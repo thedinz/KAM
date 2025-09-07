@@ -4,21 +4,18 @@ __pycache__/
 *.egg-info/
 .env
 .env.*
+!.env.example
 .venv/
 venv/
 dist/
 build/
 
-# Node (if any UI tooling)
+# Node
 node_modules/
 
 # OS/editor noise
 .DS_Store
 Thumbs.db
 
-# Docker compose local bind mounts (adjust if needed)
-*.local.yml
-# Local only – do NOT commit
-.env
-*.env
+# Local-only runtime files
 docker-compose.yml
