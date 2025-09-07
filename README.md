@@ -137,7 +137,7 @@ docker compose up -d
 
 ## Usage overview
 
-1. Open the web UI (`/`).
+1. Open the web UI.
 2. Choose the item (movie, series, collection, or season) you want to update.
 3. Upload artwork. KAM will:
 
