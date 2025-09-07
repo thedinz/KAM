@@ -18,3 +18,7 @@ Thumbs.db
 
 # Docker compose local bind mounts (adjust if needed)
 *.local.yml
+# Local only – do NOT commit
+.env
+*.env
+docker-compose.yml
