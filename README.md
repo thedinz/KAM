@@ -1,7 +1,3 @@
-Here’s a **soup-to-nuts, copy-paste-ready `README.md`** you can drop into your repo. It includes the corrected **season poster** behavior (stored as `Season01.jpg` etc. in the **series folder**, no subfolders), the asset-mapping notes, Unraid/Docker examples, troubleshooting, and FAQs.
-
----
-
 # KAM — Kometa Asset Manager
 
 KAM is a small web app that makes Kometa/Plex artwork management painless. It lets you upload artwork for **movies, TV series, seasons, and collections** and will:
