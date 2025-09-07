@@ -1,44 +1,47 @@
-Perfect — here’s the tweaked version of the **install instructions** with **series posters, season posters, and background posters** included. I’ll keep it in the same style we drafted, just expanding the “Folder rules & naming” and “Usage” parts.
+Here’s a **soup-to-nuts, copy-paste-ready `README.md`** you can drop into your repo. It includes the corrected **season poster** behavior (stored as `Season01.jpg` etc. in the **series folder**, no subfolders), the asset-mapping notes, Unraid/Docker examples, troubleshooting, and FAQs.
 
 ---
 
 # KAM — Kometa Asset Manager
 
-KAM is a tiny web app we built to make Kometa/Plex poster management painless. It lets you upload a poster for a movie, show, season, or collection and will:
+KAM is a small web app that makes Kometa/Plex artwork management painless. It lets you upload artwork for **movies, TV series, seasons, and collections** and will:
 
-* Convert the upload to **.jpg**
-* **Replace** any existing `poster.*` or `background.*` in the matching Kometa asset folder
-* Keep your asset folders in the **same structure Kometa expects**
-* Provide a simple web UI to check what’s set (with a fallback image when missing)
+* Convert uploads to **`.jpg`**
+* **Replace** existing `poster.*`, `background.*`, or `SeasonNN.*` in the correct asset folder
+* Keep everything in the **same structure Kometa expects**
+* Provide a simple web UI with a **fallback** image to quickly spot missing artwork
 
 ---
 
-## Important constraints (read this first)
+## ⚠️ Important constraints
 
-> **At the current moment the app does NOT allow you to use a myriad of different asset directories, for now you need to pair 1 library with 1 directory. Example *Kids Movies* with `/assets/Kids Movies`. Similarly all collections must reside in 1 `Collections` directory.**
+> **At the current moment the app does NOT allow you to user a myriad of different asset directories, for now you need to pair 1 library with 1 directory. Example Kids Movies with `/assets/Kids Movies`. Similarly all collections must reside in 1 `Collections` directory.**
 
 What this means in practice:
 
 * Pick **one** assets root for a given library and stick with it.
-* If you have multiple libraries, each one should have its **own** mapped directory.
-* All Kometa **Collections** live under a single `Collections` folder within the mapped assets root.
+* If you have multiple libraries, each should have its **own** mapped directory or its own container.
+* Put **all Collections** in a single `Collections` directory under one assets root.
 
 ---
 
-## How asset mapping works
+## How asset mapping works (flexible)
 
-Inside the container, KAM expects an **assets root** at a path you choose (we’ll use `/assets` inside the container for clarity). You can bind-mount **any** host path to `/assets`.
+Inside the container, KAM writes to an **assets root** (examples assume `/assets` inside the container).
+You can bind-mount **any** host path to that internal path.
 
 Examples:
 
-* Map your Unraid folder:
-  Host: `/mnt/user/kometa/assets` → Container: `/assets`
-* Or map a custom path:
-  Host: `/mystuff` → Container: `/assets`
+* Unraid/host → container
 
-The point: **KAM doesn’t care** what the host path is, as long as you mount it into the container at the internal path you configure (examples below use `/assets`).
+  * `/mnt/user/kometa/assets` → `/assets`
+* Custom mapping
 
-Typical Kometa-style structure under that mapped root:
+  * `/mystuff` → `/assets`
+
+KAM only cares about the **internal** path (e.g., `/assets`). You choose what host path it points to.
+
+**Typical Kometa-style structure under the mapped root:**
 
 ```
 /assets
@@ -46,41 +49,45 @@ Typical Kometa-style structure under that mapped root:
     /The Matrix (1999)
       poster.jpg
       background.jpg
+
   /TV Shows
     /Breaking Bad
       poster.jpg
       background.jpg
-      /Season 01
-        poster.jpg
-      /Season 02
-        poster.jpg
+      Season01.jpg
+      Season02.jpg
+      Season03.jpg
+
   /Collections
     /Batman Collection
       poster.jpg
       background.jpg
 ```
 
-KAM writes into these folders, converting to `.jpg` and replacing any existing poster/background file.
+> ✅ **Season posters** are stored as flat files **in the series folder** (`Season01.jpg`, `Season02.jpg`, …).
+> ❌ No `Season 01/` subfolders are used by KAM.
 
 ---
 
 ## Requirements
 
 * Docker (Unraid, Linux, macOS, or Windows)
-* Access to your Kometa **assets** folders (bind-mount them read/write)
-* Optional: a reverse proxy (Caddy/Traefik/Nginx) if you want TLS
+* Read/write access to your Kometa **assets** directories (bind-mounted)
+* Optional: Reverse proxy (Caddy/Traefik/Nginx) if you want TLS or auth
 
 ---
 
 ## Quick Start (Docker)
 
-### Pull the image
+### 1) Pull the image
 
 ```bash
 docker pull ghcr.io/thedinz/kam:latest
 ```
 
-### Run (simple example)
+### 2) Run (simple)
+
+Expose KAM on **7171** and map your assets:
 
 ```bash
 docker run -d \
@@ -92,7 +99,9 @@ docker run -d \
 
 Open: `http://<your-host>:7171/`
 
-### Docker Compose
+> If your assets live elsewhere, just change the host side of `-v` (e.g., `-v /mystuff:/assets`).
+
+### 3) Docker Compose
 
 ```yaml
 services:
@@ -106,55 +115,131 @@ services:
     restart: unless-stopped
 ```
 
+Bring it up:
+
+```bash
+docker compose up -d
+```
+
+---
+
+## Unraid setup
+
+1. **Add Container** → Repository: `ghcr.io/thedinz/kam:latest`
+2. **Port**: Map container `7171` → host `7171` (or any free port).
+3. **Path**: Add a path mapping:
+
+   * Container path: `/assets`
+   * Host path: `/mnt/user/kometa/assets` (or your choice)
+4. **Apply** and start → browse to `http://<UNRAID-IP>:7171/`.
+
 ---
 
 ## Usage overview
 
-* Browse to the web UI (default index page).
-* Pick the library item or collection you want to update.
-* Upload a poster or background image.
-  KAM will:
+1. Open the web UI (`/`).
+2. Choose the item (movie, series, collection, or season) you want to update.
+3. Upload artwork. KAM will:
 
-  * Convert to `.jpg`
-  * Remove any existing `poster.*` or `background.*` in that item’s asset folder
-  * Save the new file
+   * Convert to `.jpg`
+   * Remove any existing `poster.*`, `background.*`, or `SeasonNN.*` for that item
+   * Save the new file with the correct name
 
-If an item has **no** artwork yet, KAM shows a **fallback** image in the UI so you can spot missing posters/backgrounds quickly.
-
----
-
-## Folder rules & naming
-
-KAM follows Kometa’s asset layout conventions:
-
-* **Movies**:
-  `Movies/<Title (Year)>/poster.jpg`
-  `Movies/<Title (Year)>/background.jpg`
-
-* **TV Shows (series)**:
-  `TV Shows/<Show Name>/poster.jpg`
-  `TV Shows/<Show Name>/background.jpg`
-
-* **Seasons**:
-  `TV Shows/<Show Name>/Season 01/poster.jpg`
-  `TV Shows/<Show Name>/Season 02/poster.jpg`
-
-* **Collections**:
-  `Collections/<Collection Name>/poster.jpg`
-  `Collections/<Collection Name>/background.jpg`
-
-KAM **does not** invent proprietary paths. It writes exactly where Kometa expects.
-
-**Sanitization:** KAM keeps a **sane level of filename sanitization** to avoid OS/share issues.
+If an item has **no** artwork yet, KAM shows a **fallback** image in the UI so you can spot what’s missing fast.
 
 ---
 
-## Environment & configuration
+## Folder rules & naming (exact)
 
-* **Port:** Default container port is **7171**.
-* **Assets root:** Mount host assets to `/assets` inside the container.
+KAM follows Kometa’s layout and **does not** invent proprietary paths.
 
-If you run multiple libraries, follow the **1 library → 1 directory** rule (e.g., separate containers or subfolders).
+* **Movies**
+
+  ```
+  Movies/<Title (Year)>/
+    poster.jpg
+    background.jpg
+  ```
+
+* **TV Series** (series poster/background + seasons)
+
+  ```
+  TV Shows/<Show Name>/
+    poster.jpg
+    background.jpg
+    Season01.jpg
+    Season02.jpg
+    Season03.jpg
+    ...
+    # (Optionally Season00.jpg if you use Specials)
+  ```
+
+* **Collections**
+
+  ```
+  Collections/<Collection Name>/
+    poster.jpg
+    background.jpg
+  ```
+
+**Sanitization:** KAM applies a **sane level** of filename/folder sanitization to avoid OS/share problems while preserving Plex/Kometa conventions.
+
+---
+
+## Multiple libraries (recommended patterns)
+
+Because of the “1 library ↔ 1 directory” constraint, use one of the following:
+
+### Option A — One KAM per library
+
+Run separate containers with different ports and volume mappings.
+
+```yaml
+services:
+  kam_movies:
+    image: ghcr.io/thedinz/kam:latest
+    container_name: kam_movies
+    ports: ["7171:7171"]
+    volumes:
+      - /mnt/user/kometa/assets/Movies:/assets
+    restart: unless-stopped
+
+  kam_tv:
+    image: ghcr.io/thedinz/kam:latest
+    container_name: kam_tv
+    ports: ["7172:7171"]
+    volumes:
+      - /mnt/user/kometa/assets/TV Shows:/assets
+    restart: unless-stopped
+```
+
+Choose **one** assets root to host `Collections/` (e.g., under Movies).
+Point whichever KAM instance you prefer at that root when working on collections.
+
+### Option B — One KAM with a single consolidated assets root
+
+Keep all library roots **under one** top-level directory and mount that top-level to `/assets`.
+(Still follow the “1 library ↔ 1 directory” rule inside that root and keep a single `Collections/`.)
+
+---
+
+## Security & networking
+
+* KAM has **no built-in authentication**.
+
+  * Run it on a trusted LAN, or
+  * Put it behind a reverse proxy (Caddy/Traefik/Nginx) and add auth/TLS there.
+* Bind to localhost and reverse-proxy if you don’t want it exposed directly.
+
+**Example (Traefik labels)** — keep on your proxy if desired (not required):
+
+```yaml
+labels:
+  - "traefik.enable=true"
+  - "traefik.http.routers.kam.rule=Host(`kam.local`)"
+  - "traefik.http.routers.kam.entrypoints=websecure"
+  - "traefik.http.routers.kam.tls=true"
+```
 
 ---
 
@@ -163,29 +248,65 @@ If you run multiple libraries, follow the **1 library → 1 directory** rule (e.
 ```bash
 docker pull ghcr.io/thedinz/kam:latest
 docker stop kam && docker rm kam
-# re-run your docker run / compose up -d
+# re-create with your docker run or docker compose up -d
 ```
+
+> You can also use SHA tags if you prefer pinning a specific build (e.g., `ghcr.io/thedinz/kam:sha-xxxxxxxx`). On Unraid, use the **Update** action in the container UI.
 
 ---
 
 ## Troubleshooting
 
-* **Fallback shows instead of the poster/background** → upload one or verify naming (`poster.jpg`, `background.jpg`).
-* **Seasons missing posters** → ensure the subfolder is named `Season 01`, `Season 02`, etc.
-* **Permission errors** → check your Docker volume mapping and filesystem permissions.
+**Artwork isn’t appearing in Plex/Kometa**
+
+* Plex may cache images. Try “Refresh Metadata” or give it time.
+* Confirm the file exists and is correctly named in the expected asset folder.
+* For **seasons**, verify the file names are `Season01.jpg`, `Season02.jpg`, etc. (no subfolders).
+
+**Nothing changes after upload**
+
+* Double-check your volume mapping: `-v <host-path>:/assets`.
+* Ensure you’re pairing the right **library** with the right **directory** (see constraint).
+* Verify filesystem **permissions** allow the container to write.
+
+**Permission errors (EPERM/EACCES)**
+
+* On Unraid, mapping under `/mnt/user/...` typically avoids permission headaches.
+* Ensure your host user/group can read/write the assets directories.
+
+**Fallback image shows**
+
+* That item has no `poster.jpg` or `background.jpg` (or `SeasonNN.jpg` for seasons).
+* Upload the file, or confirm the item’s folder/filename matches exactly.
+
+**Collections missing**
+
+* Ensure there is a **single** `Collections/` directory under one assets root, and you’re pointing KAM at that root when managing collections.
 
 ---
 
 ## FAQ
 
-**Can I use multiple asset roots at once?**
-Not yet. One library ↔ one directory, all collections in one `Collections` folder.
+**Q: Can I use multiple asset roots at the same time?**
+A: Not currently. **One library ↔ one directory**, and all collections live in **one** `Collections/` folder.
 
-**Can I map my assets to any path I want?**
-Yes — map any host folder into the container.
+**Q: Can I map the assets directory to any host path?**
+A: Yes. Bind-mount any host folder to the container’s internal assets path (examples use `/assets`).
+You could map `/mnt/user/kometa/assets` to `/assets` or map `/mystuff` to `/assets` — KAM doesn’t care.
 
-**Does KAM handle backgrounds too?**
-Yes — it supports both `poster.jpg` and `background.jpg` for movies, shows, and collections.
+**Q: What artwork types does KAM handle?**
+A: `poster.jpg` and `background.jpg` for movies, series, and collections; `SeasonNN.jpg` for seasons (in the series folder).
 
-**What about seasons?**
-Yes — KAM supports `poster.jpg` inside season subfolders (`Season 01`, `Season 02`, etc.).
+**Q: Does KAM keep the old files?**
+A: No. It **replaces** any existing `poster.*`, `background.*`, or `SeasonNN.*` for the selected item.
+
+**Q: Which image formats can I upload?**
+A: Any common format; KAM converts to `.jpg` on save.
+
+---
+
+## Backup & restore
+
+* Your artwork lives in the **host assets** directories you mapped (not inside the container).
+* Back up those folders using your usual NAS/server backup tool.
+* Container can be recreated at any time without losing artwork.
