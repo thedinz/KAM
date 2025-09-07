@@ -188,35 +188,7 @@ KAM follows Kometa’s layout and **does not** invent proprietary paths.
 
 ## Multiple libraries (recommended patterns)
 
-Because of the “1 library ↔ 1 directory” constraint, use one of the following:
-
-### Option A — One KAM per library
-
-Run separate containers with different ports and volume mappings.
-
-```yaml
-services:
-  kam_movies:
-    image: ghcr.io/thedinz/kam:latest
-    container_name: kam_movies
-    ports: ["7171:7171"]
-    volumes:
-      - /mnt/user/kometa/assets/Movies:/assets
-    restart: unless-stopped
-
-  kam_tv:
-    image: ghcr.io/thedinz/kam:latest
-    container_name: kam_tv
-    ports: ["7172:7171"]
-    volumes:
-      - /mnt/user/kometa/assets/TV Shows:/assets
-    restart: unless-stopped
-```
-
-Choose **one** assets root to host `Collections/` (e.g., under Movies).
-Point whichever KAM instance you prefer at that root when working on collections.
-
-### Option B — One KAM with a single consolidated assets root
+Because of the “1 library ↔ 1 directory” constraint, 
 
 Keep all library roots **under one** top-level directory and mount that top-level to `/assets`.
 (Still follow the “1 library ↔ 1 directory” rule inside that root and keep a single `Collections/`.)
