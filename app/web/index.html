@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>KAM</title>
+<style>
+  :root { --bg:#0b0b0f; --fg:#e8e8ee; --muted:#a9a9b5; --card:#15151c; --accent:#5ea1ff; --border:#2a2a36; }
+  [data-theme="light"] { --bg:#ffffff; --fg:#11111a; --muted:#4a4a55; --card:#f6f6fb; --accent:#3b82f6; --border:#d7d7e0; }
+  *{box-sizing:border-box}
+  body{margin:0; font:16px/1.35 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu; background:var(--bg); color:var(--fg)}
+  header{display:flex; gap:12px; align-items:center; padding:14px 16px; border-bottom:1px solid var(--border); position:sticky; top:0; background:var(--bg); z-index:5}
+  header h1{font-size:18px; margin:0 8px 0 0}
+  select,input,button{background:var(--card); color:var(--fg); border:1px solid var(--border); border-radius:10px; padding:8px 10px}
+  select:focus,input:focus,button:focus{outline:2px solid var(--accent)}
+  #themeToggle{cursor:pointer}
+  #errors{color:#ff6b6b; padding:0 16px 8px}
+  #toolbar{display:flex; gap:8px; align-items:center; margin-left:auto}
+  #pager{display:flex; gap:6px; align-items:center; margin-left:12px}
+  .btn{cursor:pointer}
+  .btn[disabled]{opacity:.4; cursor:not-allowed}
+  #count{color:var(--muted); margin-left:8px}
+  #grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:12px; padding:16px}
+  .card{ background:var(--card); border:1px solid var(--border); border-radius:14px; overflow:hidden; display:flex; flex-direction:column; }
+  .poster{ width:100%; aspect-ratio:2/3; height:auto; object-fit:contain; background:#222; display:block; }
+  .meta{padding:8px 10px}
+  .title{font-weight:600}
+  .year{color:var(--muted); font-size:13px}
+  dialog{border:none; border-radius:14px; padding:0; max-width:520px; width:calc(100% - 24px)}
+  .dlg-body{padding:16px}
+  .row{display:flex; gap:10px; align-items:center; margin:8px 0}
+  .row label{min-width:110px; color:var(--muted)}
+  .actions{display:flex; justify-content:flex-end; gap:8px; padding:12px 16px; border-top:1px solid var(--border)}
+
+.meta{padding:12px; display:flex; flex-direction:column; gap:6px; min-height:92px}
+.title{font-weight:600; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; min-height:2.6em; line-height:1.3}
+.year{opacity:.8; font-size:.95em; min-height:1.2em}
+.actions{margin-top:auto; padding:12px; height:72px; display:flex; align-items:center}
+.actions button{background:transparent; border:1px solid var(--border); color:var(--fg); padding:8px 12px; border-radius:12px; cursor:pointer}
+.actions button:hover{outline:2px solid var(--accent)}
+
+</style>
+</head>
+<body>
+<header>
+  <h1>KAM</h1>
+  <select id="libSelect" title="Library"></select>
+  <input id="search" type="search" placeholder="Search…" />
+  <div id="toolbar">
+    <button id="themeToggle" title="Toggle theme">🌙</button>
+    <div id="pager">
+      <button id="firstBtn" class="btn" title="First">⏮</button>
+      <button id="prevBtn"  class="btn" title="Previous">◀</button>
+      <span id="pageInfo">Page 1 of 1</span>
+      <button id="nextBtn"  class="btn" title="Next">▶</button>
+      <button id="lastBtn"  class="btn" title="Last">⏭</button>
+      <span id="count"></span>
+    </div>
+  </div>
+</header>
+
+<div id="errors"></div>
+<div id="grid"></div>
+
+<dialog id="showDialog">
+  <form method="dialog" class="upload-form" style="min-width:520px">
+    <h3 id="showTitle">Show</h3>
+    <div style="display:flex; gap:14px; flex-wrap:wrap">
+      <div>
+        <label>Series Poster</label>
+        <input type="file" id="showPosterInput" accept="image/*">
+        <button id="uploadShowPoster" type="button" class="btn">Upload</button>
+      </div>
+      <div>
+        <label>Background</label>
+        <input type="file" id="showBgInput" accept="image/*">
+        <button id="uploadShowBg" type="button" class="btn">Upload</button>
+      </div>
+    </div>
+    <div id="seasonsList" style="margin-top:10px"></div>
+    <div id="showUploadStatus" class="upload-status"></div>
+    <menu style="display:flex; justify-content:flex-end; gap:8px; margin-top:10px">
+      <button id="closeShowDlg" type="reset" class="btn">Close</button>
+    </menu>
+  </form>
+</dialog>
+
+
+<dialog id="uploader">
+  <form id="uploadForm" method="dialog" enctype="multipart/form-data">
+    <div class="dlg-body">
+      <h3 id="dialogTitle" style="margin:0 0 6px">Upload poster</h3>
+      <div class="row"><label>Library</label><input type="text" id="library" name="library" readonly /></div>
+      <div class="row"><label>Rating Key</label><input type="text" id="ratingKey" name="ratingKey" readonly /></div>
+      <div class="row"><label>Folder Name</label><input type="text" id="folderName" name="folderName" readonly /></div>
+      <div class="row"><label>Image</label><input type="file" name="file" accept="image/*" required /></div>
+      <div id="uploadStatus" class="row" style="color:var(--muted)"></div>
+    </div>
+    <div class="actions">
+      <button type="button" onclick="closeDialog()">Cancel</button>
+      <button type="submit">Upload</button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+(function(){
+  const $ = sel => document.querySelector(sel);
+  const grid = $("#grid");
+  const errors = $("#errors");
+  const count = $("#count");
+  const pager = $("#pager");
+  const pageInfo = $("#pageInfo");
+  const firstBtn = $("#firstBtn");
+  const prevBtn = $("#prevBtn");
+  const nextBtn = $("#nextBtn");
+  const lastBtn = $("#lastBtn");
+  const libSelect = $("#libSelect");
+  const search = $("#search");
+  const themeToggle = $("#themeToggle");
+
+  let state = { library: null, page: 1, pageSize: 60, totalPages: 1, totalCount: 0, query: null };
+
+  function setTheme(t){
+    document.documentElement.setAttribute("data-theme", t);
+    try { localStorage.setItem("kam-theme", t); } catch {}
+    themeToggle.textContent = (t === "dark" ? "☀️" : "🌙");
+  }
+  themeToggle.addEventListener("click", ()=>{
+    const t = document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark";
+    setTheme(t);
+  });
+  (function initTheme(){ setTheme(localStorage.getItem("kam-theme") || "light"); })();
+
+  async function j(url){
+    const r = await fetch(url);
+    if (!r.ok) throw new Error(url + " -> " + r.status);
+    return r.json();
+  }
+
+  async function fetchLibraries(){
+    const data = await j("/api/libraries");
+    if (Array.isArray(data) && data.length && typeof data[0] === "string") return data;
+    if (Array.isArray(data) && data.length && typeof data[0] === "object") return data.map(d => d.name);
+    return [];
+  }
+
+  function renderItems(items){
+    grid.innerHTML = "";
+    for (const it of (items || [])) {
+      const card = document.createElement("a");
+      card.className = "card";
+      if (it.ratingKey && state.library && state.library.toLowerCase() !== "collections") {
+        card.href = `show.html?library=${encodeURIComponent(state.library)}&ratingKey=${encodeURIComponent(it.ratingKey)}`;
+      } else {
+        card.href = "javascript:void(0)";
+      }
+      /* KAM: link to show page */
+      if (it.type === 'show') {
+        card.dataset.ratingKey = it.ratingKey;
+        card.dataset.title = it.title || '';
+        card.addEventListener('click', ()=> openShowDialog(state.library, card.dataset.ratingKey, card.dataset.title));
+      }
+
+      const img = document.createElement("img");
+      img.className = "poster";
+      img.loading = "lazy";
+      img.alt = it.title || "";
+
+      // If backend already gave us a poster URL, use it; otherwise start at fallback.
+      img.src = it.posterUrl || "fallback.png";
+
+      // Be robust: if the poster 404s, swap to relative fallback and stop error loops
+      img.onerror = function () { this.onerror = null; this.src = "fallback.png"; };
+
+      const meta = document.createElement("div");
+      meta.className = "meta";
+      const t = document.createElement("div");
+      t.className = "title"; t.textContent = it.title || "";
+      const y = document.createElement("div");
+      y.className = "year"; y.textContent = it.year || "";
+      meta.appendChild(t); meta.appendChild(y);
+      card.appendChild(img); card.appendChild(meta);
+      // --- Upload button ---
+      const actions = document.createElement("div");
+      actions.className = "actions";
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.textContent = "Upload";
+      btn.title = "Upload a custom poster";
+      btn.addEventListener("click", ()=> {
+        const folderGuess = it.folder || it.folderName || it.name || it.title || "";
+        const ratingKey = it.ratingKey || it.key || it.id || "";
+        openUpload(state.library, ratingKey, folderGuess, it.title || folderGuess || "");
+      });
+      actions.appendChild(btn);
+      card.appendChild(actions);
+
+      grid.appendChild(card);
+    }
+  }
+
+  function updatePager() {
+    pageInfo.textContent = `Page ${state.page} of ${state.totalPages}`;
+    pager.style.display = state.totalPages > 1 ? "" : "none";
+    firstBtn.disabled = state.page <= 1;
+    prevBtn.disabled  = state.page <= 1;
+    nextBtn.disabled  = state.page >= state.totalPages;
+    lastBtn.disabled  = state.page >= state.totalPages;
+    count.textContent = `${state.totalCount} items`;
+  }
+
+  async function loadPage(p=1){
+    if (!state.library) return;
+    const u = new URL("/api/items", location.origin);
+    u.searchParams.set("library", state.library);
+    u.searchParams.set("page", String(p));
+    u.searchParams.set("page_size", String(state.pageSize));
+    if (state.query) u.searchParams.set("query", state.query);
+    try {
+      errors.textContent = "";
+      const data = await j(u);
+      state.page = data.page || 1;
+      state.totalPages = data.total_pages || 1;
+      state.totalCount = data.total_count || 0;
+      renderItems(data.items || []);
+      updatePager();
+    } catch (e) {
+      errors.textContent = String(e);
+    }
+  }
+
+  // pager buttons
+  firstBtn.addEventListener("click", ()=> loadPage(1));
+  prevBtn.addEventListener("click", ()=> loadPage(Math.max(1, state.page - 1)));
+  nextBtn.addEventListener("click", ()=> loadPage(Math.min(state.totalPages, state.page + 1)));
+  lastBtn.addEventListener("click", ()=> loadPage(state.totalPages));
+
+  // library + search
+  async function init(){
+    const urlp = new URLSearchParams(location.search);
+    const desiredLib = urlp.get('lib');
+    try {
+      const libs = await fetchLibraries();
+      libSelect.innerHTML = "";
+      for (const name of libs) {
+        const opt = document.createElement("option");
+        opt.value = opt.textContent = name;
+        libSelect.appendChild(opt);
+      }
+      if (libs.length) {
+        if (desiredLib && libs.includes(desiredLib)) { state.library = desiredLib; }
+        state.library = libs[0];
+        await loadPage(1);
+      }
+    } catch (e) {
+      errors.textContent = String(e);
+    }
+  }
+  libSelect.addEventListener("change", async ()=>{
+    state.library = libSelect.value;
+    state.page = 1;
+    await loadPage(1);
+  });
+
+  let searchTimer = null;
+  search.addEventListener("input", ()=>{
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(()=>{
+      const val = search.value.trim();
+      state.query = val || null;
+      state.page = 1;
+      loadPage(1);
+    }, 300);
+  });
+
+  // Upload dialog helpers
+  const dlg = document.getElementById("uploader");
+  const uploadForm = document.getElementById("uploadForm");
+  const uploadStatus = document.getElementById("uploadStatus");
+  window.closeDialog = () => { try { dlg.close(); } catch {} };
+  window.openUpload = (lib, ratingKey, folderName, title) => {
+    document.getElementById("ratingKey").value = ratingKey;
+    document.getElementById("folderName").value = folderName;
+    document.getElementById("library").value = lib;
+    document.getElementById("dialogTitle").textContent = `Upload poster for: ${title}`;
+    uploadStatus.textContent = "";
+    dlg.showModal();
+  };
+  uploadForm.addEventListener("submit", async (e)=>{
+    e.preventDefault();
+    uploadStatus.textContent = "Uploading...";
+    const fd = new FormData(uploadForm);
+    try {
+      const r = await fetch("/api/upload", { method: "POST", body: fd });
+      if (!r.ok) throw new Error("Upload failed: " + r.status);
+      const data = await r.json();
+      uploadStatus.textContent = "Done: " + (data.path || "");
+      setTimeout(()=>{ try { dlg.close(); } catch {} }, 800);
+    } catch (err) {
+      uploadStatus.textContent = String(err);
+    }
+  });
+
+  document.addEventListener("DOMContentLoaded", init);
+})();// ---- TV Show Support ----
+  let currentShowCtx = null; // {library, ratingKey, folderName, title}
+  async function fetchJSON(url){ const r = await fetch(url); if(!r.ok) throw new Error(r.status); return await r.json(); }
+
+  async function openShowDialog(library, ratingKey, title){
+    const data = await fetchJSON(`/api/show?library=${encodeURIComponent(library)}&ratingKey=${encodeURIComponent(ratingKey)}`);
+    currentShowCtx = { library, ratingKey, folderName: data.folderName, title: data.title };
+    document.getElementById('showTitle').textContent = `${data.title} (${data.year||''})`.trim();
+    const seasonsDiv = document.getElementById('seasonsList');
+    seasonsDiv.innerHTML = '';
+    const hdr = document.createElement('h4'); hdr.textContent = 'Seasons'; seasonsDiv.appendChild(hdr);
+    const list = document.createElement('div'); list.style.display='grid'; list.style.gridTemplateColumns='repeat(auto-fill, minmax(180px,1fr))'; list.style.gap='10px';
+    seasonsDiv.appendChild(list);
+    for (const s of data.seasons) {
+      const card = document.createElement('div'); card.className='card';
+      const label = document.createElement('div'); label.textContent = `Season ${String(s.index).padStart(2,'0')}`;
+      const input = document.createElement('input'); input.type='file'; input.accept='image/*';
+      const btn = document.createElement('button'); btn.type='button'; btn.className='btn'; btn.textContent='Upload';
+      btn.addEventListener('click', async ()=>{
+        const f = input.files && input.files[0]; if(!f) return;
+        const fd = new FormData();
+        fd.append('library', currentShowCtx.library);
+        fd.append('folderName', currentShowCtx.folderName);
+        fd.append('season', String(s.index));
+        fd.append('file', f);
+        const status = document.getElementById('showUploadStatus');
+        status.textContent = 'Uploading season ' + s.index + '...';
+        try {
+          const r = await fetch('/api/upload_season', { method:'POST', body: fd });
+          if(!r.ok) throw new Error('HTTP ' + r.status);
+          await r.json();
+          status.textContent = 'Done.';
+        } catch(err){ status.textContent = String(err); }
+      });
+      card.appendChild(label); card.appendChild(input); card.appendChild(btn);
+      list.appendChild(card);
+    }
+    document.getElementById('showDialog').showModal();
+  }
+
+  // Hook upload buttons for series poster/bg
+  (function(){
+    const dlg = document.getElementById('showDialog');
+    if (!dlg) return;
+    const postBtn = document.getElementById('uploadShowPoster');
+    const bgBtn = document.getElementById('uploadShowBg');
+    const posterInput = document.getElementById('showPosterInput');
+    const bgInput = document.getElementById('showBgInput');
+    const status = document.getElementById('showUploadStatus');
+    document.getElementById('closeShowDlg').addEventListener('click', ()=>{ try{ dlg.close(); }catch{} });
+
+    async function send(kind, file){
+      if(!currentShowCtx) return;
+      const fd = new FormData();
+      fd.append('library', currentShowCtx.library);
+      fd.append('folderName', currentShowCtx.folderName);
+      fd.append('kind', kind);
+      fd.append('file', file);
+      status.textContent = 'Uploading ' + kind + '...';
+      const r = await fetch('/api/upload_show', { method:'POST', body: fd });
+      if(!r.ok){ status.textContent = 'Error ' + r.status; return; }
+      await r.json();
+      status.textContent = 'Done.';
+    }
+
+    postBtn.addEventListener('click', async ()=>{
+      const f = posterInput.files && posterInput.files[0]; if(!f) return;
+      await send('poster', f);
+    });
+    bgBtn.addEventListener('click', async ()=>{
+      const f = bgInput.files && bgInput.files[0]; if(!f) return;
+      await send('background', f);
+    });
+  })();
+
+</script>
+</body>
+</html>

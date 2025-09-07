@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.env
+.env.*
+.venv/
+venv/
+dist/
+build/
+
+# Node (if any UI tooling)
+node_modules/
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+
+# Docker compose local bind mounts (adjust if needed)
+*.local.yml

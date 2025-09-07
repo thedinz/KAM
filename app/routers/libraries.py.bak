@@ -1,0 +1,48 @@
+from __future__ import annotations
+
+import os
+from typing import List, Set, Tuple, Literal, Any
+from fastapi import APIRouter, Query
+from ..services.plex import get_plex
+
+router = APIRouter()
+
+def _parse_library_map(raw: str | None) -> List[Tuple[str, str]]:
+    raw = (raw or "").strip()
+    if not raw:
+        return []
+    pairs: List[Tuple[str, str]] = []
+    for part in (p.strip() for p in raw.split(",") if p.strip()):
+        if ":" not in part:
+            continue
+        name, path = part.split(":", 1)
+        pairs.append((name.strip(), path.strip()))
+    return pairs
+
+@router.get("/libraries", summary="Libraries")
+def libraries(format: Literal["objects", "names"] = Query("objects")) -> List[Any]:
+    """
+    - If LIBRARIES is set: return those (in order), but filter to ones that exist
+      in Plex **OR** are exactly 'Collections' (case-insensitive).
+    - If LIBRARIES is empty: return all Plex sections (sorted). (No 'Collections' in this mode.)
+    - Default return shape: objects [{name, assets_path}]. Use ?format=names for ["name", ...].
+    """
+    plex = get_plex()
+    plex_names: Set[str] = {s.title for s in plex.library.sections()}
+    configured = _parse_library_map(os.getenv("LIBRARIES"))
+
+    if not configured:
+        names = sorted(plex_names)
+        if format == "names":
+            return names
+        return [{"name": n, "assets_path": None} for n in names]
+
+    filtered: List[Tuple[str, str]] = []
+    for (n, p) in configured:
+        if n in plex_names or n.lower() == "collections":
+            filtered.append((n, p))
+
+    if format == "names":
+        return [n for (n, _p) in filtered]
+
+    return [{"name": n, "assets_path": p} for (n, p) in filtered]
