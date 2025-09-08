@@ -163,7 +163,7 @@ KAM follows Kometa’s layout and **does not** invent proprietary paths.
 * **TV Series** (series poster/background + seasons)
 
   ```
-  TV Shows/<Show Name>/
+  TV Shows/<Show Name (year)>/
     poster.jpg
     background.jpg
     Season01.jpg
