@@ -18,6 +18,7 @@ What this means in practice:
 * Pick **one** assets root for a given library and stick with it.
 * If you have multiple libraries, each should have its **own** mapped directory or its own container.
 * Put **all Collections** in a single `Collections` directory under one assets root.
+* Right now KAM expects your naming scheme to be Title (year) AKA The Matrix (1999) if that is NOT your current nameing scheme you need to change that or wait for us to support other naming conventions.
 
 ---
 
