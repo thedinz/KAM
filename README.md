@@ -130,6 +130,8 @@ docker compose up -d
    * Host path: `/mnt/user/kometa/assets` (or your choice)
 4. **Apply** and start → browse to `http://<UNRAID-IP>:7171/`.
 
+We will be submitting KAmto the Unraid App store after a bit more testing.
+
 ---
 
 ## Usage overview
