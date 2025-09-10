@@ -112,13 +112,23 @@ def show_detail(library: str = Query(...), ratingKey: int = Query(...)):
             for ext in (".jpg",".jpeg",".png",".webp"):
                 p = os.path.join(folder_path, "poster"+ext)
                 if os.path.isfile(p):
-                    poster_url_local = "/api/fileproxy?path=" + p
+                    ts = None
+                    try:
+                        ts = int(os.path.getmtime(p))
+                    except Exception:
+                        ts = None
+                    poster_url_local = "/api/fileproxy?path=" + p + (("&t=" + str(ts)) if ts else "")
                     break
         if background_exists:
             for ext in (".jpg",".jpeg",".png",".webp"):
                 p = os.path.join(folder_path, "background"+ext)
                 if os.path.isfile(p):
-                    background_url_local = "/api/fileproxy?path=" + p
+                    ts2 = None
+                    try:
+                        ts2 = int(os.path.getmtime(p))
+                    except Exception:
+                        ts2 = None
+                    background_url_local = "/api/fileproxy?path=" + p + (("&t=" + str(ts2)) if ts2 else "")
                     break
         for s in seasons:
             idx = s['index']
@@ -129,11 +139,16 @@ def show_detail(library: str = Query(...), ratingKey: int = Query(...)):
                 sp = os.path.join(folder_path, base+ext)
                 if os.path.isfile(sp):
                     exists = True
-                    local_url = '/api/fileproxy?path=' + sp
+                    ts3 = None
+                    try:
+                        ts3 = int(os.path.getmtime(sp))
+                    except Exception:
+                        ts3 = None
+                    local_url = '/api/fileproxy?path=' + sp + (('&t=' + str(ts3)) if ts3 else '')
                     break
             rk_season = int(s.get('ratingKey') or 0)
             plex_url = (f"{config.PLEX_URL}/library/metadata/{rk_season}/thumb?X-Plex-Token={config.PLEX_TOKEN}" if rk_season else None)
-            season_assets.append({ "index": idx, "exists": exists, "url": local_url, "urlPlex": plex_url })
+            season_assets.append({ "index": idx, "exists": exists, "url": local_url, "urlPlex": plex_url, "ratingKey": int(s.get("ratingKey") or 0) })
     return {
         "library": library,
         "title": title,

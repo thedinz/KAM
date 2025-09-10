@@ -37,7 +37,8 @@
       <img id="posterImg" style="max-height:220px; border-radius:8px; display:none; margin-bottom:8px" />
       <div class="upload-row">
         <input type="file" id="posterFile" accept="image/*">
-        <button class="btn" id="uploadPoster">Upload</button>
+        <button class="btn" id="importPoster">Import</button>
+          <button class="btn" id="uploadPoster">Upload</button>
         <span id="posterFlag"></span>
       </div>
     </div>
@@ -114,6 +115,7 @@
         const img = document.createElement("img"); img.style.maxHeight="200px"; img.style.display = (s.url || s.urlPlex) ? "block" : "none"; if (s.url) img.src = s.url; else if (s.urlPlex) img.src = s.urlPlex;
         const input = document.createElement("input"); input.type="file"; input.accept="image/*";
         const btn = document.createElement("button"); btn.className="btn"; btn.textContent="Upload";
+        const importBtn = document.createElement("button"); importBtn.className="btn"; importBtn.textContent="Import";
         const flagSpan = document.createElement("span"); flagSpan.className = s.exists ? "exists" : "missing"; flagSpan.textContent = s.exists ? "exists" : "missing";
         btn.addEventListener("click", async ()=>{
           const f = input.files && input.files[0]; if (!f) return;
@@ -135,12 +137,46 @@
         });
         card.appendChild(label);
         const row = document.createElement("div"); row.className="upload-row";
-        row.appendChild(img); row.appendChild(input); row.appendChild(btn); row.appendChild(flagSpan);
+        row.appendChild(img); importBtn.addEventListener("click", async ()=>{
+            status.textContent = "Importing Season " + s.index + "...";
+            try {
+              const fd = new FormData();
+              fd.append("library", library);
+              fd.append("ratingKey", s.ratingKey);
+              fd.append("folderName", data.folderName);
+              fd.append("seasonIndex", s.index);
+              const r = await fetch("/api/import/poster", { method:"POST", body: fd });
+              if (!r.ok) throw new Error("HTTP " + r.status);
+              await r.json();
+              flagSpan.textContent = "exists";
+              if (img && img.src) img.src = img.src + (img.src.includes("?")?"&":"?") + "t=" + Date.now();
+              status.textContent = "Done.";
+            } catch (err) { status.textContent = String(err); }
+          });
+          row.appendChild(input); row.appendChild(btn); row.appendChild(importBtn); row.appendChild(flagSpan);
         card.appendChild(row);
         seasonsDiv.appendChild(card);
       }
 
-      uploadPoster.onclick = async ()=>{
+      
+async function importSeriesPoster(){
+  status.textContent = "Importing series poster...";
+  try {
+    const fd = new FormData();
+    fd.append("library", library);
+    fd.append("ratingKey", data.ratingKey);
+    fd.append("folderName", data.folderName);
+    const r = await fetch("/api/import/poster", { method:"POST", body: fd });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    await r.json();
+    const pimg = document.getElementById('posterImg');
+    if (pimg && pimg.src){ pimg.src = pimg.src + (pimg.src.includes("?")?"&":"?") + "t=" + Date.now(); pimg.style.display='block'; }
+    status.textContent = "Done.";
+    flag(posterFlag, true);
+  } catch (e) { status.textContent = String(e); }
+}
+document.getElementById("importPoster").onclick = ()=>importSeriesPoster();
+uploadPoster.onclick = async ()=>{
         const f = posterFile.files && posterFile.files[0]; if (!f) return;
         const fd = new FormData();
         fd.append("library", library);
