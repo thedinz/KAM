@@ -71,3 +71,20 @@ def save_as_named_jpg(upload: UploadFile, dest_folder: str, base_no_ext: str) ->
     dest = os.path.join(dest_folder, base_no_ext + ".jpg")
     im.save(dest, format="JPEG", quality=90, optimize=True)
     return dest
+
+
+def save_bytes_as_poster_jpg(data: bytes, dest_folder: str) -> str:
+    """Save raw image bytes as poster.jpg in dest_folder, converting to JPEG."""
+    ensure_dir(dest_folder)
+    try:
+        img = Image.open(io.BytesIO(data))
+        if img.mode not in ("RGB", "L", "P"):
+            img = img.convert("RGB")
+        out_path = os.path.join(dest_folder, "poster.jpg")
+        img.save(out_path, format="JPEG", quality=92, optimize=True)
+        return out_path
+    except Exception:
+        out_path = os.path.join(dest_folder, "poster.jpg")
+        with open(out_path, "wb") as f:
+            f.write(data)
+        return out_path
