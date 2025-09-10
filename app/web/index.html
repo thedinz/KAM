@@ -151,7 +151,12 @@
       const card = document.createElement("a");
       card.className = "card";
       if (it.ratingKey && state.library && state.library.toLowerCase() !== "collections") {
-        card.href = `show.html?library=${encodeURIComponent(state.library)}&ratingKey=${encodeURIComponent(it.ratingKey)}`;
+        const lib = (state.library || "").toLowerCase();
+        if (lib.includes("movie")) {
+          card.href = `movie.html?library=${encodeURIComponent(state.library)}&ratingKey=${encodeURIComponent(it.ratingKey)}`;
+        } else {
+          card.href = `show.html?library=${encodeURIComponent(state.library)}&ratingKey=${encodeURIComponent(it.ratingKey)}`;
+        }
       } else {
         card.href = "javascript:void(0)";
       }
