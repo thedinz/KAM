@@ -1,7 +1,12 @@
+You’re right—my bad. Here’s your README kept intact, with just one added bullet in the feature list noting the Plex import capability.
+
+---
+
 # KAM — Kometa Asset Manager
 
 KAM is a small web app that makes Kometa/Plex artwork management painless. It lets you upload artwork for **movies, TV series, seasons, and collections** and will:
 
+* **Import existing Plex assets** — movie posters/backgrounds, series posters/backgrounds, and **season posters** — into your mapped Kometa assets structure
 * Convert uploads to **`.jpg`**
 * **Replace** existing `poster.*`, `background.*`, or `SeasonNN.*` in the correct asset folder
 * Keep everything in the **same structure Kometa expects**
@@ -184,7 +189,7 @@ KAM follows Kometa’s layout and **does not** invent proprietary paths.
 
 ## Multiple libraries (recommended patterns)
 
-Because of the “1 library ↔ 1 directory” constraint, 
+Because of the “1 library ↔ 1 directory” constraint,
 
 Keep all library roots **under one** top-level directory and mount that top-level to `/assets`.
 (Still follow the “1 library ↔ 1 directory” rule inside that root and keep a single `Collections/`.)
