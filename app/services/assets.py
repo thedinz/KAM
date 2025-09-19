@@ -10,7 +10,10 @@ def ensure_dir(p: str):
     pathlib.Path(p).mkdir(parents=True, exist_ok=True)
 
 def sanitize_name(name: str) -> str:
-    s = SAFE.sub("", name or "").strip()
+    s = (name or "")
+    # Always preserve real titles. Only neutralize path separators and nulls.
+    s = s.replace("\\", "⧵").replace("/", "⁄").replace("\x00", "")
+    s = s.strip()
     return MULTI.sub(" ", s)
 
 def folder_name_for(title: str, year: Optional[int]) -> str:

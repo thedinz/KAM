@@ -11,11 +11,11 @@
   body{margin:0; font:16px/1.35 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu; background:var(--bg); color:var(--fg)}
   header{display:flex; gap:12px; align-items:center; padding:14px 16px; border-bottom:1px solid var(--border); position:sticky; top:0; background:var(--bg); z-index:5}
   header h1{font-size:18px; margin:0 8px 0 0}
-  a.btn,button.btn{background:var(--card); color:var(--fg); border:1px solid var(--border); border-radius:10px; padding:8px 10px; text-decoration:none}
+  a.btn,button.btn{background:var(--card); color:var(--fg); border:1px solid var(--border); border-radius:10px; padding:8px 10px; text-decoration:none; cursor:pointer}
   a.btn:hover,button.btn:hover{border-color:var(--accent)}
   main{padding:16px}
   .row{display:flex; gap:16px; flex-wrap:wrap}
-  .card{background:var(--card); border:1px solid var(--border); border-radius:12px; padding:12px} overflow:hidden;
+  .card{background:var(--card); border:1px solid var(--border); border-radius:12px; padding:12px; overflow:hidden;}
   .label{font-size:13px; color:var(--muted); margin-bottom:6px}
   .grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(240px,1fr)); gap:12px; margin-top:12px}
   .exists{font-size:12px; color:#4ade80; margin-left:6px}
@@ -38,7 +38,7 @@
       <div class="upload-row">
         <input type="file" id="posterFile" accept="image/*">
         <button class="btn" id="importPoster">Import</button>
-          <button class="btn" id="uploadPoster">Upload</button>
+        <button class="btn" id="uploadPoster">Upload</button>
         <span id="posterFlag"></span>
       </div>
     </div>
@@ -47,6 +47,7 @@
       <img id="bgImg" style="max-height:220px; border-radius:8px; display:none; margin-bottom:8px" />
       <div class="upload-row">
         <input type="file" id="bgFile" accept="image/*">
+        <button class="btn" id="importBg">Import</button>
         <button class="btn" id="uploadBg">Upload</button>
         <span id="bgFlag"></span>
       </div>
@@ -70,17 +71,35 @@
     return;
   }
 
-  // Update back link so we return to the same library view on index
-  const back = $("#back"); back.href = "index.html?lib=" + encodeURIComponent(library);
-
+  $("#back").href = "index.html?lib=" + encodeURIComponent(library);
   const status = $("#status");
-  const posterFile = $("#posterFile");
-  const bgFile = $("#bgFile");
-  const uploadPoster = $("#uploadPoster");
-  const uploadBg = $("#uploadBg");
-  const posterFlag = $("#posterFlag");
-  const bgFlag = $("#bgFlag");
-  const seasonsDiv = $("#seasons");
+
+  const els = {
+    posterFile: $("#posterFile"),
+    bgFile: $("#bgFile"),
+    uploadPoster: $("#uploadPoster"),
+    uploadBg: $("#uploadBg"),
+    importPoster: $("#importPoster"),
+    importBg: $("#importBg"),
+    posterFlag: $("#posterFlag"),
+    bgFlag: $("#bgFlag"),
+    seasonsDiv: $("#seasons"),
+    posterImg: $("#posterImg"),
+    bgImg: $("#bgImg"),
+  };
+
+  const state = {
+    folderName: null,
+    plexPosterUrl: null,
+    plexBackgroundUrl: null,
+    seasons: [] // {index, title, url, urlPlex, exists, plexPosterUrl?}
+  };
+
+  function flag(el, exists){
+    el.textContent = exists ? "exists" : "missing";
+    el.className = exists ? "exists" : "missing";
+  }
+  function bust(url){ if (!url) return url; return url + (url.includes("?") ? "&" : "?") + "t=" + Date.now(); }
 
   async function j(url){
     const r = await fetch(url);
@@ -88,134 +107,184 @@
     return r.json();
   }
 
-  function flag(el, exists){
-    el.textContent = exists ? "exists" : "missing";
-    el.className = exists ? "exists" : "missing";
-  }
-
   async function load(){
     status.textContent = "";
     try {
       const data = await j(`/api/show?library=${encodeURIComponent(library)}&ratingKey=${encodeURIComponent(ratingKey)}`);
+
+      // Title
       $("#title").textContent = `${data.title || "Show"}${data.year ? " ("+data.year+")" : ""}`;
-      flag(posterFlag, !!data.posterExists);
-      flag(bgFlag, !!data.backgroundExists);
-      const pimg = document.getElementById("posterImg");
-      const bimg = document.getElementById("bgImg");
-      if (data.posterUrl){ pimg.src = data.posterUrl; pimg.style.display="block"; }
-      else if (data.posterUrlPlex){ pimg.src = data.posterUrlPlex; pimg.style.display="block"; }
-      else { pimg.style.display="none"; }
-      if (data.backgroundUrl){ bimg.src = data.backgroundUrl; bimg.style.display="block"; }
-      else if (data.backgroundUrlPlex){ bimg.src = data.backgroundUrlPlex; bimg.style.display="block"; }
-      else { bimg.style.display="none"; }
-      seasonsDiv.innerHTML = "";
-      for (const s of (data.seasons || [])) {
-        const card = document.createElement("div"); card.className = "card";
-        const label = document.createElement("div"); label.className="label"; label.textContent = "Season " + String(s.index).padStart(2, "0");
-        const img = document.createElement("img"); img.style.maxHeight="200px"; img.style.display = (s.url || s.urlPlex) ? "block" : "none"; if (s.url) img.src = s.url; else if (s.urlPlex) img.src = s.urlPlex;
-        const input = document.createElement("input"); input.type="file"; input.accept="image/*";
-        const btn = document.createElement("button"); btn.className="btn"; btn.textContent="Upload";
-        const importBtn = document.createElement("button"); importBtn.className="btn"; importBtn.textContent="Import";
-        const flagSpan = document.createElement("span"); flagSpan.className = s.exists ? "exists" : "missing"; flagSpan.textContent = s.exists ? "exists" : "missing";
-        btn.addEventListener("click", async ()=>{
-          const f = input.files && input.files[0]; if (!f) return;
-          const fd = new FormData();
-          fd.append("library", library);
-          fd.append("folderName", data.folderName);
-          fd.append("season", String(s.index));
-          fd.append("file", f);
-          status.textContent = "Uploading Season " + s.index + "...";
-          try {
-            const r = await fetch("/api/upload_season", { method:"POST", body: fd });
-            if (!r.ok) throw new Error("HTTP " + r.status);
-            await r.json();
-            status.textContent = "Done.";
-            flagSpan.textContent = "exists"; flagSpan.className="exists"; if (img){ img.src = (s.url || '') + (s.url ? (s.url.includes('?')?'&':'?') + 't='+Date.now() : ''); img.style.display='block'; }
-          } catch (err) {
-            status.textContent = String(err);
-          }
-        });
-        card.appendChild(label);
-        const row = document.createElement("div"); row.className="upload-row";
-        row.appendChild(img); importBtn.addEventListener("click", async ()=>{
-            status.textContent = "Importing Season " + s.index + "...";
-            try {
-              const fd = new FormData();
-              fd.append("library", library);
-              fd.append("ratingKey", s.ratingKey);
-              fd.append("folderName", data.folderName);
-              fd.append("seasonIndex", s.index);
-              const r = await fetch("/api/import/poster", { method:"POST", body: fd });
-              if (!r.ok) throw new Error("HTTP " + r.status);
-              await r.json();
-              flagSpan.textContent = "exists";
-              if (img && img.src) img.src = img.src + (img.src.includes("?")?"&":"?") + "t=" + Date.now();
-              status.textContent = "Done.";
-            } catch (err) { status.textContent = String(err); }
-          });
-          row.appendChild(input); row.appendChild(btn); row.appendChild(importBtn); row.appendChild(flagSpan);
-        card.appendChild(row);
-        seasonsDiv.appendChild(card);
-      }
 
-      
-async function importSeriesPoster(){
-  status.textContent = "Importing series poster...";
-  try {
-    const fd = new FormData();
-    fd.append("library", library);
-    fd.append("ratingKey", data.ratingKey);
-    fd.append("folderName", data.folderName);
-    const r = await fetch("/api/import/poster", { method:"POST", body: fd });
-    if (!r.ok) throw new Error("HTTP " + r.status);
-    await r.json();
-    const pimg = document.getElementById('posterImg');
-    if (pimg && pimg.src){ pimg.src = pimg.src + (pimg.src.includes("?")?"&":"?") + "t=" + Date.now(); pimg.style.display='block'; }
-    status.textContent = "Done.";
-    flag(posterFlag, true);
-  } catch (e) { status.textContent = String(e); }
-}
-document.getElementById("importPoster").onclick = ()=>importSeriesPoster();
-uploadPoster.onclick = async ()=>{
-        const f = posterFile.files && posterFile.files[0]; if (!f) return;
-        const fd = new FormData();
-        fd.append("library", library);
-        fd.append("folderName", data.folderName);
-        fd.append("kind", "poster");
-        fd.append("file", f);
-        status.textContent = "Uploading series poster...";
-        try {
-          const r = await fetch("/api/upload_show", { method:"POST", body: fd });
-          if (!r.ok) throw new Error("HTTP " + r.status);
-          await r.json();
-          status.textContent = "Done.";
-          flag(posterFlag, true);
-          const pimg = document.getElementById('posterImg'); pimg.src = (pimg.src || data.posterUrl || '') + (pimg.src.includes('?')?'&':'?') + 't=' + Date.now(); pimg.style.display='block';
-        } catch (err) { status.textContent = String(err); }
-      };
+      // Remember folder/plex URLs if provided
+      state.folderName        = data.folderName;
+      state.plexPosterUrl     = data.plexPosterUrl     || data.posterUrlPlex || null;
+      state.plexBackgroundUrl = data.plexBackgroundUrl || data.backgroundUrlPlex || null;
 
-      uploadBg.onclick = async ()=>{
-        const f = bgFile.files && bgFile.files[0]; if (!f) return;
-        const fd = new FormData();
-        fd.append("library", library);
-        fd.append("folderName", data.folderName);
-        fd.append("kind", "background");
-        fd.append("file", f);
-        status.textContent = "Uploading background...";
-        try {
-          const r = await fetch("/api/upload_show", { method:"POST", body: fd });
-          if (!r.ok) throw new Error("HTTP " + r.status);
-          await r.json();
-          status.textContent = "Done.";
-          flag(bgFlag, true);
-          const bimg = document.getElementById('bgImg'); bimg.src = (bimg.src || data.backgroundUrl || '') + (bimg.src.includes('?')?'&':'?') + 't=' + Date.now(); bimg.style.display='block';
-        } catch (err) { status.textContent = String(err); }
-      };
+      // Flags (if backend provides booleans; else infer from local path presence)
+      const posterExists = typeof data.posterExists === "boolean" ? data.posterExists
+                          : (data.posterUrl ? data.posterUrl.startsWith("/fileproxy") : false);
+      const bgExists     = typeof data.backgroundExists === "boolean" ? data.backgroundExists
+                          : (data.backgroundUrl ? data.backgroundUrl.startsWith("/fileproxy") : false);
 
+      flag(els.posterFlag, posterExists);
+      flag(els.bgFlag, bgExists);
+
+      // Images: prefer local URLs if present; else Plex
+      const posterSrc = data.posterUrl || data.posterUrlPlex || state.plexPosterUrl;
+      const bgSrc     = data.backgroundUrl || data.backgroundUrlPlex || state.plexBackgroundUrl;
+
+      if (posterSrc){ els.posterImg.src = bust(posterSrc); els.posterImg.style.display="block"; }
+      else { els.posterImg.style.display="none"; }
+      if (bgSrc){ els.bgImg.src = bust(bgSrc); els.bgImg.style.display="block"; }
+      else { els.bgImg.style.display="none"; }
+
+      // Seasons
+      state.seasons = (data.seasons || []).map(s => ({
+        index: s.index,
+        title: s.title || `Season ${String(s.index).padStart(2,"0")}`,
+        url: s.url || s.posterUrl || null,
+        urlPlex: s.urlPlex || s.plexPosterUrl || null,
+        exists: !!s.exists || (!!s.url && s.url.startsWith("/fileproxy"))
+      }));
+
+      renderSeasons();
     } catch (e) {
       status.textContent = String(e);
     }
   }
+
+  function renderSeasons(){
+    els.seasonsDiv.innerHTML = "";
+    for (const s of state.seasons) {
+      const card = document.createElement("div"); card.className = "card";
+      const label = document.createElement("div"); label.className="label"; label.textContent = s.title;
+      const img = document.createElement("img");
+      img.style.maxHeight="200px"; img.style.display = (s.url || s.urlPlex) ? "block" : "none";
+      if (s.url) img.src = bust(s.url); else if (s.urlPlex) img.src = bust(s.urlPlex);
+
+      const input = document.createElement("input"); input.type="file"; input.accept="image/*";
+      const btn = document.createElement("button"); btn.className="btn"; btn.textContent="Upload";
+      const importBtn = document.createElement("button"); importBtn.className="btn"; importBtn.textContent="Import";
+      const flagSpan = document.createElement("span"); flag(flagSpan, s.exists);
+
+      // Upload season -> /api/upload_season
+      btn.addEventListener("click", async ()=>{
+        const f = input.files && input.files[0]; if (!f) return;
+        const fd = new FormData();
+        fd.append("library", library);
+        fd.append("folderName", state.folderName);
+        fd.append("season", String(s.index));
+        fd.append("file", f);
+        status.textContent = "Uploading Season " + s.index + "...";
+        try {
+          const r = await fetch("/api/upload_season", { method:"POST", body: fd });
+          if (!r.ok) throw new Error("HTTP " + r.status);
+          await r.json();
+          status.textContent = "Done.";
+          flag(flagSpan, true);
+          await load();
+        } catch (err) {
+          status.textContent = String(err);
+        }
+      });
+
+      // Import season -> /api/import/season (pass show ratingKey; include url if we have a Plex URL)
+      importBtn.addEventListener("click", async ()=>{
+        status.textContent = "Importing Season " + s.index + "...";
+        try {
+          const fd = new FormData();
+          fd.append("library", library);
+          fd.append("folderName", state.folderName);
+          fd.append("season", String(s.index));
+          fd.append("ratingKey", ratingKey);
+          if (s.urlPlex) fd.append("url", s.urlPlex);
+          const r = await fetch("/api/import/season", { method:"POST", body: fd });
+          if (!r.ok) throw new Error("HTTP " + r.status);
+          await r.json();
+          status.textContent = "Done.";
+          await load();
+        } catch (err) { status.textContent = String(err); }
+      });
+
+      card.appendChild(label);
+      const row = document.createElement("div"); row.className="upload-row";
+      row.appendChild(img); row.appendChild(input); row.appendChild(btn); row.appendChild(importBtn); row.appendChild(flagSpan);
+      card.appendChild(row);
+      els.seasonsDiv.appendChild(card);
+    }
+  }
+
+  // Upload series poster/background -> /api/upload_show (kind = poster|background)
+  els.uploadPoster.onclick = async ()=>{
+    const f = els.posterFile.files && els.posterFile.files[0]; if (!f) return;
+    const fd = new FormData();
+    fd.append("library", library);
+    fd.append("folderName", state.folderName);
+    fd.append("kind", "poster");
+    fd.append("file", f);
+    status.textContent = "Uploading series poster...";
+    try {
+      const r = await fetch("/api/upload_show", { method:"POST", body: fd });
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      await r.json();
+      flag(els.posterFlag, true);
+      status.textContent = "Done.";
+      await load();
+    } catch (err) { status.textContent = String(err); }
+  };
+
+  els.uploadBg.onclick = async ()=>{
+    const f = els.bgFile.files && els.bgFile.files[0]; if (!f) return;
+    const fd = new FormData();
+    fd.append("library", library);
+    fd.append("folderName", state.folderName);
+    fd.append("kind", "background");
+    fd.append("file", f);
+    status.textContent = "Uploading background...";
+    try {
+      const r = await fetch("/api/upload_show", { method:"POST", body: fd });
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      await r.json();
+      flag(els.bgFlag, true);
+      status.textContent = "Done.";
+      await load();
+    } catch (err) { status.textContent = String(err); }
+  };
+
+  // Import series poster/background (use show ratingKey, include URL if API returned one)
+  els.importPoster.onclick = async ()=>{
+    status.textContent = "Importing series poster...";
+    try {
+      const fd = new FormData();
+      fd.append("library", library);
+      fd.append("folderName", state.folderName);
+      fd.append("ratingKey", ratingKey);
+      if (state.plexPosterUrl) fd.append("url", state.plexPosterUrl);
+      const r = await fetch("/api/import/poster", { method:"POST", body: fd });
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      await r.json();
+      flag(els.posterFlag, true);
+      status.textContent = "Done.";
+      await load();
+    } catch (err) { status.textContent = String(err); }
+  };
+
+  els.importBg.onclick = async ()=>{
+    status.textContent = "Importing background...";
+    try {
+      const fd = new FormData();
+      fd.append("library", library);
+      fd.append("folderName", state.folderName);
+      fd.append("ratingKey", ratingKey);
+      if (state.plexBackgroundUrl) fd.append("url", state.plexBackgroundUrl);
+      const r = await fetch("/api/import/background", { method:"POST", body: fd });
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      await r.json();
+      flag(els.bgFlag, true);
+      status.textContent = "Done.";
+      await load();
+    } catch (err) { status.textContent = String(err); }
+  };
 
   document.documentElement.setAttribute("data-theme", localStorage.getItem("kam-theme") || "light");
   load();

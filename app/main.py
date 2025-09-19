@@ -1,22 +1,33 @@
+# app/main.py
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
-from pathlib import Path
-
-# ⬇️ Added `imports` here
-from .routers import libraries, items, collections, upload, tv, fileproxy, movie, imports
 
 app = FastAPI(title="KAM")
-app.include_router(libraries.router,   prefix="/api")
-app.include_router(items.router,       prefix="/api")
-app.include_router(collections.router, prefix="/api")
-app.include_router(upload.router,      prefix="/api")
-app.include_router(tv.router,          prefix="/api")
-app.include_router(movie.router,       prefix="/api")
-app.include_router(fileproxy.router,   prefix="/api")
-# ⬇️ Added this line so POST /api/import/poster works
-app.include_router(imports.router,     prefix="/api")
 
-# Serve UI
-WEB_DIR = Path(__file__).parent / "web"
-app.mount("/", StaticFiles(directory=WEB_DIR, html=True), name="web")
+# CORS (adjust if you lock this down)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# ---- Routers ----
+# IMPORTANT: keep these imports AFTER FastAPI() is created
+from .routers import libraries, items, collections, upload, tv, fileproxy, movie, imports
+
+# Register all routers (order doesn’t usually matter, but keep them together)
+app.include_router(libraries.router)
+app.include_router(items.router)
+app.include_router(collections.router)
+app.include_router(upload.router)
+app.include_router(tv.router)          # <-- /api/show lives here
+app.include_router(movie.router)
+app.include_router(imports.router)     # <-- /api/import/* lives here
+app.include_router(fileproxy.router)
+
+# ---- Static Web UI ----
+# Serves files from app/web at /
+app.mount("/", StaticFiles(directory="app/web", html=True), name="web")

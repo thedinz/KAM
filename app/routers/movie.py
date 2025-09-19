@@ -53,7 +53,7 @@ def movie(library: str = Query(...), ratingKey: int = Query(...)):
                 ts = int(os.path.getmtime(p))
             except Exception:
                 ts = None
-            poster_url_local = "/api/fileproxy?path=" + p + (("&t=" + str(ts)) if ts else "")
+            poster_url_local = "/fileproxy?path=" + p + (("&t=" + str(ts)) if ts else "")
         # background
         b = _first_existing(os.path.join(movie_folder, "background"))
         if b:
@@ -62,7 +62,7 @@ def movie(library: str = Query(...), ratingKey: int = Query(...)):
                 ts2 = int(os.path.getmtime(b))
             except Exception:
                 ts2 = None
-            background_url_local = "/api/fileproxy?path=" + b + (("&t=" + str(ts2)) if ts2 else "")
+            background_url_local = "/fileproxy?path=" + b + (("&t=" + str(ts2)) if ts2 else "")
 
     return {
         "library": library,
@@ -77,3 +77,7 @@ def movie(library: str = Query(...), ratingKey: int = Query(...)):
         "backgroundUrl": background_url_local,
         "backgroundUrlPlex": f"{config.PLEX_URL}/library/metadata/{int(ratingKey)}/art?X-Plex-Token={config.PLEX_TOKEN}",
     }
+
+@router.get("/api/movie", summary="Single movie details (alias)")
+def movie_api(library: str = Query(...), ratingKey: int = Query(...)):
+    return movie(library=library, ratingKey=ratingKey)

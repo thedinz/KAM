@@ -1,114 +1,88 @@
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form
+# app/routers/upload.py
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 from typing import Optional
-import os, io
-from PIL import Image
+import os
 
-from ..services.assets import ensure_dir
-from .. import config
+from ..services.resolve import resolve_existing_dir_or_422
 
 router = APIRouter()
 
-# ---------- helpers ----------
+def _write_file(dest_path: str, up: UploadFile) -> None:
+    data = up.file.read()
+    if not data:
+        raise HTTPException(status_code=422, detail="Empty file")
+    # ensure parent exists (we only ever write into an existing dir)
+    parent = os.path.dirname(dest_path)
+    if not os.path.isdir(parent):
+        raise HTTPException(status_code=422, detail="Asset folder does not exist")
+    with open(dest_path, "wb") as f:
+        f.write(data)
 
-def _delete_variants(dest_folder: str, base_no_ext: str) -> None:
-    """Remove any existing files named <base_no_ext>.(jpg|jpeg|png|webp) in the folder."""
-    for ext in (".jpg", ".jpeg", ".png", ".webp"):
-        p = os.path.join(dest_folder, base_no_ext + ext)
-        try:
-            if os.path.exists(p):
-                os.remove(p)
-        except Exception:
-            # don't block the request if cleanup fails
-            pass
-
-def _save_as_named_jpg_from_upload(file: UploadFile, dest_folder: str, base_no_ext: str) -> str:
+@router.post("/api/upload")
+def upload_movie_asset(
+    library: str = Form(...),
+    folderName: str = Form(...),
+    file: UploadFile = File(...),
+    kind: Optional[str] = Form("poster"),  # "poster" or "background"
+):
     """
-    Save uploaded image to <dest_folder>/<base_no_ext>.jpg.
-    - Deletes existing variants first (handled by caller)
-    - Normalizes via Pillow to JPEG
+    Movie upload: write ONLY into an existing Kometa folder.
+    If the folder doesn't exist, return 422. Never create a new folder.
     """
-    ensure_dir(dest_folder)
-
-    data = file.file.read()
-    out_path = os.path.join(dest_folder, base_no_ext + ".jpg")
     try:
-        img = Image.open(io.BytesIO(data))
-        # Convert so JPEG save is safe
-        if img.mode not in ("RGB", "L", "P"):
-            img = img.convert("RGB")
-        img.save(out_path, format="JPEG", quality=92, optimize=True)
-        return out_path
+        dest_dir = resolve_existing_dir_or_422(library, folderName)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+    filename = "background.jpg" if (kind or "").lower() == "background" else "poster.jpg"
+    dest_path = os.path.join(dest_dir, filename)
+    _write_file(dest_path, file)
+    return {"ok": True, "path": dest_path}
+
+@router.post("/api/upload_show")
+def upload_show_asset(
+    library: str = Form(...),
+    folderName: str = Form(...),
+    kind: str = Form(...),                  # "poster" | "background"
+    file: UploadFile = File(...),
+):
+    """
+    Series upload: write ONLY into an existing Kometa folder.
+    """
+    if kind not in ("poster", "background"):
+        raise HTTPException(status_code=422, detail=f"Invalid kind: {kind}")
+
+    try:
+        dest_dir = resolve_existing_dir_or_422(library, folderName)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+    dest_name = "poster.jpg" if kind == "poster" else "background.jpg"
+    dest_path = os.path.join(dest_dir, dest_name)
+    _write_file(dest_path, file)
+    return {"ok": True, "path": dest_path}
+
+@router.post("/api/upload_season")
+def upload_season_asset(
+    library: str = Form(...),
+    folderName: str = Form(...),
+    season: str = Form(...),                # numeric string (e.g., "1", "02")
+    file: UploadFile = File(...),
+):
+    """
+    Season upload: write ONLY into an existing Kometa folder.
+    """
+    try:
+        idx = int(str(season).strip())
     except Exception:
-        # Fallback: raw write (still .jpg extension)
-        with open(out_path, "wb") as f:
-            f.write(data)
-        return out_path
+        raise HTTPException(status_code=422, detail=f"Invalid season: {season!r}")
 
-def _validate_folder_name(folderName: str) -> None:
-    # Fix: backslash must be written as "\\"
-    if "/" in folderName or "\\" in folderName:
-        raise HTTPException(400, "Invalid folder name")
+    try:
+        dest_dir = resolve_existing_dir_or_422(library, folderName)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=422, detail=str(e))
 
-def _library_base_or_404(library: str) -> str:
-    base = config.LIBRARY_MAPPINGS.get(library)
-    if not base:
-        raise HTTPException(404, f"Library '{library}' not configured")
-    return base
-
-# ---------- Movies: /api/upload ----------
-
-@router.post("/upload")
-def upload_movie(
-    library: str = Form(...),
-    folderName: str = Form(...),
-    ratingKey: int = Form(...),
-    kind: str = Form("poster"),
-    file: UploadFile = File(...),
-):
-    """
-    Movies upload:
-      kind=poster      -> poster.jpg
-      kind=background  -> background.jpg
-    """
-    _validate_folder_name(folderName)
-    base = _library_base_or_404(library)
-    dest_folder = os.path.join(base, folderName)
-    ensure_dir(dest_folder)
-
-    base_no_ext = "background" if (kind or "").lower() == "background" else "poster"
-    # Critical: delete old variants before saving, to guarantee overwrite
-    _delete_variants(dest_folder, base_no_ext)
-    path = _save_as_named_jpg_from_upload(file, dest_folder, base_no_ext)
-    return {"ok": True, "path": path}
-
-# ---------- TV: /api/upload_show ----------
-
-@router.post("/upload_show")
-def upload_show(
-    library: str = Form(...),
-    folderName: str = Form(...),
-    ratingKey: int = Form(...),
-    kind: str = Form("poster"),
-    file: UploadFile = File(...),
-    seasonIndex: Optional[int] = Form(None),
-):
-    """
-    TV upload:
-      - Series-level poster/background -> poster.jpg / background.jpg
-      - Season poster (if seasonIndex provided) -> SeasonXX.jpg (no subfolders)
-    """
-    _validate_folder_name(folderName)
-    base = _library_base_or_404(library)
-    dest_folder = os.path.join(base, folderName)
-    ensure_dir(dest_folder)
-
-    if seasonIndex is not None:
-        # Save as SeasonXX.jpg inside the show's folder
-        base_no_ext = f"Season{int(seasonIndex):02d}"
-    else:
-        base_no_ext = "background" if (kind or "").lower() == "background" else "poster"
-
-    # Critical: delete old variants (this fixes your "import blocks upload overwrite" case)
-    _delete_variants(dest_folder, base_no_ext)
-    path = _save_as_named_jpg_from_upload(file, dest_folder, base_no_ext)
-    return {"ok": True, "path": path}
+    dest_name = f"Season{idx:02d}.jpg"
+    dest_path = os.path.join(dest_dir, dest_name)
+    _write_file(dest_path, file)
+    return {"ok": True, "path": dest_path}
