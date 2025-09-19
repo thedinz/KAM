@@ -1,7 +1,3 @@
-You’re right—my bad. Here’s your README kept intact, with just one added bullet in the feature list noting the Plex import capability.
-
----
-
 # KAM — Kometa Asset Manager
 
 KAM is a small web app that makes Kometa/Plex artwork management painless. It lets you upload artwork for **movies, TV series, seasons, and collections** and will:
