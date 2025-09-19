@@ -1,194 +1,192 @@
-
-from fastapi import APIRouter, HTTPException, Query, Form, File, UploadFile
-from math import ceil
-from typing import Optional, List, Dict, Any
+# app/routers/tv.py
+from fastapi import APIRouter, HTTPException, Query
+from typing import Any, Dict, List, Optional
 import os
+import requests
+import xml.etree.ElementTree as ET
+from urllib.parse import quote
 
-from ..services.plex import get_plex
-from ..services.assets import sanitize_name, save_as_named_jpg
-from .. import config
+from ..services.resolve import resolve_existing_dir_or_422
+from ..services.sanitize import kometa_sanitize_folder
 
 router = APIRouter()
 
-def _section_by_name(name: str):
-    plex = get_plex()
-    for s in plex.library.sections():
-        if s.title == name:
-            return s
-    raise HTTPException(404, f"Library '{name}' not found in Plex")
+PLEX_URL    = os.environ.get("PLEX_URL", "").rstrip("/")
+PLEX_TOKEN  = os.environ.get("PLEX_TOKEN", "")
+ASSETS_ROOT = os.environ.get("KAM_ASSETS_ROOT", "/assets")
 
+def _require_plex():
+    if not PLEX_URL or not PLEX_TOKEN:
+        raise HTTPException(status_code=500, detail="PLEX_URL or PLEX_TOKEN not set")
 
-def _find_first_existing(base: str):
-    for ext in ('.jpg', '.jpeg', '.png', '.webp'):
-        p = base + ext
-        if os.path.isfile(p):
-            return p
+def _plex_json_or_xml(path: str):
+    _require_plex()
+    url = f"{PLEX_URL}{path}"
+    headers = {"Accept": "application/json", "X-Plex-Token": PLEX_TOKEN}
+    r = requests.get(url, headers=headers, params={"X-Plex-Token": PLEX_TOKEN}, timeout=25)
+    r.raise_for_status()
+    return r
+
+def _show_meta(rk: str) -> Dict[str, Any]:
+    r = _plex_json_or_xml(f"/library/metadata/{rk}")
+    ctype = (r.headers.get("Content-Type") or "").lower()
+    if "application/json" in ctype:
+        data = r.json()
+        md = (data.get("MediaContainer", {}) or {}).get("Metadata") or []
+        md = md[0] if isinstance(md, list) and md else (md if isinstance(md, dict) else {})
+        if not md or md.get("type") not in ("show", "series"):
+            raise HTTPException(status_code=404, detail="Show not found")
+        return {
+            "title": md.get("title") or "",
+            "year": md.get("year"),
+            "thumb": md.get("thumb"),
+            "art": md.get("art"),
+        }
+    root = ET.fromstring(r.text)
+    md = root.find(".//Video")
+    if md is None or md.attrib.get("type") not in ("show", "series"):
+        raise HTTPException(status_code=404, detail="Show not found")
+    return {
+        "title": md.attrib.get("title") or "",
+        "year": _to_int(md.attrib.get("year")),
+        "thumb": md.attrib.get("thumb"),
+        "art": md.attrib.get("art"),
+    }
+
+def _seasons(rk: str) -> List[Dict[str, Any]]:
+    r = _plex_json_or_xml(f"/library/metadata/{rk}/children")
+    ctype = (r.headers.get("Content-Type") or "").lower()
+    out: List[Dict[str, Any]] = []
+    if "application/json" in ctype:
+        data = r.json()
+        md = (data.get("MediaContainer", {}) or {}).get("Metadata") or []
+        if isinstance(md, dict): md = [md]
+        for it in md:
+            if it.get("type") == "season":
+                out.append({
+                    "index": _to_int(it.get("index")),
+                    "title": it.get("title") or f"Season {it.get('index')}",
+                    "ratingKey": it.get("ratingKey"),
+                    "thumb": it.get("thumb"),
+                })
+        return sorted([s for s in out if s["index"] is not None], key=lambda x: x["index"])
+    root = ET.fromstring(r.text)
+    for node in root.findall(".//Directory"):
+        if node.attrib.get("type") == "season":
+            out.append({
+                "index": _to_int(node.attrib.get("index")),
+                "title": node.attrib.get("title") or f"Season {node.attrib.get('index')}",
+                "ratingKey": node.attrib.get("ratingKey"),
+                "thumb": node.attrib.get("thumb"),
+            })
+    return sorted([s for s in out if s["index"] is not None], key=lambda x: x["index"])
+
+def _to_int(x) -> Optional[int]:
+    try: return int(str(x))
+    except Exception: return None
+
+def _existing_folder_name(library: str, title: str, year: Optional[int]) -> Optional[str]:
+    candidates: List[str] = []
+    if year: candidates.append(f"{title} ({year})")
+    candidates.append(title)
+    for cand in candidates:
+        try:
+            path = resolve_existing_dir_or_422(library, cand)
+            return os.path.basename(path.rstrip(os.sep))
+        except Exception:
+            continue
     return None
 
-def _folder_name_for_show(title: str, year: Optional[int]) -> str:
-    # Keep simple for now to match Kometa style: Title or Title (YYYY)
-    t = sanitize_name(title or "")
-    if year:
-        # Some shows use Title (YYYY). We won't attempt to detect collisions yet.
-        return f"{t} ({year})" if "(" not in t and ")" not in t else t
-    return t
+def _local_exists(path: str) -> bool:
+    try:
+        return os.path.isfile(path) and os.path.getsize(path) > 0
+    except Exception:
+        return False
 
-@router.get("/shows", summary="List TV shows")
-def shows(library: str = Query(...),
-          query: Optional[str] = Query(None),
-          page: int = Query(1, ge=1),
-          page_size: int = Query(60, ge=1, le=200)):
-    section = _section_by_name(library)
-    # Fetch shows
-    items = section.search(libtype='show', sort='titleSort:asc')
-    out = []
-    q = (query or "").strip().lower()
-    for it in items:
-        title = getattr(it, 'title', None)
-        year = getattr(it, 'year', None)
-        if q and q not in (title or "").lower():
-            continue
-        ratingKey = int(getattr(it, 'ratingKey', 0))
-        folder = _folder_name_for_show(title, year)
-        # Asset poster if present
-        assets_root = config.LIBRARY_MAPPINGS.get(library)
-        poster = None
-        if assets_root:
-            for ext in ('.jpg', '.jpeg', '.png', '.webp'):
-                p = os.path.join(assets_root, folder, 'poster' + ext)
-                if os.path.isfile(p):
-                    poster = '/api/fileproxy?path=' + p  # simple passthrough if you add such route later
-                    break
-        out.append({
-            "type": "show",
-            "title": title,
-            "year": year,
-            "ratingKey": ratingKey,
-            "folderName": folder,
-            "posterUrl": poster,  # UI should fallback if None
+def _mtime(path: str) -> int:
+    try:
+        return int(os.path.getmtime(path))
+    except Exception:
+        return 0
+
+def _fileproxy_abs_path(library: str, folder: str, filename: str, bust: int = 0) -> str:
+    lib_enc = quote(library, safe="")
+    fol_enc = quote(folder,  safe="")
+    fn_enc  = quote(filename, safe="")
+    t = f"&t={bust}" if bust else ""
+    return f"/fileproxy?path=/assets/{lib_enc}/{fol_enc}/{fn_enc}{t}"
+
+def _plex_thumb_url(thumb: Optional[str], rk: Optional[str]) -> Optional[str]:
+    path = thumb or (f"/library/metadata/{rk}/thumb" if rk else None)
+    if not path: return None
+    return f"{PLEX_URL}{path}?X-Plex-Token={PLEX_TOKEN}"
+
+def _plex_art_url(art: Optional[str], rk: Optional[str]) -> Optional[str]:
+    path = art or (f"/library/metadata/{rk}/art" if rk else None)
+    if not path: return None
+    return f"{PLEX_URL}{path}?X-Plex-Token={PLEX_TOKEN}"
+
+@router.get("/api/show")
+def get_show(library: str = Query(...), ratingKey: str = Query(...)):
+    """
+    Returns:
+      {
+        title, year, folderName,
+        posterUrl, backgroundUrl,
+        plexPosterUrl, plexBackgroundUrl,
+        seasons: [{index, title, posterUrl, plexPosterUrl}]
+      }
+    Prefers local assets for poster/background/season; includes plex* URLs so the UI can pass
+    them to /api/import/* (eliminates fragile server-side discovery).
+    """
+    meta = _show_meta(ratingKey)
+    title, year, thumb, art = meta["title"], meta["year"], meta["thumb"], meta["art"]
+    all_seasons = _seasons(ratingKey)
+
+    folder = _existing_folder_name(library, title, year)
+    if not folder:
+        folder = kometa_sanitize_folder(f"{title} ({year})" if year else title)
+
+    series_dir_fs = os.path.join(ASSETS_ROOT, library, folder)
+
+    # Local-first with cache-busting
+    poster_local = os.path.join(series_dir_fs, "poster.jpg")
+    if _local_exists(poster_local):
+        poster_url = _fileproxy_abs_path(library, folder, "poster.jpg", _mtime(poster_local))
+    else:
+        poster_url = _plex_thumb_url(thumb, ratingKey)
+    plex_poster_url = _plex_thumb_url(thumb, ratingKey)
+
+    bg_local = os.path.join(series_dir_fs, "background.jpg")
+    if _local_exists(bg_local):
+        background_url = _fileproxy_abs_path(library, folder, "background.jpg", _mtime(bg_local))
+    else:
+        background_url = _plex_art_url(art, ratingKey)
+    plex_background_url = _plex_art_url(art, ratingKey)
+
+    seasons_out: List[Dict[str, Any]] = []
+    for s in all_seasons:
+        idx = s["index"]
+        sea_name = f"Season{idx:02d}.jpg"
+        sea_local = os.path.join(series_dir_fs, sea_name)
+        if _local_exists(sea_local):
+            sea_url = _fileproxy_abs_path(library, folder, sea_name, _mtime(sea_local))
+        else:
+            sea_url = _plex_thumb_url(s.get("thumb"), s.get("ratingKey"))
+        seasons_out.append({
+            "index": idx,
+            "title": s["title"],
+            "posterUrl": sea_url,
+            "plexPosterUrl": _plex_thumb_url(s.get("thumb"), s.get("ratingKey")),
         })
-    total = len(out)
-    pages = max(1, ceil(total / page_size))
-    page = min(page, pages)
-    start = (page - 1) * page_size
-    end = start + page_size
-    return {
-        "library": library,
-        "page": page,
-        "page_size": page_size,
-        "total_count": total,
-        "total_pages": pages,
-        "items": out[start:end],
-    }
 
-@router.get("/show", summary="Single TV show details")
-def show_detail(library: str = Query(...), ratingKey: int = Query(...)):
-    section = _section_by_name(library)
-    show = section.fetchItem(ratingKey)
-    if not show or str(getattr(show, 'type', '')) != 'show':
-        raise HTTPException(404, "Show not found")
-    title = getattr(show, 'title', None)
-    year = getattr(show, 'year', None)
-    folder = _folder_name_for_show(title, year)
-    seasons = []
-    for s in show.seasons():
-        try:
-            num = int(getattr(s, 'index', 0))
-        except Exception:
-            num = 0
-        seasons.append({ "index": num, "title": getattr(s, 'title', f"Season {num}"), "ratingKey": int(getattr(s, "ratingKey", 0)) })
-    seasons = sorted(seasons, key=lambda x: x['index'])
-    # Check which asset files exist
-    root = config.LIBRARY_MAPPINGS.get(library)
-    poster_exists = background_exists = False
-    poster_url_local = None
-    background_url_local = None
-    season_assets = []
-    if root:
-        folder_path = os.path.join(root, folder)
-        poster_exists = any(os.path.isfile(os.path.join(folder_path, "poster"+ext)) for ext in (".jpg",".jpeg",".png",".webp"))
-        background_exists = any(os.path.isfile(os.path.join(folder_path, "background"+ext)) for ext in (".jpg",".jpeg",".png",".webp"))
-        if poster_exists:
-            for ext in (".jpg",".jpeg",".png",".webp"):
-                p = os.path.join(folder_path, "poster"+ext)
-                if os.path.isfile(p):
-                    ts = None
-                    try:
-                        ts = int(os.path.getmtime(p))
-                    except Exception:
-                        ts = None
-                    poster_url_local = "/api/fileproxy?path=" + p + (("&t=" + str(ts)) if ts else "")
-                    break
-        if background_exists:
-            for ext in (".jpg",".jpeg",".png",".webp"):
-                p = os.path.join(folder_path, "background"+ext)
-                if os.path.isfile(p):
-                    ts2 = None
-                    try:
-                        ts2 = int(os.path.getmtime(p))
-                    except Exception:
-                        ts2 = None
-                    background_url_local = "/api/fileproxy?path=" + p + (("&t=" + str(ts2)) if ts2 else "")
-                    break
-        for s in seasons:
-            idx = s['index']
-            base = f"Season{idx:02d}"
-            local_url = None
-            exists = False
-            for ext in (".jpg",".jpeg",".png",".webp"):
-                sp = os.path.join(folder_path, base+ext)
-                if os.path.isfile(sp):
-                    exists = True
-                    ts3 = None
-                    try:
-                        ts3 = int(os.path.getmtime(sp))
-                    except Exception:
-                        ts3 = None
-                    local_url = '/api/fileproxy?path=' + sp + (('&t=' + str(ts3)) if ts3 else '')
-                    break
-            rk_season = int(s.get('ratingKey') or 0)
-            plex_url = (f"{config.PLEX_URL}/library/metadata/{rk_season}/thumb?X-Plex-Token={config.PLEX_TOKEN}" if rk_season else None)
-            season_assets.append({ "index": idx, "exists": exists, "url": local_url, "urlPlex": plex_url, "ratingKey": int(s.get("ratingKey") or 0) })
     return {
-        "library": library,
         "title": title,
         "year": year,
-        "ratingKey": int(ratingKey),
         "folderName": folder,
-        "posterExists": poster_exists,
-        "backgroundExists": background_exists,
-        "posterUrl": poster_url_local,
-        "posterUrlPlex": f"{config.PLEX_URL}/library/metadata/{int(ratingKey)}/thumb?X-Plex-Token={config.PLEX_TOKEN}",
-        "backgroundUrl": background_url_local,
-        "backgroundUrlPlex": f"{config.PLEX_URL}/library/metadata/{int(ratingKey)}/art?X-Plex-Token={config.PLEX_TOKEN}",
-        "seasons": season_assets,
+        "posterUrl": poster_url,
+        "backgroundUrl": background_url,
+        "plexPosterUrl": plex_poster_url,
+        "plexBackgroundUrl": plex_background_url,
+        "seasons": seasons_out,
     }
-
-@router.post("/upload_show", summary="Upload series poster/background")
-def upload_show(library: str = Form(...), folderName: str = Form(...),
-                kind: str = Form(...), file: UploadFile = File(...)):
-    if kind not in ("poster", "background"):
-        raise HTTPException(400, "kind must be 'poster' or 'background'")
-    if library not in config.LIBRARY_MAPPINGS:
-        raise HTTPException(404, f"Library '{library}' not configured")
-    if any(c in folderName for c in ('/', '\\')):
-        raise HTTPException(400, "Invalid folder name")
-    dest_folder = os.path.join(config.LIBRARY_MAPPINGS[library], folderName)
-    path = save_as_named_jpg(file, dest_folder, kind)
-    return {"ok": True, "path": path}
-
-@router.post("/upload_season", summary="Upload a season poster")
-def upload_season(library: str = Form(...), folderName: str = Form(...),
-                  season: str = Form(...), file: UploadFile = File(...)):
-    if library not in config.LIBRARY_MAPPINGS:
-        raise HTTPException(404, f"Library '{library}' not configured")
-    if any(c in folderName for c in ('/', '\\')):
-        raise HTTPException(400, "Invalid folder name")
-    try:
-        n = int(season)
-    except Exception:
-        raise HTTPException(400, "season must be an integer like 0,1,2,10")
-    base = f"Season{n:02d}"
-    dest_folder = os.path.join(config.LIBRARY_MAPPINGS[library], folderName)
-    path = save_as_named_jpg(file, dest_folder, base)
-    return {"ok": True, "path": path}

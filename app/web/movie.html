@@ -47,6 +47,7 @@
       <img id="bgImg" style="max-height:220px; border-radius:8px; display:none; margin-bottom:8px" />
       <div class="upload-row">
         <input type="file" id="bgFile" accept="image/*">
+        <button class="btn" id="importBg">Import</button>
         <button class="btn" id="uploadBg">Upload</button>
         <span id="bgFlag"></span>
       </div>
@@ -130,7 +131,25 @@
     status.textContent = "Done.";
   }
 
-  async function importPoster() {
+  
+  async function importBg() {
+    status.textContent = "Importing from Plex...";
+    const fd = new FormData();
+    fd.append("library", library);
+    fd.append("ratingKey", data.ratingKey);
+    fd.append("folderName", data.folderName);
+    if (data.backgroundUrlPlex) fd.append("url", data.backgroundUrlPlex);
+
+    const r = await fetch("/api/import/background", { method: "POST", body: fd });
+    if (!r.ok) { status.textContent = "Import failed."; throw new Error(await r.text()); }
+    await r.json();
+
+    const fresh = await j(`/api/movie?library=${encodeURIComponent(library)}&ratingKey=${encodeURIComponent(ratingKey)}`);
+    render(fresh);
+    status.textContent = "Done.";
+  }
+
+async function importPoster() {
     status.textContent = "Importing from Plex...";
     const fd = new FormData();
     fd.append("library", library);
@@ -150,6 +169,7 @@
     $("#uploadPoster").onclick = () => upload("poster", $("#posterFile"));
     $("#uploadBg").onclick = () => upload("background", $("#bgFile"));
     $("#importPoster").onclick = () => importPoster();
+    $("#importBg").onclick = () => importBg();
     load().catch((e) => (status.textContent = String(e)));
   });
 </script>
