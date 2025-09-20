@@ -1,70 +1,105 @@
 # app/routers/libraries.py
-from fastapi import APIRouter, HTTPException
+"""
+Libraries router: only expose libraries explicitly mapped in the environment.
+
+Env format (in your .env):
+  LIBRARIES=Movies:/assets/Movies,Kids Movies:/assets/Kids Movies,TV Shows:/assets/TV Shows
+"""
+
+from __future__ import annotations
+
+from fastapi import APIRouter, HTTPException, Query
+from typing import Dict, List, Optional
 import os
-import requests
-import xml.etree.ElementTree as ET
-from typing import List, Dict, Any
 
 router = APIRouter()
 
-PLEX_URL   = os.environ.get("PLEX_URL", "").rstrip("/")
-PLEX_TOKEN = os.environ.get("PLEX_TOKEN", "")
+# --- Load mappings -----------------------------------------------------------
 
-def _plex_sections_json() -> Dict[str, Any]:
-    if not PLEX_URL or not PLEX_TOKEN:
-        raise HTTPException(status_code=500, detail="PLEX_URL or PLEX_TOKEN not set")
-    url = f"{PLEX_URL}/library/sections"
-    headers = {"Accept": "application/json", "X-Plex-Token": PLEX_TOKEN}
+def _parse_env_mappings(raw: str) -> Dict[str, str]:
+    """
+    Parse "Name:/path,Other Name:/other/path" into {"Name": "/path", ...}
+    Ignores empty items; trims whitespace; last duplicate wins.
+    """
+    mapping: Dict[str, str] = {}
+    for part in (raw or "").split(","):
+        part = part.strip()
+        if not part:
+            continue
+        if ":" not in part:
+            # Skip malformed entry gracefully
+            continue
+        name, path = part.split(":", 1)
+        name = name.strip()
+        path = path.strip()
+        if name and path:
+            mapping[name] = path
+    return mapping
+
+
+def _load_mappings() -> Dict[str, str]:
+    """
+    Prefer importing from app.config if available (e.g., LIBRARY_MAPPINGS),
+    otherwise parse LIBRARIES from the environment directly.
+    """
+    # Try to use central config if present
     try:
-        r = requests.get(url, headers=headers, params={"X-Plex-Token": PLEX_TOKEN}, timeout=15)
-        # Plex may still return XML even if we ask for JSON; if so, we'll parse XML below.
-        if r.headers.get("Content-Type", "").lower().startswith("application/json"):
-            r.raise_for_status()
-            return r.json()
-        # fallthrough: treat as XML
-        return {"_xml": r.text}
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Plex sections request failed: {e}")
-
-def _parse_sections_to_names(doc: Dict[str, Any]) -> List[str]:
-    # JSON path: MediaContainer.Directory -> list of libs with {title, type}
-    if "_xml" not in doc:
-        mc = doc.get("MediaContainer") or {}
-        dirs = mc.get("Directory") or []
-        # some Plex servers return a single dict instead of list
-        if isinstance(dirs, dict):
-            dirs = [dirs]
-        names: List[str] = []
-        for d in dirs:
-            title = d.get("title")
-            if title:
-                names.append(title)
-        return sorted(names, key=lambda s: s.lower())
-
-    # XML path:
-    try:
-        root = ET.fromstring(doc["_xml"])
-        names: List[str] = []
-        # The <Directory title="Movies" type="movie" ... /> elements are children of <MediaContainer>
-        for node in root.findall(".//Directory"):
-            title = node.attrib.get("title")
-            if title:
-                names.append(title)
-        return sorted(names, key=lambda s: s.lower())
+        # Expected in your codebase: app/config.py defines LIBRARY_MAPPINGS: Dict[str, str]
+        from ..config import LIBRARY_MAPPINGS  # type: ignore
+        if isinstance(LIBRARY_MAPPINGS, dict) and LIBRARY_MAPPINGS:
+            # Normalize keys/values
+            return {str(k).strip(): str(v).strip() for k, v in LIBRARY_MAPPINGS.items() if str(k).strip() and str(v).strip()}
     except Exception:
-        # If XML parse fails, fall back to empty (better than 500)
-        return []
+        pass
 
-@router.get("/api/libraries")
+    # Fallback: parse from ENV
+    env_raw = os.environ.get("LIBRARIES", "")
+    return _parse_env_mappings(env_raw)
+
+
+LIBRARY_MAPPINGS: Dict[str, str] = _load_mappings()
+
+
+def _ensure_any_mapped() -> None:
+    if not LIBRARY_MAPPINGS:
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "No mapped libraries were found. Set LIBRARIES=Name:/path,... "
+                "in your environment (or ensure config.LIBRARY_MAPPINGS is populated)."
+            ),
+        )
+
+
+# --- Endpoints ---------------------------------------------------------------
+
+@router.get("/api/libraries", response_model=List[str])
 def get_libraries() -> List[str]:
     """
-    Return a simple array of library names.
-    Your index.html already copes with either an array of strings or an array of objects with a 'name' field,
-    but we'll keep it simple here and return names only.
+    Return only the names of libraries that are explicitly mapped.
+    This prevents showing unsupported sections like Music, etc.
     """
-    data = _plex_sections_json()
-    names = _parse_sections_to_names(data)
-    if not names:
-        # give a friendly error instead of empty 200 when Plex is reachable but nothing parsed
-        raise HTTPException(status_code=404, detail="No libraries found from Plex")
-    return names
+    _ensure_any_mapped()
+    return sorted(LIBRARY_MAPPINGS.keys())
+
+
+@router.get("/api/libraries/map", response_model=Dict[str, str])
+def get_library_map() -> Dict[str, str]:
+    """
+    Return the full name -> path map (useful for uploads).
+    """
+    _ensure_any_mapped()
+    # Return a stable ordering for deterministic diffs/tests (optional)
+    return {name: LIBRARY_MAPPINGS[name] for name in sorted(LIBRARY_MAPPINGS.keys())}
+
+
+@router.get("/api/library-path")
+def get_library_path(name: str = Query(..., description="Mapped library name")) -> Dict[str, str]:
+    """
+    Resolve a single library name to its mapped path.
+    """
+    _ensure_any_mapped()
+    path = LIBRARY_MAPPINGS.get(name)
+    if not path:
+        raise HTTPException(status_code=404, detail=f"Library '{name}' is not mapped.")
+    return {"name": name, "path": path}
