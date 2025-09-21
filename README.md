@@ -32,6 +32,7 @@ Movies:
   operations:
     assets_for_all: true
     assets_for_all_collections: true
+  settings:
     create_asset_folders: true
 ```
 
