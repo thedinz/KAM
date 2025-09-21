@@ -42,7 +42,7 @@ Movies:
 - Once the folders exist, KAM will safely upload and replace artwork inside them.  
 
 ⚠️ If the folders don’t exist first, uploads from KAM will fail.
-  ⚠️ REMEMBER, this is an addon for Kometa, not a stand alone application.
+⚠️ REMEMBER, this is an addon for Kometa, not a stand alone application.
 
 ---
 
