@@ -22,6 +22,28 @@ What this means in practice:
 
 ---
 
+## Required Kometa settings
+
+For KAM to function properly, Kometa needs to be configured to create and manage asset folders ahead of time.  
+In your Kometa configuration (example shown for **Movies**), make sure these settings are enabled:
+
+```yaml
+Movies:
+  operations:
+    assets_for_all: true
+    assets_for_all_collections: true
+    create_asset_folders: true
+```
+
+### Why this is required
+- **KAM does not create folders.** It only places artwork into existing Kometa asset folders.  
+- These Kometa options ensure asset folders are created automatically for every movie, show, and collection.  
+- Once the folders exist, KAM will safely upload and replace artwork inside them.  
+
+⚠️ If the folders don’t exist first, uploads from KAM will fail.
+
+---
+
 ## How asset mapping works (flexible)
 
 Inside the container, KAM writes to an **assets root** (examples assume `/assets` inside the container).
@@ -61,7 +83,7 @@ KAM only cares about the **internal** path (e.g., `/assets`). You choose what ho
       background.jpg
 ```
 
-> ✅ **Season posters** are stored as flat files **in the series folder** (`Season01.jpg`, `Season02.jpg`, …).
+> ✅ **Season posters** are stored as flat files **in the series folder** (`Season01.jpg`, `Season02.jpg`, …).  
 > ❌ No `Season 01/` subfolders are used by KAM.
 
 ---
@@ -87,11 +109,7 @@ docker pull ghcr.io/thedinz/kam:latest
 Expose KAM on **7171** and map your assets:
 
 ```bash
-docker run -d \
-  --name kam \
-  -p 7171:7171 \
-  -v /mnt/user/kometa/assets:/assets \
-  ghcr.io/thedinz/kam:latest
+docker run -d   --name kam   -p 7171:7171   -v /mnt/user/kometa/assets:/assets   ghcr.io/thedinz/kam:latest
 ```
 
 Open: `http://<your-host>:7171/`
@@ -256,20 +274,20 @@ docker stop kam && docker rm kam
 
 ## FAQ
 
-**Q: Can I use multiple asset roots at the same time?**
+**Q: Can I use multiple asset roots at the same time?**  
 A: Not currently. **One library ↔ one directory**, and all collections live in **one** `Collections/` folder.
 
-**Q: Can I map the assets directory to any host path?**
-A: Yes. Bind-mount any host folder to the container’s internal assets path (examples use `/assets`).
+**Q: Can I map the assets directory to any host path?**  
+A: Yes. Bind-mount any host folder to the container’s internal assets path (examples use `/assets`).  
 You could map `/mnt/user/kometa/assets` to `/assets` or map `/mystuff` to `/assets` — KAM doesn’t care.
 
-**Q: What artwork types does KAM handle?**
+**Q: What artwork types does KAM handle?**  
 A: `poster.jpg` and `background.jpg` for movies, series, and collections; `SeasonNN.jpg` for seasons (in the series folder).
 
-**Q: Does KAM keep the old files?**
+**Q: Does KAM keep the old files?**  
 A: No. It **replaces** any existing `poster.*`, `background.*`, or `SeasonNN.*` for the selected item.
 
-**Q: Which image formats can I upload?**
+**Q: Which image formats can I upload?**  
 A: Any common format; KAM converts to `.jpg` on save.
 
 ---
