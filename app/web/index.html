@@ -45,18 +45,19 @@
 <header>
   <h1>KAM</h1>
   <select id="libSelect" title="Library"></select>
-  <input id="search" type="search" placeholder="Search…" />
+  <input id="search" type="search" placeholder="Search&hellip;" />
   <div id="toolbar">
     <!-- Import all for current library -->
     <button id="importAllBtn" class="btn" title="Import all posters (and TV season posters) from Plex">Import Assets</button>
 
-    <button id="themeToggle" title="Toggle theme">🌙</button>
+    <button id="themeToggle" title="Toggle theme">&#127769;</button><!-- 🌙 -->
+
     <div id="pager">
-      <button id="firstBtn" class="btn" title="First">⏮</button>
-      <button id="prevBtn"  class="btn" title="Previous">◀</button>
+      <button id="firstBtn" class="btn" title="First">&#9198;</button><!-- ⏮ -->
+      <button id="prevBtn"  class="btn" title="Previous">&#9664;</button><!-- ◀ -->
       <span id="pageInfo">Page 1 of 1</span>
-      <button id="nextBtn"  class="btn" title="Next">▶</button>
-      <button id="lastBtn"  class="btn" title="Last">⏭</button>
+      <button id="nextBtn"  class="btn" title="Next">&#9654;</button><!-- ▶ -->
+      <button id="lastBtn"  class="btn" title="Last">&#9199;</button><!-- ⏭ -->
       <span id="count"></span>
     </div>
   </div>
@@ -125,10 +126,12 @@
   let state = { library: null, page: 1, pageSize: 60, totalPages: 1, totalCount: 0, query: null };
 
   // ===== theme =====
+  const MOON = String.fromCodePoint(0x1F319);
+  const SUN  = String.fromCodePoint(0x2600, 0xFE0F);
   function setTheme(t){
     document.documentElement.setAttribute("data-theme", t);
     try { localStorage.setItem("kam-theme", t); } catch {}
-    themeToggle.textContent = (t === "dark" ? "☀️" : "🌙");
+    themeToggle.textContent = (t === "dark" ? SUN : MOON);
   }
   themeToggle.addEventListener("click", ()=>{
     const t = document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark";
@@ -177,7 +180,19 @@
       img.className = "poster";
       img.loading = "lazy";
       img.alt = it.title || "";
-      img.src = it.posterUrl || "fallback.png";
+
+      const posterLocal =
+        it.posterUrlLocal || it.poster_local || it.assetPosterUrl || it.asset_poster_url || it.poster;
+      const posterPlex =
+        it.posterUrlPlex || it.poster_url_plex || it.plexPoster || it.plex_poster || it.posterUrl;
+
+      let chosen = posterLocal || posterPlex || "fallback.png";
+      if (posterLocal && !/\bt=/.test(chosen)) {
+        const sep = chosen.includes("?") ? "&" : "?";
+        chosen = `${chosen}${sep}t=${Date.now()}`;
+      }
+      img.src = chosen;
+
       img.onerror = function () { this.onerror = null; this.src = "fallback.png"; };
 
       const meta = document.createElement("div");
@@ -214,8 +229,9 @@
 
   async function loadPage(p=1){
     if (!state.library) return;
-    const u = new URL("/api/items", location.origin);
-    u.searchParams.set("library", state.library);
+    const isCollections = (state.library || '').trim().toLowerCase() === 'collections';
+    const u = new URL(isCollections ? "/collections" : "/api/items", location.origin);
+    if (!isCollections) u.searchParams.set("library", state.library);
     u.searchParams.set("page", String(p));
     u.searchParams.set("page_size", String(state.pageSize));
     if (state.query) u.searchParams.set("query", state.query);
@@ -232,15 +248,14 @@
     }
   }
 
-  // ===== pager =====
+  // pager
   firstBtn.addEventListener("click", ()=> loadPage(1));
   prevBtn.addEventListener("click", ()=> loadPage(Math.max(1, state.page - 1)));
   nextBtn.addEventListener("click", ()=> loadPage(Math.min(state.totalPages, state.page + 1)));
   lastBtn.addEventListener("click", ()=> loadPage(state.totalPages));
 
-  // ===== Import All (Movies ok, TV uses show + seasons) =====
+  // Import All (unchanged)
   async function fetchAllItemsForLibrary(lib, query=null) {
-    // Server default pagination (no page_size) to avoid 422
     const mk = (p) => {
       const u = new URL("/api/items", location.origin);
       u.searchParams.set("library", lib);
@@ -248,7 +263,6 @@
       if (query) u.searchParams.set("query", query);
       return u.toString();
     };
-
     const all = [];
     const first = await j(mk(1));
     const totalPages = first.total_pages || 1;
@@ -270,26 +284,20 @@
   }
 
   async function importShowPosterPreferShowEndpoint(library, ratingKey, folderName){
-    // Try a dedicated show import endpoint first (many KAM builds have this),
-    // then fall back to the generic poster endpoint if not supported.
     const tryShow = async () => {
       const fd = new FormData();
       fd.append("library", library);
       if (ratingKey != null) fd.append("ratingKey", String(ratingKey));
       if (folderName) fd.append("folderName", folderName);
-      // If your backend uses a different path (e.g. /api/import/showPoster),
-      // you can change it here in one place.
       const r = await fetch("/api/import/show", { method: "POST", body: fd });
       return r;
     };
-
     let r;
     try {
       r = await tryShow();
       if (!r.ok && r.status !== 404 && r.status !== 405) return r;
       if (r.ok) return r;
-    } catch(_) { /* ignore and fall back */ }
-
+    } catch(_) {}
     return importMoviePoster(library, ratingKey, folderName);
   }
 
@@ -314,7 +322,6 @@
     try {
       const { all, totalCount } = await fetchAllItemsForLibrary(state.library, state.query);
       const total = all.length || totalCount || 1;
-
       let done = 0;
       const bump = () => {
         done++;
@@ -322,38 +329,26 @@
           errors.textContent = `Importing assets from Plex… (${Math.round((done / total) * 100)}%)`;
         }
       };
-
       for (const it of all) {
         const folderName = it.folder || it.folderName || it.name || it.title || "";
         const ratingKey  = it.ratingKey || it.key || it.id;
-
         if (isTVLib || String(it.type || "").toLowerCase() === "show" || it.isShow === true) {
-          // TV path: fetch show details first so we have seasons + canonical folder
           try {
             const show = await j(`/api/show?library=${encodeURIComponent(state.library)}&ratingKey=${encodeURIComponent(ratingKey)}`);
             const showFolder = show.folderName || folderName;
-
-            // 1) import the series poster (prefer show endpoint)
             await importShowPosterPreferShowEndpoint(state.library, ratingKey, showFolder);
-
-            // 2) import all season posters
             await importAllSeasons(state.library, showFolder, show.seasons || []);
           } catch (e) {
-            // If /api/show fails for any item, still attempt a generic poster import as fallback
             await importMoviePoster(state.library, ratingKey, folderName);
           }
         } else {
-          // Movie path
           await importMoviePoster(state.library, ratingKey, folderName);
         }
-
         bump();
       }
-
       errors.textContent = "Import complete.";
       await loadPage(state.page);
       setTimeout(()=>{ errors.textContent = ""; }, 1500);
-
     } catch (e) {
       errors.textContent = "Import failed: " + e.message;
       setTimeout(()=>{ errors.textContent = prevErr; }, 3000);
@@ -362,7 +357,17 @@
     }
   });
 
-  // ===== library + search =====
+  // library + search
+  function updateImportAllBtnState(){
+    const isCollections = (state.library || '').trim().toLowerCase() === 'collections';
+    if (importAllBtn) {
+      importAllBtn.disabled = !!isCollections;
+      importAllBtn.title = isCollections
+        ? "Import is not available on Collections"
+        : "Import all posters (and TV season posters) from Plex";
+    }
+  }
+
   async function init(){
     const urlp = new URLSearchParams(location.search);
     const desiredLib = urlp.get('lib');
@@ -374,9 +379,24 @@
         opt.value = opt.textContent = name;
         libSelect.appendChild(opt);
       }
+      try {
+        const ping = await fetch("/collections?page=1&page_size=1");
+        if (ping.ok && !libs.includes("Collections")) {
+          const opt = document.createElement("option");
+          opt.value = opt.textContent = "Collections";
+          libSelect.appendChild(opt);
+          libs.push("Collections");
+        }
+      } catch (_) {}
       if (libs.length) {
-        if (desiredLib && libs.includes(desiredLib)) { state.library = desiredLib; }
-        state.library = libs[0];
+        if (desiredLib && libs.includes(desiredLib)) {
+          state.library = desiredLib;
+        } else if (!state.library) {
+          state.library = libs[0];
+        }
+        libSelect.value = state.library;
+        state.page = 1;
+        updateImportAllBtnState();
         await loadPage(1);
       }
     } catch (e) {
@@ -386,6 +406,7 @@
   libSelect.addEventListener("change", async ()=>{
     state.library = libSelect.value;
     state.page = 1;
+    updateImportAllBtnState();
     await loadPage(1);
   });
 
@@ -400,7 +421,7 @@
     }, 300);
   });
 
-  // ===== upload dialog (movies) =====
+  // upload dialog (movies)
   const dlg = document.getElementById("uploader");
   const uploadForm = document.getElementById("uploadForm");
   const uploadStatus = document.getElementById("uploadStatus");
@@ -422,6 +443,11 @@
       if (!r.ok) throw new Error("Upload failed: " + r.status);
       const data = await r.json();
       uploadStatus.textContent = "Done: " + (data.path || "");
+
+      if ((state.library || '').trim().toLowerCase() === 'collections') {
+        try { await loadPage(state.page); } catch (_) {}
+      }
+
       setTimeout(()=>{ try { dlg.close(); } catch {} }, 800);
     } catch (err) {
       uploadStatus.textContent = String(err);
@@ -430,7 +456,7 @@
 
   document.addEventListener("DOMContentLoaded", init);
 })();// ---- TV Show Support ----
-  let currentShowCtx = null; // {library, ratingKey, folderName, title}
+  let currentShowCtx = null;
   async function fetchJSON(url){ const r = await fetch(url); if(!r.ok) throw new Error(r.status); return await r.json(); }
 
   async function openShowDialog(library, ratingKey, title){
