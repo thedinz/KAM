@@ -254,7 +254,7 @@
   nextBtn.addEventListener("click", ()=> loadPage(Math.min(state.totalPages, state.page + 1)));
   lastBtn.addEventListener("click", ()=> loadPage(state.totalPages));
 
-  // Import All (unchanged)
+  // Import All (helpers)
   async function fetchAllItemsForLibrary(lib, query=null) {
     const mk = (p) => {
       const u = new URL("/api/items", location.origin);
@@ -275,12 +275,14 @@
     return { all, totalPages, totalCount };
   }
 
-  async function importMoviePoster(library, ratingKey, folderName){
+  // REPLACED: importMoviePoster -> combined assets import
+  async function importMovieAssets(library, ratingKey, folderName){
     const fd = new FormData();
     fd.append("library", library);
     if (ratingKey != null) fd.append("ratingKey", String(ratingKey));
     if (folderName) fd.append("folderName", folderName);
-    return fetch("/api/import/poster", { method: "POST", body: fd });
+    // backend defaults already import both poster + background
+    return fetch("/api/import/movie", { method: "POST", body: fd });
   }
 
   async function importShowPosterPreferShowEndpoint(library, ratingKey, folderName){
@@ -298,7 +300,8 @@
       if (!r.ok && r.status !== 404 && r.status !== 405) return r;
       if (r.ok) return r;
     } catch(_) {}
-    return importMoviePoster(library, ratingKey, folderName);
+    // fallback to movie-style import (brings poster+background)
+    return importMovieAssets(library, ratingKey, folderName);
   }
 
   async function importAllSeasons(library, showFolder, seasons){
@@ -339,10 +342,12 @@
             await importShowPosterPreferShowEndpoint(state.library, ratingKey, showFolder);
             await importAllSeasons(state.library, showFolder, show.seasons || []);
           } catch (e) {
-            await importMoviePoster(state.library, ratingKey, folderName);
+            // fallback if show API fails: still import poster+bg
+            await importMovieAssets(state.library, ratingKey, folderName);
           }
         } else {
-          await importMoviePoster(state.library, ratingKey, folderName);
+          // movies: import poster + background in one call
+          await importMovieAssets(state.library, ratingKey, folderName);
         }
         bump();
       }
