@@ -287,6 +287,52 @@ def import_season_get(
         url=url,
     )
 
+# NEW: combined import for movies (poster + background in one call)
+@router.post("/api/import/movie")
+def import_movie_both(
+    library: str = Form(...),
+    folderName: str = Form(...),
+    ratingKey: str = Form(...),
+    includePoster: bool = Form(True),
+    includeBackground: bool = Form(True),
+    posterUrl: Optional[str] = Form(None),
+    backgroundUrl: Optional[str] = Form(None),
+):
+    """
+    Convenience endpoint: import poster and/or background for a movie.
+    Returns per-asset results so one can succeed if the other fails.
+    """
+    dest_dir = _dest_dir_or_422(library, folderName)
+
+    results = {
+        "poster": {"ok": False, "path": None, "src": None, "error": None},
+        "background": {"ok": False, "path": None, "src": None, "error": None},
+    }
+
+    if includePoster:
+        try:
+            p_path = os.path.join(dest_dir, "poster.jpg")
+            p_src = posterUrl or _poster_url_for_rating_key(ratingKey)
+            _download_to(p_path, p_src)
+            results["poster"] = {"ok": True, "path": p_path, "src": p_src, "error": None}
+        except HTTPException as e:
+            results["poster"]["error"] = e.detail
+        except Exception as e:
+            results["poster"]["error"] = str(e)
+
+    if includeBackground:
+        try:
+            b_path = os.path.join(dest_dir, "background.jpg")
+            b_src = backgroundUrl or _art_url_for_rating_key(ratingKey)
+            _download_to(b_path, b_src)
+            results["background"] = {"ok": True, "path": b_path, "src": b_src, "error": None}
+        except HTTPException as e:
+            results["background"]["error"] = e.detail
+        except Exception as e:
+            results["background"]["error"] = str(e)
+
+    return {"ok": results["poster"]["ok"] or results["background"]["ok"], "results": results}
+
 @router.post("/api/import/library")
 def import_library(library: str = Form(...)):
     # front-end loops items and calls /api/import/* per item
