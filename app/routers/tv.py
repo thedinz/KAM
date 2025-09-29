@@ -134,7 +134,7 @@ def get_show(library: str = Query(...), ratingKey: str = Query(...)):
         title, year, folderName,
         posterUrl, backgroundUrl,
         plexPosterUrl, plexBackgroundUrl,
-        seasons: [{index, title, posterUrl, plexPosterUrl}]
+        seasons: [{index, title, posterUrl, plexPosterUrl, ratingKey}]
       }
     Prefers local assets for poster/background/season; includes plex* URLs so the UI can pass
     them to /api/import/* (eliminates fragile server-side discovery).
@@ -178,6 +178,7 @@ def get_show(library: str = Query(...), ratingKey: str = Query(...)):
             "title": s["title"],
             "posterUrl": sea_url,
             "plexPosterUrl": _plex_thumb_url(s.get("thumb"), s.get("ratingKey")),
+            "ratingKey": s.get("ratingKey"),  # added for convenience
         })
 
     return {

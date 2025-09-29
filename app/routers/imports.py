@@ -32,7 +32,6 @@ def _get(url: str, params: Optional[dict] = None, headers: Optional[dict] = None
         r.raise_for_status()
         return r
     except requests.HTTPError as e:
-        # bubble up real status for easier debugging
         status = e.response.status_code if e.response is not None else 502
         detail = f"Plex request failed [{status}] for {url}"
         raise HTTPException(status_code=502, detail=detail)
@@ -67,20 +66,14 @@ def _json_or_xml(path: str) -> Dict[str, Any] | str:
     return r.text  # XML
 
 def _resolve_thumb_path_from_metadata(rating_key: str) -> Optional[str]:
-    """
-    Ask /library/metadata/<rk> for 'thumb' and return the path (not full URL).
-    Works for JSON or XML servers.
-    """
     data = _json_or_xml(f"/library/metadata/{rating_key}")
     if isinstance(data, dict):
         md = (data.get("MediaContainer", {}) or {}).get("Metadata") or []
         if isinstance(md, dict):
             md = [md]
         if md:
-            thumb = md[0].get("thumb")
-            return thumb
+            return md[0].get("thumb")
         return None
-    # XML
     try:
         root = ET.fromstring(data)
         node = root.find(".//Video")
@@ -97,8 +90,7 @@ def _resolve_art_path_from_metadata(rating_key: str) -> Optional[str]:
         if isinstance(md, dict):
             md = [md]
         if md:
-            art = md[0].get("art")
-            return art
+            return md[0].get("art")
         return None
     try:
         root = ET.fromstring(data)
@@ -110,18 +102,12 @@ def _resolve_art_path_from_metadata(rating_key: str) -> Optional[str]:
     return None
 
 def _poster_url_for_rating_key(rating_key: str) -> str:
-    """
-    Prefer direct thumb endpoint; if that fails, resolve thumb path from metadata.
-    """
     _require_plex()
-    # Try direct /thumb first
     direct = f"{PLEX_URL}/library/metadata/{rating_key}/thumb?X-Plex-Token={PLEX_TOKEN}"
-    # Probe with a HEAD-like GET (cheap) to fail fast if it's forbidden/missing.
     try:
         _get(direct)
         return direct
     except HTTPException:
-        # Resolve via metadata then fetch that path
         thumb_path = _resolve_thumb_path_from_metadata(rating_key)
         if not thumb_path:
             raise HTTPException(status_code=502, detail=f"Could not resolve poster path for ratingKey={rating_key}")
@@ -155,7 +141,6 @@ def _children_for_show(rating_key: str) -> List[Dict[str, Any]]:
                     "thumb": it.get("thumb"),
                 })
         return out
-    # XML
     try:
         root = ET.fromstring(data)
         for node in root.findall(".//Directory"):
@@ -166,7 +151,6 @@ def _children_for_show(rating_key: str) -> List[Dict[str, Any]]:
                     "ratingKey": node.attrib.get("ratingKey"),
                     "thumb": node.attrib.get("thumb"),
                 })
-        # Some servers use <Video type="season">
         for node in root.findall(".//Video"):
             if node.attrib.get("type") == "season":
                 out.append({
@@ -298,10 +282,6 @@ def import_movie_both(
     posterUrl: Optional[str] = Form(None),
     backgroundUrl: Optional[str] = Form(None),
 ):
-    """
-    Convenience endpoint: import poster and/or background for a movie.
-    Returns per-asset results so one can succeed if the other fails.
-    """
     dest_dir = _dest_dir_or_422(library, folderName)
 
     results = {
@@ -332,6 +312,83 @@ def import_movie_both(
             results["background"]["error"] = str(e)
 
     return {"ok": results["poster"]["ok"] or results["background"]["ok"], "results": results}
+
+# NEW: combined import for TV shows (poster + background + all seasons)
+@router.post("/api/import/show")
+def import_show_all(
+    library: str = Form(...),
+    folderName: str = Form(...),
+    ratingKey: str = Form(...),
+    includePoster: bool = Form(True),
+    includeBackground: bool = Form(True),
+    includeSeasons: bool = Form(True),
+):
+    """
+    Import a show's poster, background, and all season posters in one call.
+    """
+    dest_dir = _dest_dir_or_422(library, folderName)
+    results: Dict[str, Any] = {
+        "poster": {"ok": False, "path": None, "src": None, "error": None},
+        "background": {"ok": False, "path": None, "src": None, "error": None},
+        "seasons": [],
+    }
+
+    # Series poster
+    if includePoster:
+        try:
+            p_path = os.path.join(dest_dir, "poster.jpg")
+            p_src = _poster_url_for_rating_key(ratingKey)
+            _download_to(p_path, p_src)
+            results["poster"] = {"ok": True, "path": p_path, "src": p_src, "error": None}
+        except HTTPException as e:
+            results["poster"]["error"] = e.detail
+        except Exception as e:
+            results["poster"]["error"] = str(e)
+
+    # Series background
+    if includeBackground:
+        try:
+            b_path = os.path.join(dest_dir, "background.jpg")
+            b_src = _art_url_for_rating_key(ratingKey)
+            _download_to(b_path, b_src)
+            results["background"] = {"ok": True, "path": b_path, "src": b_src, "error": None}
+        except HTTPException as e:
+            results["background"]["error"] = e.detail
+        except Exception as e:
+            results["background"]["error"] = str(e)
+
+    # Seasons
+    if includeSeasons:
+        try:
+            seasons = _children_for_show(ratingKey)  # [{index, ratingKey, thumb}, ...]
+            for s in seasons:
+                idx_raw = s.get("index")
+                ok_entry = {"index": idx_raw, "ok": False, "path": None, "src": None, "error": None}
+                try:
+                    idx = int(str(idx_raw))
+                except Exception:
+                    ok_entry["error"] = f"Invalid season index: {idx_raw!r}"
+                    results["seasons"].append(ok_entry)
+                    continue
+                try:
+                    sea_path = os.path.join(dest_dir, f"Season{idx:02d}.jpg")
+                    sea_src = _season_poster_url(ratingKey, idx)
+                    _download_to(sea_path, sea_src)
+                    ok_entry.update({"ok": True, "path": sea_path, "src": sea_src})
+                except HTTPException as e:
+                    ok_entry["error"] = e.detail
+                except Exception as e:
+                    ok_entry["error"] = str(e)
+                results["seasons"].append(ok_entry)
+        except Exception as e:
+            results["seasons"].append({"ok": False, "error": f"Failed to enumerate seasons: {e}"})
+
+    results["ok"] = (
+        results["poster"]["ok"]
+        or results["background"]["ok"]
+        or any(s.get("ok") for s in results["seasons"])
+    )
+    return results
 
 @router.post("/api/import/library")
 def import_library(library: str = Form(...)):
