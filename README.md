@@ -164,13 +164,7 @@ COLLECTIONS_ROOT=/assets/Collections
 
 ## Unraid setup
 
-1. **Add Container** → Repository: `ghcr.io/thedinz/kam:latest`
-2. **Port**: Map container `7171` → host `7171` (or any free port).
-3. **Path**: Add a path mapping:
-
-   * Container path: `/assets`
-   * Host path: `/mnt/user/kometa/assets` (or your choice)
-4. **Apply** and start → browse to `http://<UNRAID-IP>:7171/`.
+Kometa Asset Manager can now be found in the Unraid app store. Simply mount your Kometa asset directory and edit the other easy to understand template variables and GO!
 
 ---
 
