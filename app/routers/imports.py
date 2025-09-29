@@ -390,7 +390,41 @@ def import_show_all(
     )
     return results
 
-@router.post("/api/import/library")
-def import_library(library: str = Form(...)):
-    # front-end loops items and calls /api/import/* per item
-    return {"ok": True, "imported": True}
+# NEW: combined import for Collections (poster + background in one call)
+@router.post("/api/import/collection")
+def import_collection_both(
+    library: str = Form(...),
+    folderName: str = Form(...),
+    ratingKey: str = Form(...),
+    includePoster: bool = Form(True),
+    includeBackground: bool = Form(True),
+):
+    """
+    Import a collection's poster and background from Plex into the Kometa asset folder.
+    """
+    dest_dir = _dest_dir_or_422(library, folderName)
+
+    results: Dict[str, Any] = {
+        "poster": {"ok": False, "path": None, "src": None, "error": None},
+        "background": {"ok": False, "path": None, "src": None, "error": None},
+    }
+
+    if includePoster:
+        try:
+            p_path = os.path.join(dest_dir, "poster.jpg")
+            p_src = _poster_url_for_rating_key(ratingKey)
+            _download_to(p_path, p_src)
+            results["poster"] = {"ok": True, "path": p_path, "src": p_src, "error": None}
+        except HTTPException as e:
+            results["poster"]["error"] = e.detail
+        except Exception as e:
+            results["poster"]["error"] = str(e)
+
+    if includeBackground:
+        try:
+            b_path = os.path.join(dest_dir, "background.jpg")
+            b_src = _art_url_for_rating_key(ratingKey)
+            _download_to(b_path, b_src)
+            results["background"] = {"ok": True, "path": b_path, "src": b_src, "error": None}
+        except HTTPException as e:
+            results
