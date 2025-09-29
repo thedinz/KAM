@@ -9,13 +9,15 @@
   [data-theme="light"] { --bg:#ffffff; --fg:#11111a; --muted:#4a4a55; --card:#f6f6fb; --accent:#3b82f6; --border:#d7d7e0; }
   *{box-sizing:border-box}
   body{margin:0; font:16px/1.35 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu; background:var(--bg); color:var(--fg)}
-  header{display:flex; gap:12px; align-items:center; padding:14px 16px; border-bottom:1px solid var(--border); position:sticky; top:0; background:var(--bg); z-index:5}
+  header{display:flex; gap:12px; align-items:center; padding:14px 12px; border-bottom:1px solid var(--border); position:sticky; top:0; background:var(--bg); z-index:5}
   header h1{font-size:18px; margin:0 8px 0 0}
   select,input,button{background:var(--card); color:var(--fg); border:1px solid var(--border); border-radius:10px; padding:8px 10px}
   select:focus,input:focus,button:focus{outline:2px solid var(--accent)}
   #themeToggle{cursor:pointer}
-  #errors{color:#ff6b6b; padding:0 16px 8px}
-  #toolbar{display:flex; gap:8px; align-items:center; margin-left:auto}
+  #errors{color:#ff7a7a; min-height:1.2em}
+  #toolbar{display:flex; gap:8px; align-items:center; flex-wrap:wrap}
+  #libSelect{min-width:200px}
+  #search{min-width:220px}
   #pager{display:flex; gap:6px; align-items:center; margin-left:12px}
   .btn{cursor:pointer}
   .btn[disabled]{opacity:.4; cursor:not-allowed}
@@ -30,201 +32,149 @@
   .dlg-body{padding:16px}
   .row{display:flex; gap:10px; align-items:center; margin:8px 0}
   .row label{min-width:110px; color:var(--muted)}
-  .actions{display:flex; justify-content:flex-end; gap:8px; padding:12px 16px; border-top:1px solid var(--border)}
-
-.meta{padding:12px; display:flex; flex-direction:column; gap:6px; min-height:92px}
-.title{font-weight:600; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; min-height:2.6em; line-height:1.3}
-.year{opacity:.8; font-size:.95em; min-height:1.2em}
-.actions{margin-top:auto; padding:12px; height:72px; display:flex; align-items:center}
-.actions button{background:transparent; border:1px solid var(--border); color:var(--fg); padding:8px 12px; border-radius:12px; cursor:pointer}
-.actions button:hover{outline:2px solid var(--accent)}
-
+  .actions{display:flex; gap:8px; align-items:center; justify-content:flex-end; padding:10px 16px; border-top:1px solid var(--border)}
+  .filebox{display:flex; flex-direction:column; gap:8px; margin:10px 0}
+  .hint{color:var(--muted); font-size:13px}
+  .small{font-size:12px}
+  .muted{color:var(--muted)}
+  .tag{display:inline-block; padding:2px 8px; border:1px solid var(--border); border-radius:999px; font-size:12px; color:var(--muted)}
+  .row .tag{margin-left:auto}
+  .sr{position:absolute; left:-9999px; width:1px; height:1px; overflow:hidden}
 </style>
 </head>
 <body>
 <header>
   <h1>KAM</h1>
-  <select id="libSelect" title="Library"></select>
-  <input id="search" type="search" placeholder="Search&hellip;" />
   <div id="toolbar">
-    <!-- Import all for current library -->
-    <button id="importAllBtn" class="btn" title="Import all posters (and TV season posters) from Plex">Import Assets</button>
-
-    <button id="themeToggle" title="Toggle theme">&#127769;</button><!-- 🌙 -->
-
+    <select id="libSelect" title="Plex library"></select>
+    <input id="search" type="search" placeholder="Search…" />
+    <button id="importAllBtn" class="btn" title="Import assets for the whole page">Import Assets</button>
     <div id="pager">
-      <button id="firstBtn" class="btn" title="First">&#9198;</button><!-- ⏮ -->
-      <button id="prevBtn"  class="btn" title="Previous">&#9664;</button><!-- ◀ -->
-      <span id="pageInfo">Page 1 of 1</span>
-      <button id="nextBtn"  class="btn" title="Next">&#9654;</button><!-- ▶ -->
-      <button id="lastBtn"  class="btn" title="Last">&#9199;</button><!-- ⏭ -->
-      <span id="count"></span>
+      <button id="firstBtn" class="btn">« First</button>
+      <button id="prevBtn" class="btn">‹ Prev</button>
+      <span id="pageInfo"></span>
+      <button id="nextBtn" class="btn">Next ›</button>
+      <button id="lastBtn" class="btn">Last »</button>
     </div>
+    <span id="count"></span>
+    <span id="errors"></span>
+  </div>
+  <div style="margin-left:auto; display:flex; gap:8px; align-items:center">
+    <button id="themeToggle" title="Toggle theme">🌓</button>
   </div>
 </header>
 
-<div id="errors"></div>
-<div id="grid"></div>
+<main>
+  <div id="grid" aria-live="polite"></div>
+</main>
 
-<dialog id="showDialog">
-  <form method="dialog" class="upload-form" style="min-width:520px">
-    <h3 id="showTitle">Show</h3>
-    <div style="display:flex; gap:14px; flex-wrap:wrap">
-      <div>
-        <label>Series Poster</label>
-        <input type="file" id="showPosterInput" accept="image/*">
-        <button id="uploadShowPoster" type="button" class="btn">Upload</button>
-      </div>
-      <div>
-        <label>Background</label>
-        <input type="file" id="showBgInput" accept="image/*">
-        <button id="uploadShowBg" type="button" class="btn">Upload</button>
-      </div>
-    </div>
-    <div id="seasonsList" style="margin-top:10px"></div>
-    <div id="showUploadStatus" class="upload-status"></div>
-    <menu style="display:flex; justify-content:flex-end; gap:8px; margin-top:10px">
-      <button id="closeShowDlg" type="reset" class="btn">Close</button>
-    </menu>
-  </form>
-</dialog>
-
+<!-- Upload dialog -->
 <dialog id="uploader">
   <form id="uploadForm" method="dialog" enctype="multipart/form-data">
     <div class="dlg-body">
-      <h3 id="dialogTitle" style="margin:0 0 6px">Upload poster</h3>
-      <div class="row"><label>Library</label><input type="text" id="library" name="library" readonly /></div>
-      <div class="row"><label>Rating Key</label><input type="text" id="ratingKey" name="ratingKey" readonly /></div>
-      <div class="row"><label>Folder Name</label><input type="text" id="folderName" name="folderName" readonly /></div>
-      <div class="row"><label>Image</label><input type="file" name="file" accept="image/*" required /></div>
-      <div id="uploadStatus" class="row" style="color:var(--muted)"></div>
+      <h3 style="margin:8px 0 12px">Upload Artwork</h3>
+      <div class="row"><label>Library</label><span id="uLibrary" class="tag"></span></div>
+      <div class="row"><label>Folder</label><span id="uFolder" class="tag"></span></div>
+      <div class="row"><label>Poster</label><input type="file" name="poster" accept="image/*" /></div>
+      <div class="row"><label>Background</label><input type="file" name="background" accept="image/*" /></div>
+      <p class="hint small">Images will be converted to <code>.jpg</code> and replace existing <code>poster.*</code> or <code>background.*</code> in this folder.</p>
+      <p id="uploadStatus" class="muted small"></p>
     </div>
     <div class="actions">
-      <button type="button" onclick="closeDialog()">Cancel</button>
-      <button type="submit">Upload</button>
+      <button type="button" id="uploadCancel">Cancel</button>
+      <button type="submit" id="uploadSubmit" class="btn">Upload</button>
     </div>
   </form>
 </dialog>
 
 <script>
-(function(){
-  const $ = sel => document.querySelector(sel);
-  const grid = $("#grid");
-  const errors = $("#errors");
-  const count = $("#count");
-  const pager = $("#pager");
-  const pageInfo = $("#pageInfo");
-  const firstBtn = $("#firstBtn");
-  const prevBtn = $("#prevBtn");
-  const nextBtn = $("#nextBtn");
-  const lastBtn = $("#lastBtn");
-  const libSelect = $("#libSelect");
-  const search = $("#search");
-  const themeToggle = $("#themeToggle");
-  const importAllBtn = $("#importAllBtn");
-
-  let state = { library: null, page: 1, pageSize: 60, totalPages: 1, totalCount: 0, query: null };
-
-  // ===== theme =====
-  const MOON = String.fromCodePoint(0x1F319);
-  const SUN  = String.fromCodePoint(0x2600, 0xFE0F);
-  function setTheme(t){
-    document.documentElement.setAttribute("data-theme", t);
-    try { localStorage.setItem("kam-theme", t); } catch {}
-    themeToggle.textContent = (t === "dark" ? SUN : MOON);
+  // Theme
+  (function(){
+    const saved = localStorage.getItem("kam-theme");
+    if (saved) document.documentElement.setAttribute("data-theme", saved);
+  })();
+  function toggleTheme(){
+    const cur = document.documentElement.getAttribute("data-theme") || "dark";
+    const next = cur === "dark" ? "light" : "dark";
+    document.documentElement.setAttribute("data-theme", next);
+    localStorage.setItem("kam-theme", next);
   }
-  themeToggle.addEventListener("click", ()=>{
-    const t = document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark";
-    setTheme(t);
-  });
-  (function initTheme(){ setTheme(localStorage.getItem("kam-theme") || "light"); })();
+  document.getElementById("themeToggle").addEventListener("click", toggleTheme);
 
-  // ===== fetch helpers =====
+  // State
+  const grid       = document.getElementById("grid");
+  const libSelect  = document.getElementById("libSelect");
+  const search     = document.getElementById("search");
+  const errors     = document.getElementById("errors");
+  const importAllBtn = document.getElementById("importAllBtn");
+  const firstBtn = document.getElementById("firstBtn");
+  const prevBtn  = document.getElementById("prevBtn");
+  const nextBtn  = document.getElementById("nextBtn");
+  const lastBtn  = document.getElementById("lastBtn");
+  const pageInfo = document.getElementById("pageInfo");
+  const countEl  = document.getElementById("count");
+
+  const state = {
+    library: null,
+    page: 1,
+    totalPages: 1,
+    pageSize: 60,
+    totalCount: 0,
+    query: null
+  };
+
+  // Utils
   async function j(url){
     const r = await fetch(url);
-    if (!r.ok) throw new Error(url + " -> " + r.status);
+    if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
     return r.json();
   }
+  function esc(s){ return (s||"").replace(/[&<>"]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m])); }
 
-  async function fetchLibraries(){
-    const data = await j("/api/libraries");
-    if (Array.isArray(data) && data.length && typeof data[0] === "string") return data;
-    if (Array.isArray(data) && data.length && typeof data[0] === "object") return data.map(d => d.name);
-    return [];
-  }
-
-  // ===== grid render =====
   function renderItems(items){
     grid.innerHTML = "";
     for (const it of (items || [])) {
-      const card = document.createElement("a");
+      const card = document.createElement("div");
       card.className = "card";
-      if (it.ratingKey && state.library && state.library.toLowerCase() !== "collections") {
-        const lib = (state.library || "").toLowerCase();
-        if (lib.includes("movie")) {
-          card.href = `movie.html?library=${encodeURIComponent(state.library)}&ratingKey=${encodeURIComponent(it.ratingKey)}`;
-        } else {
-          card.href = `show.html?library=${encodeURIComponent(state.library)}&ratingKey=${encodeURIComponent(it.ratingKey)}`;
-        }
-      } else {
-        card.href = "javascript:void(0)";
-      }
-
-      if (it.type === 'show') {
-        card.dataset.ratingKey = it.ratingKey;
-        card.dataset.title = it.title || '';
-        card.addEventListener('click', ()=> openShowDialog(state.library, card.dataset.ratingKey, card.dataset.title));
-      }
-
       const img = document.createElement("img");
       img.className = "poster";
       img.loading = "lazy";
-      img.alt = it.title || "";
+      img.alt = esc(it.title || it.name || "Item");
 
-      const posterLocal =
-        it.posterUrlLocal || it.poster_local || it.assetPosterUrl || it.asset_poster_url || it.poster;
-      const posterPlex =
-        it.posterUrlPlex || it.poster_url_plex || it.plexPoster || it.plex_poster || it.posterUrl;
-
-      let chosen = posterLocal || posterPlex || "fallback.png";
-      if (posterLocal && !/\bt=/.test(chosen)) {
-        const sep = chosen.includes("?") ? "&" : "?";
-        chosen = `${chosen}${sep}t=${Date.now()}`;
-      }
-      img.src = chosen;
-
-      img.onerror = function () { this.onerror = null; this.src = "fallback.png"; };
+      // favor local, then Plex
+      const src = it.posterUrl || it.posterUrlLocal || it.posterUrlPlex || it.thumb || it.background || it.art || "";
+      if (src) img.src = src;
 
       const meta = document.createElement("div");
       meta.className = "meta";
-      const t = document.createElement("div"); t.className = "title"; t.textContent = it.title || "";
-      const y = document.createElement("div"); y.className = "year"; y.textContent = it.year || "";
-      meta.appendChild(t); meta.appendChild(y);
 
-      const actions = document.createElement("div");
-      actions.className = "actions";
-      const btn = document.createElement("button");
-      btn.type = "button"; btn.textContent = "Upload"; btn.title = "Upload a custom poster";
-      btn.addEventListener("click", ()=> {
-        const folderGuess = it.folder || it.folderName || it.name || it.title || "";
-        const ratingKey = it.ratingKey || it.key || it.id || "";
-        openUpload(state.library, ratingKey, folderGuess, it.title || folderGuess || "");
-      });
-      actions.appendChild(btn);
+      const t = document.createElement("div");
+      t.className = "title";
+      t.textContent = it.title || it.name || "(Untitled)";
 
-      card.appendChild(img); card.appendChild(meta); card.appendChild(actions);
+      const y = document.createElement("div");
+      y.className = "year";
+      const yr = it.year || "";
+      y.textContent = yr ? String(yr) : "";
+
+      meta.appendChild(t);
+      meta.appendChild(y);
+
+      // click to open upload dialog (movie/show libraries)
+      card.addEventListener("click", ()=> openUploadDialogFor(it));
+
+      card.appendChild(img);
+      card.appendChild(meta);
       grid.appendChild(card);
     }
   }
 
-  function updatePager() {
-    pageInfo.textContent = `Page ${state.page} of ${state.totalPages}`;
-    pager.style.display = state.totalPages > 1 ? "" : "none";
+  function updatePager(){
+    pageInfo.textContent = `Page ${state.page} / ${state.totalPages}`;
     firstBtn.disabled = state.page <= 1;
     prevBtn.disabled  = state.page <= 1;
     nextBtn.disabled  = state.page >= state.totalPages;
     lastBtn.disabled  = state.page >= state.totalPages;
-    count.textContent = `${state.totalCount} items`;
   }
 
   async function loadPage(p=1){
@@ -235,12 +185,13 @@
     u.searchParams.set("page", String(p));
     u.searchParams.set("page_size", String(state.pageSize));
     if (state.query) u.searchParams.set("query", state.query);
+
     try {
-      errors.textContent = "";
-      const data = await j(u);
-      state.page = data.page || 1;
+      const data = await j(u.toString());
+      state.page = data.page || p || 1;
       state.totalPages = data.total_pages || 1;
-      state.totalCount = data.total_count || 0;
+      state.totalCount = data.total_count || (data.items ? data.items.length : 0);
+      countEl.textContent = `${state.totalCount.toLocaleString()} items`;
       renderItems(data.items || []);
       updatePager();
     } catch (e) {
@@ -248,7 +199,6 @@
     }
   }
 
-  // pager
   firstBtn.addEventListener("click", ()=> loadPage(1));
   prevBtn.addEventListener("click", ()=> loadPage(Math.max(1, state.page - 1)));
   nextBtn.addEventListener("click", ()=> loadPage(Math.min(state.totalPages, state.page + 1)));
@@ -256,10 +206,13 @@
 
   // Import All (helpers)
   async function fetchAllItemsForLibrary(lib, query=null) {
+    const isCollections = (lib || '').trim().toLowerCase() === 'collections';
+    const perPage = state.pageSize || 60;
     const mk = (p) => {
-      const u = new URL("/api/items", location.origin);
-      u.searchParams.set("library", lib);
+      const u = new URL(isCollections ? "/collections" : "/api/items", location.origin);
+      if (!isCollections) u.searchParams.set("library", lib);
       u.searchParams.set("page", String(p));
+      u.searchParams.set("page_size", String(perPage));
       if (query) u.searchParams.set("query", query);
       return u.toString();
     };
@@ -283,6 +236,15 @@
     if (folderName) fd.append("folderName", folderName);
     // backend defaults already import both poster + background
     return fetch("/api/import/movie", { method: "POST", body: fd });
+  }
+
+  async function importCollectionAssets(library, ratingKey, folderName){
+    const fd = new FormData();
+    fd.append("library", library);
+    if (ratingKey != null) fd.append("ratingKey", String(ratingKey));
+    if (folderName) fd.append("folderName", folderName);
+    // backend defaults: includePoster=True, includeBackground=True
+    return fetch("/api/import/collection", { method: "POST", body: fd });
   }
 
   async function importShowPosterPreferShowEndpoint(library, ratingKey, folderName){
@@ -317,13 +279,16 @@
   importAllBtn.addEventListener("click", async ()=>{
     if (!state.library) return;
     importAllBtn.disabled = true;
-    const prevErr = errors.textContent;
-    const isTVLib = (state.library || "").toLowerCase().includes("tv");
 
-    errors.textContent = "Importing assets from Plex… (0%))";
+    const lib = (state.library || "").trim();
+    const isCollections = lib.toLowerCase() === "collections";
+    const isTVLib = lib.toLowerCase().includes("tv");
+
+    const prevErr = errors.textContent;
+    errors.textContent = "Importing assets from Plex… (0%)";
 
     try {
-      const { all, totalCount } = await fetchAllItemsForLibrary(state.library, state.query);
+      const { all, totalCount } = await fetchAllItemsForLibrary(lib, state.query);
       const total = all.length || totalCount || 1;
       let done = 0;
       const bump = () => {
@@ -332,30 +297,40 @@
           errors.textContent = `Importing assets from Plex… (${Math.round((done / total) * 100)}%)`;
         }
       };
+
       for (const it of all) {
-        const folderName = it.folder || it.folderName || it.name || it.title || "";
-        const ratingKey  = it.ratingKey || it.key || it.id;
+        const folderName =
+          it.folderName || it.folder || it.name || it.title || "";
+        const ratingKey =
+          it.ratingKey || it.key || it.id;
+
+        if (isCollections) {
+          await importCollectionAssets(lib, ratingKey, folderName);
+          bump();
+          continue;
+        }
+
         if (isTVLib || String(it.type || "").toLowerCase() === "show" || it.isShow === true) {
           try {
-            const show = await j(`/api/show?library=${encodeURIComponent(state.library)}&ratingKey=${encodeURIComponent(ratingKey)}`);
+            const show = await j(`/api/show?library=${encodeURIComponent(lib)}&ratingKey=${encodeURIComponent(ratingKey)}`);
             const showFolder = show.folderName || folderName;
-            await importShowPosterPreferShowEndpoint(state.library, ratingKey, showFolder);
-            await importAllSeasons(state.library, showFolder, show.seasons || []);
+            await importShowPosterPreferShowEndpoint(lib, ratingKey, showFolder);
+            await importAllSeasons(lib, showFolder, show.seasons || []);
           } catch (e) {
-            // fallback if show API fails: still import poster+bg
-            await importMovieAssets(state.library, ratingKey, folderName);
+            await importMovieAssets(lib, ratingKey, folderName);
           }
         } else {
-          // movies: import poster + background in one call
-          await importMovieAssets(state.library, ratingKey, folderName);
+          await importMovieAssets(lib, ratingKey, folderName);
         }
+
         bump();
       }
+
       errors.textContent = "Import complete.";
       await loadPage(state.page);
       setTimeout(()=>{ errors.textContent = ""; }, 1500);
     } catch (e) {
-      errors.textContent = "Import failed: " + e.message;
+      errors.textContent = "Import failed: " + (e?.message || e);
       setTimeout(()=>{ errors.textContent = prevErr; }, 3000);
     } finally {
       importAllBtn.disabled = false;
@@ -364,12 +339,13 @@
 
   // library + search
   function updateImportAllBtnState(){
-    const isCollections = (state.library || '').trim().toLowerCase() === 'collections';
+    const lib = (state.library || '').trim();
+    const isCollections = lib.toLowerCase() === 'collections';
     if (importAllBtn) {
-      importAllBtn.disabled = !!isCollections;
+      importAllBtn.disabled = !lib; // enable when a library is selected
       importAllBtn.title = isCollections
-        ? "Import is not available on Collections"
-        : "Import all posters (and TV season posters) from Plex";
+        ? "Import all collection posters/backgrounds from Plex into Kometa asset folders"
+        : "Import all posters/backgrounds (and TV seasons) from Plex into Kometa asset folders";
     }
   }
 
@@ -415,6 +391,11 @@
     await loadPage(1);
   });
 
+  async function fetchLibraries(){
+    const data = await j("/api/libraries");
+    return data.libraries || data || [];
+  }
+
   let searchTimer = null;
   search.addEventListener("input", ()=>{
     clearTimeout(searchTimer);
@@ -430,109 +411,66 @@
   const dlg = document.getElementById("uploader");
   const uploadForm = document.getElementById("uploadForm");
   const uploadStatus = document.getElementById("uploadStatus");
-  window.closeDialog = () => { try { dlg.close(); } catch {} };
-  window.openUpload = (lib, ratingKey, folderName, title) => {
-    document.getElementById("ratingKey").value = ratingKey;
-    document.getElementById("folderName").value = folderName;
-    document.getElementById("library").value = lib;
-    document.getElementById("dialogTitle").textContent = `Upload poster for: ${title}`;
+  window.closeUploadDialog = () => dlg.close();
+
+  let currentUploadCtx = null;
+  function openUploadDialogFor(it){
+    // Disable dialog on Collections to avoid confusion (collection uploads happen via Import All)
+    const isCollections = (state.library || '').trim().toLowerCase() === 'collections';
+    if (isCollections) return;
+
+    currentUploadCtx = {
+      library: state.library,
+      folderName: it.folderName || it.folder || it.name || it.title || "",
+      ratingKey: it.ratingKey || it.key || it.id
+    };
+    document.getElementById("uLibrary").textContent = currentUploadCtx.library;
+    document.getElementById("uFolder").textContent = currentUploadCtx.folderName;
     uploadStatus.textContent = "";
     dlg.showModal();
-  };
-  uploadForm.addEventListener("submit", async (e)=>{
-    e.preventDefault();
-    uploadStatus.textContent = "Uploading...";
+  }
+
+  document.getElementById("uploadCancel").addEventListener("click", ()=> dlg.close());
+  uploadForm.addEventListener("submit", async (ev)=>{
+    ev.preventDefault();
+    if (!currentUploadCtx) return;
+    uploadStatus.textContent = "Uploading…";
     const fd = new FormData(uploadForm);
+    const lib = currentUploadCtx.library;
+    const folderName = currentUploadCtx.folderName;
+    const ratingKey = currentUploadCtx.ratingKey;
+
     try {
-      const r = await fetch("/api/upload", { method: "POST", body: fd });
-      if (!r.ok) throw new Error("Upload failed: " + r.status);
-      const data = await r.json();
-      uploadStatus.textContent = "Done: " + (data.path || "");
-
-      if ((state.library || '').trim().toLowerCase() === 'collections') {
-        try { await loadPage(state.page); } catch (_) {}
+      // Upload poster if provided
+      const p = fd.get("poster");
+      if (p && p.size > 0) {
+        const up = new FormData();
+        up.append("library", lib);
+        up.append("folderName", folderName);
+        up.append("ratingKey", String(ratingKey));
+        up.append("file", p);
+        await fetch("/api/upload/poster", { method: "POST", body: up });
       }
-
-      setTimeout(()=>{ try { dlg.close(); } catch {} }, 800);
-    } catch (err) {
-      uploadStatus.textContent = String(err);
+      // Upload background if provided
+      const b = fd.get("background");
+      if (b && b.size > 0) {
+        const up = new FormData();
+        up.append("library", lib);
+        up.append("folderName", folderName);
+        up.append("ratingKey", String(ratingKey));
+        up.append("file", b);
+        await fetch("/api/upload/background", { method: "POST", body: up });
+      }
+      uploadStatus.textContent = "Done.";
+      setTimeout(()=> dlg.close(), 600);
+      await loadPage(state.page);
+    } catch (e) {
+      uploadStatus.textContent = "Upload failed: " + (e?.message || e);
     }
   });
 
-  document.addEventListener("DOMContentLoaded", init);
-})();// ---- TV Show Support ----
-  let currentShowCtx = null;
-  async function fetchJSON(url){ const r = await fetch(url); if(!r.ok) throw new Error(r.status); return await r.json(); }
-
-  async function openShowDialog(library, ratingKey, title){
-    const data = await fetchJSON(`/api/show?library=${encodeURIComponent(library)}&ratingKey=${encodeURIComponent(ratingKey)}`);
-    currentShowCtx = { library, ratingKey, folderName: data.folderName, title: data.title };
-    document.getElementById('showTitle').textContent = `${data.title} (${data.year||''})`.trim();
-    const seasonsDiv = document.getElementById('seasonsList');
-    seasonsDiv.innerHTML = '';
-    const hdr = document.createElement('h4'); hdr.textContent = 'Seasons'; seasonsDiv.appendChild(hdr);
-    const list = document.createElement('div'); list.style.display='grid'; list.style.gridTemplateColumns='repeat(auto-fill, minmax(180px,1fr))'; list.style.gap='10px';
-    seasonsDiv.appendChild(list);
-    for (const s of data.seasons) {
-      const card = document.createElement('div'); card.className='card';
-      const label = document.createElement('div'); label.textContent = `Season ${String(s.index).padStart(2,'0')}`;
-      const input = document.createElement('input'); input.type='file'; input.accept='image/*';
-      const btn = document.createElement('button'); btn.type='button'; btn.className='btn'; btn.textContent='Upload';
-      btn.addEventListener('click', async ()=>{
-        const f = input.files && input.files[0]; if(!f) return;
-        const fd = new FormData();
-        fd.append('library', currentShowCtx.library);
-        fd.append('folderName', currentShowCtx.folderName);
-        fd.append('season', String(s.index));
-        fd.append('file', f);
-        const status = document.getElementById('showUploadStatus');
-        status.textContent = 'Uploading season ' + s.index + '...';
-        try {
-          const r = await fetch('/api/upload_season', { method:'POST', body: fd });
-          if(!r.ok) throw new Error('HTTP ' + r.status);
-          await r.json();
-          status.textContent = 'Done.';
-        } catch(err){ status.textContent = String(err); }
-      });
-      card.appendChild(label); card.appendChild(input); card.appendChild(btn);
-      list.appendChild(card);
-    }
-    document.getElementById('showDialog').showModal();
-  }
-
-  (function(){
-    const dlg = document.getElementById('showDialog');
-    if (!dlg) return;
-    const postBtn = document.getElementById('uploadShowPoster');
-    const bgBtn = document.getElementById('uploadShowBg');
-    const posterInput = document.getElementById('showPosterInput');
-    const bgInput = document.getElementById('showBgInput');
-    const status = document.getElementById('showUploadStatus');
-    document.getElementById('closeShowDlg').addEventListener('click', ()=>{ try{ dlg.close(); }catch{} });
-
-    async function send(kind, file){
-      if(!currentShowCtx) return;
-      const fd = new FormData();
-      fd.append('library', currentShowCtx.library);
-      fd.append('folderName', currentShowCtx.folderName);
-      fd.append('kind', kind);
-      fd.append('file', file);
-      status.textContent = 'Uploading ' + kind + '...';
-      const r = await fetch('/api/upload_show', { method:'POST', body: fd });
-      if(!r.ok){ status.textContent = 'Error ' + r.status; return; }
-      await r.json();
-      status.textContent = 'Done.';
-    }
-
-    postBtn.addEventListener('click', async ()=>{
-      const f = posterInput.files && posterInput.files[0]; if(!f) return;
-      await send('poster', f);
-    });
-    bgBtn.addEventListener('click', async ()=>{
-      const f = bgInput.files && bgInput.files[0]; if(!f) return;
-      await send('background', f);
-    });
-  })();
+  // boot
+  init();
 </script>
 </body>
 </html>
