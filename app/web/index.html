@@ -68,7 +68,7 @@
   <div id="grid" aria-live="polite"></div>
 </main>
 
-<!-- Upload dialog -->
+<!-- Upload dialog (left intact but no longer opened by clicking items) -->
 <dialog id="uploader">
   <form id="uploadForm" method="dialog" enctype="multipart/form-data">
     <div class="dlg-body">
@@ -131,6 +131,24 @@
   }
   function esc(s){ return (s||"").replace(/[&<>"]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m])); }
 
+  // NEW: determine if an item is a TV show
+  function isShowItem(it, libraryName){
+    const libTV = (libraryName || '').toLowerCase().includes('tv');
+    const t = String(it.type || '').toLowerCase();
+    return libTV || t === 'show' || it.isShow === true;
+  }
+
+  function goToDetail(it){
+    const isCollections = (state.library || '').trim().toLowerCase() === 'collections';
+    if (isCollections) return; // unchanged behavior for Collections
+
+    const rk = encodeURIComponent(it.ratingKey || it.key || it.id || '');
+    const lib = encodeURIComponent(state.library || '');
+    const dest = isShowItem(it, state.library) ? 'show.html' : 'movie.html';
+    const url = `${dest}?library=${lib}&ratingKey=${rk}`;
+    return url;
+  }
+
   function renderItems(items){
     grid.innerHTML = "";
     for (const it of (items || [])) {
@@ -160,8 +178,19 @@
       meta.appendChild(t);
       meta.appendChild(y);
 
-      // click to open upload dialog (movie/show libraries)
-      card.addEventListener("click", ()=> openUploadDialogFor(it));
+      // CHANGED: click to navigate to dedicated page instead of opening the inline upload dialog
+      const detailUrl = goToDetail(it);
+      if (detailUrl){
+        card.style.cursor = "pointer";
+        card.title = "Open details";
+        card.addEventListener("click", (ev)=>{
+          if (ev.metaKey || ev.ctrlKey) {
+            window.open(detailUrl, "_blank");
+          } else {
+            location.href = detailUrl;
+          }
+        });
+      }
 
       card.appendChild(img);
       card.appendChild(meta);
@@ -204,7 +233,7 @@
   nextBtn.addEventListener("click", ()=> loadPage(Math.min(state.totalPages, state.page + 1)));
   lastBtn.addEventListener("click", ()=> loadPage(state.totalPages));
 
-  // Import All (helpers)
+  // Import All helpers (unchanged)
   async function fetchAllItemsForLibrary(lib, query=null) {
     const isCollections = (lib || '').trim().toLowerCase() === 'collections';
     const perPage = state.pageSize || 60;
@@ -228,13 +257,11 @@
     return { all, totalPages, totalCount };
   }
 
-  // REPLACED: importMoviePoster -> combined assets import
   async function importMovieAssets(library, ratingKey, folderName){
     const fd = new FormData();
     fd.append("library", library);
     if (ratingKey != null) fd.append("ratingKey", String(ratingKey));
     if (folderName) fd.append("folderName", folderName);
-    // backend defaults already import both poster + background
     return fetch("/api/import/movie", { method: "POST", body: fd });
   }
 
@@ -243,7 +270,6 @@
     fd.append("library", library);
     if (ratingKey != null) fd.append("ratingKey", String(ratingKey));
     if (folderName) fd.append("folderName", folderName);
-    // backend defaults: includePoster=True, includeBackground=True
     return fetch("/api/import/collection", { method: "POST", body: fd });
   }
 
@@ -262,7 +288,6 @@
       if (!r.ok && r.status !== 404 && r.status !== 405) return r;
       if (r.ok) return r;
     } catch(_) {}
-    // fallback to movie-style import (brings poster+background)
     return importMovieAssets(library, ratingKey, folderName);
   }
 
@@ -299,10 +324,8 @@
       };
 
       for (const it of all) {
-        const folderName =
-          it.folderName || it.folder || it.name || it.title || "";
-        const ratingKey =
-          it.ratingKey || it.key || it.id;
+        const folderName = it.folderName || it.folder || it.name || it.title || "";
+        const ratingKey = it.ratingKey || it.key || it.id;
 
         if (isCollections) {
           await importCollectionAssets(lib, ratingKey, folderName);
@@ -342,7 +365,7 @@
     const lib = (state.library || '').trim();
     const isCollections = lib.toLowerCase() === 'collections';
     if (importAllBtn) {
-      importAllBtn.disabled = !lib; // enable when a library is selected
+      importAllBtn.disabled = !lib;
       importAllBtn.title = isCollections
         ? "Import all collection posters/backgrounds from Plex into Kometa asset folders"
         : "Import all posters/backgrounds (and TV seasons) from Plex into Kometa asset folders";
@@ -407,57 +430,31 @@
     }, 300);
   });
 
-  // upload dialog (movies)
+  // Upload dialog code left as-is (no longer invoked by clicking cards)
   const dlg = document.getElementById("uploader");
   const uploadForm = document.getElementById("uploadForm");
   const uploadStatus = document.getElementById("uploadStatus");
   window.closeUploadDialog = () => dlg.close();
 
-  let currentUploadCtx = null;
-  function openUploadDialogFor(it){
-    // Disable dialog on Collections to avoid confusion (collection uploads happen via Import All)
-    const isCollections = (state.library || '').trim().toLowerCase() === 'collections';
-    if (isCollections) return;
-
-    currentUploadCtx = {
-      library: state.library,
-      folderName: it.folderName || it.folder || it.name || it.title || "",
-      ratingKey: it.ratingKey || it.key || it.id
-    };
-    document.getElementById("uLibrary").textContent = currentUploadCtx.library;
-    document.getElementById("uFolder").textContent = currentUploadCtx.folderName;
-    uploadStatus.textContent = "";
-    dlg.showModal();
-  }
-
   document.getElementById("uploadCancel").addEventListener("click", ()=> dlg.close());
   uploadForm.addEventListener("submit", async (ev)=>{
     ev.preventDefault();
-    if (!currentUploadCtx) return;
     uploadStatus.textContent = "Uploading…";
     const fd = new FormData(uploadForm);
-    const lib = currentUploadCtx.library;
-    const folderName = currentUploadCtx.folderName;
-    const ratingKey = currentUploadCtx.ratingKey;
-
     try {
-      // Upload poster if provided
       const p = fd.get("poster");
       if (p && p.size > 0) {
         const up = new FormData();
-        up.append("library", lib);
-        up.append("folderName", folderName);
-        up.append("ratingKey", String(ratingKey));
+        up.append("library", state.library);
+        up.append("folderName", fd.get("folderName") || "");
         up.append("file", p);
         await fetch("/api/upload/poster", { method: "POST", body: up });
       }
-      // Upload background if provided
       const b = fd.get("background");
       if (b && b.size > 0) {
         const up = new FormData();
-        up.append("library", lib);
-        up.append("folderName", folderName);
-        up.append("ratingKey", String(ratingKey));
+        up.append("library", state.library);
+        up.append("folderName", fd.get("folderName") || "");
         up.append("file", b);
         await fetch("/api/upload/background", { method: "POST", body: up });
       }
