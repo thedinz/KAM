@@ -451,7 +451,7 @@
       const poster = normalizeAssetResult(results.poster, message);
       const background = normalizeAssetResult(results.background, message);
       const ok = Boolean(
-        (data && typeof data.ok === "boolean" ? data.ok : null) ?? poster.ok || background.ok
+        ((data && typeof data.ok === "boolean" ? data.ok : null) ?? (poster.ok || background.ok))
       );
       return {
         ok: ok && response.ok,
@@ -487,7 +487,7 @@
       const poster = normalizeAssetResult(results.poster, message);
       const background = normalizeAssetResult(results.background, message);
       const ok = Boolean(
-        (data && typeof data.ok === "boolean" ? data.ok : null) ?? poster.ok || background.ok
+        ((data && typeof data.ok === "boolean" ? data.ok : null) ?? (poster.ok || background.ok))
       );
       return {
         ok: ok && response.ok,
