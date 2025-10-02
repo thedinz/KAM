@@ -36,6 +36,24 @@ def test_resolve_accepts_high_similarity_variant(tmp_path, monkeypatch):
     assert os.path.basename(resolved) == existing
 
 
+def test_resolve_matches_stopword_and_year_variants(tmp_path, monkeypatch):
+    assets_root = tmp_path / "assets"
+    library = "Movies"
+    target = "The Super Mario Bros. Movie"
+    existing = "Super Mario Bros. (2023)"
+
+    library_path = assets_root / library
+    library_path.mkdir(parents=True)
+    (library_path / existing).mkdir()
+
+    monkeypatch.setenv("KAM_ASSETS_ROOT", str(assets_root))
+
+    resolve_module = _reload_with_assets_root(str(assets_root))
+
+    resolved = resolve_module.resolve_existing_dir_or_422(library, target)
+    assert os.path.basename(resolved) == existing
+
+
 def test_resolve_rejects_low_similarity_titles(tmp_path, monkeypatch):
     assets_root = tmp_path / "assets"
     library = "Movies"
