@@ -1,8 +1,15 @@
 # app/main.py
+import logging
+import os
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-import os
+
+from .logging_config import configure_logging
+
+configure_logging()
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="KAM")
 
@@ -37,7 +44,7 @@ if ASSETS_ROOT and os.path.isdir(ASSETS_ROOT):
     # Serve files at the URL path /assets (matches your .env paths)
     app.mount("/assets", StaticFiles(directory=ASSETS_ROOT), name="assets")
 else:
-    print(f"[KAM] Skipping /assets mount. Not found in container: {ASSETS_ROOT!r}")
+    logger.warning("Skipping /assets mount. Not found in container: %r", ASSETS_ROOT)
 
 # ---- Static Web UI ----
 app.mount("/", StaticFiles(directory="app/web", html=True), name="web")
