@@ -129,9 +129,9 @@
   const search     = document.getElementById("search");
   const importAllBtn = document.getElementById("importAllBtn");
   const importStatus = document.getElementById("importStatus");
-  const progressBar = importStatus.querySelector(".progress-bar");
-  const progressLabel = importStatus.querySelector(".progress-label");
-  const errorListEl = importStatus.querySelector(".error-list");
+  const progressBar = importStatus ? importStatus.querySelector(".progress-bar") : null;
+  const progressLabel = importStatus ? importStatus.querySelector(".progress-label") : null;
+  const errorListEl = importStatus ? importStatus.querySelector(".error-list") : null;
   const firstBtn = document.getElementById("firstBtn");
   const prevBtn  = document.getElementById("prevBtn");
   const nextBtn  = document.getElementById("nextBtn");
@@ -153,19 +153,24 @@
 
   function showProgressContainer(){
     clearTimeout(progressHideTimer);
+    if (!importStatus) return;
     importStatus.classList.add("is-active");
   }
 
   function hideProgressContainer(){
     clearTimeout(progressHideTimer);
+    if (!importStatus) return;
     importStatus.classList.remove("is-active");
     importStatus.classList.remove("has-errors");
   }
 
   function renderErrorList(items){
-    errorListEl.innerHTML = "";
     const hasErrors = Array.isArray(items) && items.length > 0;
-    importStatus.classList.toggle("has-errors", hasErrors);
+    if (importStatus) {
+      importStatus.classList.toggle("has-errors", hasErrors);
+    }
+    if (!errorListEl) return;
+    errorListEl.innerHTML = "";
     if (!hasErrors) return;
     for (const entry of items) {
       const li = document.createElement("li");
@@ -182,18 +187,18 @@
   }
 
   function resetProgressUI(){
-    progressBar.style.width = "0%";
-    progressLabel.textContent = "";
+    if (progressBar) progressBar.style.width = "0%";
+    if (progressLabel) progressLabel.textContent = "";
     renderErrorList([]);
   }
 
   function updateProgressUI(percent, label){
     if (typeof percent === "number" && !Number.isNaN(percent)) {
       const clamped = Math.max(0, Math.min(100, Math.round(percent)));
-      progressBar.style.width = `${clamped}%`;
+      if (progressBar) progressBar.style.width = `${clamped}%`;
     }
     if (label !== undefined) {
-      progressLabel.textContent = label || "";
+      if (progressLabel) progressLabel.textContent = label || "";
     }
   }
 
