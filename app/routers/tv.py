@@ -144,6 +144,7 @@ def get_show(library: str = Query(...), ratingKey: str = Query(...)):
     all_seasons = _seasons(ratingKey)
 
     folder = _existing_folder_name(library, title, year)
+    folder_exists = folder is not None
     if not folder:
         folder = kometa_sanitize_folder(f"{title} ({year})" if year else title)
 
@@ -185,6 +186,7 @@ def get_show(library: str = Query(...), ratingKey: str = Query(...)):
         "title": title,
         "year": year,
         "folderName": folder,
+        "folderExists": folder_exists,
         "posterUrl": poster_url,
         "backgroundUrl": background_url,
         "plexPosterUrl": plex_poster_url,
