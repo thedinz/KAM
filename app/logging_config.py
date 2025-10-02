@@ -4,19 +4,26 @@ import os
 import sys
 from typing import Optional
 
-DEFAULT_LEVEL = "INFO"
+DEFAULT_LEVEL = logging.INFO
 ENV_LEVEL = "KAM_LOG_LEVEL"
 
 
 def _resolve_level(name: Optional[str]) -> int:
     """Return a logging level from an environment-provided name."""
-    if not name:
-        return logging.getLevelName(DEFAULT_LEVEL)
+    if not name or not name.strip():
+        return DEFAULT_LEVEL
+
     normalized = name.strip().upper()
-    level = logging.getLevelName(normalized)
+    level = logging._nameToLevel.get(normalized)
     if isinstance(level, int):
         return level
-    return logging.getLevelName(DEFAULT_LEVEL)
+
+    try:
+        candidate = logging._checkLevel(normalized)
+    except (ValueError, TypeError):
+        return DEFAULT_LEVEL
+
+    return candidate if isinstance(candidate, int) else DEFAULT_LEVEL
 
 
 def configure_logging() -> None:
