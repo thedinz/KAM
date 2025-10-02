@@ -26,7 +26,8 @@
   .card{ background:var(--card); border:1px solid var(--border); border-radius:14px; overflow:hidden; display:flex; flex-direction:column; }
   .poster{ width:100%; aspect-ratio:2/3; height:auto; object-fit:contain; background:#222; display:block; }
   .meta{padding:8px 10px}
-  .title{font-weight:600; display:flex; align-items:center; gap:6px; flex-wrap:wrap}
+  .title{font-weight:600; display:grid; grid-template-columns:1fr auto; align-items:start; column-gap:6px; row-gap:4px; min-height:3.4em}
+  .title-text{display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; text-overflow:ellipsis; line-height:1.2}
   .ready-badge{display:inline-flex; align-items:center; gap:4px; padding:2px 6px; border-radius:999px; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.04em}
   .ready-badge.ready{background:#1f8f4d; color:#fff}
   .ready-badge.not-ready{background:#b91c1c; color:#fff}
@@ -180,7 +181,11 @@
       const t = document.createElement("div");
       t.className = "title";
       const titleText = it.title || it.name || "(Untitled)";
-      t.textContent = titleText;
+      const titleSpan = document.createElement("span");
+      titleSpan.className = "title-text";
+      titleSpan.textContent = titleText;
+      titleSpan.title = titleText;
+      t.appendChild(titleSpan);
       const status = document.createElement("span");
       status.className = `ready-badge ${isReady ? "ready" : "not-ready"}`;
       status.textContent = isReady ? "✔ Ready" : "✖ Not Ready";
