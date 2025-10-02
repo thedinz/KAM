@@ -97,6 +97,7 @@
       <h3 style="margin:8px 0 12px">Upload Artwork</h3>
       <div class="row"><label>Library</label><span id="uLibrary" class="tag"></span></div>
       <div class="row"><label>Folder</label><span id="uFolder" class="tag"></span></div>
+      <input type="hidden" name="folderName" />
       <div class="row"><label>Poster</label><input type="file" name="poster" accept="image/*" /></div>
       <div class="row"><label>Background</label><input type="file" name="background" accept="image/*" /></div>
       <p class="hint small">Images will be converted to <code>.jpg</code> and replace existing <code>poster.*</code> or <code>background.*</code> in this folder.</p>
@@ -361,6 +362,7 @@
       const detailUrl = goToDetail(it);
       const readinessTooltip = isReady ? "Ready: asset folder found." : "Not ready: asset folder missing.";
       card.title = readinessTooltip;
+      const isCollections = !detailUrl && (state.library || "").trim().toLowerCase() === "collections";
       if (detailUrl){
         card.style.cursor = "pointer";
         card.title = `${readinessTooltip} Click to open details.`;
@@ -369,6 +371,22 @@
             window.open(detailUrl, "_blank");
           } else {
             location.href = detailUrl;
+          }
+        });
+      } else if (isCollections) {
+        card.style.cursor = "pointer";
+        card.title = `${readinessTooltip} Click to upload artwork.`;
+        card.addEventListener("click", ()=>{
+          if (uploadForm) uploadForm.reset();
+          const libraryName = it?.library || state.library || "";
+          const folderName = it?.folderName || it?.folder || it?.name || it?.title || "";
+          if (uploadLibraryTag) uploadLibraryTag.textContent = libraryName;
+          if (uploadFolderTag) uploadFolderTag.textContent = folderName;
+          if (uploadFolderInput) uploadFolderInput.value = folderName;
+          if (uploadStatus) uploadStatus.textContent = "";
+          if (typeof dlg?.showModal === "function") {
+            try { dlg.showModal(); }
+            catch (err) { console.error(err); }
           }
         });
       }
@@ -792,6 +810,9 @@
   const dlg = document.getElementById("uploader");
   const uploadForm = document.getElementById("uploadForm");
   const uploadStatus = document.getElementById("uploadStatus");
+  const uploadLibraryTag = document.getElementById("uLibrary");
+  const uploadFolderTag = document.getElementById("uFolder");
+  const uploadFolderInput = uploadForm ? uploadForm.querySelector("input[name='folderName']") : null;
   window.closeUploadDialog = () => dlg.close();
 
   document.getElementById("uploadCancel").addEventListener("click", ()=> dlg.close());
