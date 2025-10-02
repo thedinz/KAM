@@ -22,6 +22,10 @@
   .missing{font-size:12px; color:#f59e0b; margin-left:6px}
   .upload-row{display:flex; gap:10px; align-items:center; flex-wrap:wrap}
   .upload-row input[type="file"]{flex:1}
+  button.btn:disabled{opacity:0.5; cursor:not-allowed}
+  .upload-row input[type="file"][disabled]{opacity:0.6; cursor:not-allowed}
+  .warning{display:none; background:#450a0a; color:#fecaca; border:1px solid #f87171; border-radius:10px; padding:10px 12px; margin-bottom:14px}
+  .warning strong{margin-right:6px}
   #status{margin-top:10px; color:var(--muted)}
 </style>
 </head>
@@ -31,6 +35,7 @@
   <h1>Movie</h1>
 </header>
 <main>
+  <div id="folderWarning" class="warning"><strong>✖</strong>Asset folder not found. Create the Kometa asset folder first.</div>
   <div class="row">
     <div class="card">
       <div class="label">Poster</div>
@@ -74,6 +79,9 @@
   const status = $("#status");
   const posterFlag = $("#posterFlag");
   const bgFlag = $("#bgFlag");
+  const folderWarning = $("#folderWarning");
+  const interactiveEls = [$("#posterFile"), $("#bgFile"), $("#importPoster"), $("#uploadPoster"), $("#importBg"), $("#uploadBg")];
+  const missingMsg = "Create the Kometa asset folder first.";
 
   function flag(el, exists) {
     el.className = exists ? "exists" : "missing";
@@ -98,6 +106,20 @@
   }
 
   function render(d) {
+    data = d;
+    const folderExists = !!d.folderExists;
+    if (folderWarning) folderWarning.style.display = folderExists ? "none" : "block";
+    for (const el of interactiveEls) {
+      if (!el) continue;
+      el.disabled = !folderExists;
+      if (!folderExists && el.tagName === "INPUT") el.value = "";
+    }
+    if (!folderExists) {
+      status.textContent = missingMsg;
+    } else if (status.textContent === missingMsg) {
+      status.textContent = "";
+    }
+
     const posterSrc = d.posterUrl || d.posterUrlPlex || "";
     const bgSrc = d.backgroundUrl || d.backgroundUrlPlex || "";
 
@@ -111,6 +133,10 @@
   }
 
   async function upload(kind, fileInput) {
+    if (!data || !data.folderExists) {
+      status.textContent = missingMsg;
+      return;
+    }
     const file = fileInput.files[0];
     if (!file) { status.textContent = "Choose a file first."; return; }
     status.textContent = "Uploading...";
@@ -131,8 +157,12 @@
     status.textContent = "Done.";
   }
 
-  
+
   async function importBg() {
+    if (!data || !data.folderExists) {
+      status.textContent = missingMsg;
+      return;
+    }
     status.textContent = "Importing from Plex...";
     const fd = new FormData();
     fd.append("library", library);
@@ -150,6 +180,10 @@
   }
 
 async function importPoster() {
+    if (!data || !data.folderExists) {
+      status.textContent = missingMsg;
+      return;
+    }
     status.textContent = "Importing from Plex...";
     const fd = new FormData();
     fd.append("library", library);
