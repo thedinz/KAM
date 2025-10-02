@@ -530,10 +530,8 @@
         error: s && s.error || null
       }));
       const ok = Boolean(
-        (data && typeof data.ok === "boolean" ? data.ok : null)
-          ?? poster.ok
-          || background.ok
-          || seasons.some(sea => sea.ok)
+        ((data && typeof data.ok === "boolean" ? data.ok : null)
+          ?? (poster.ok || background.ok || seasons.some(sea => sea.ok)))
       );
       const result = {
         ok: ok && response.ok,
