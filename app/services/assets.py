@@ -1,4 +1,4 @@
-import os, io, re, pathlib
+import os, io, re, pathlib, shutil
 from typing import Optional
 from PIL import Image
 from fastapi import UploadFile, HTTPException
