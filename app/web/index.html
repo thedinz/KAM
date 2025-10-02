@@ -598,123 +598,127 @@
     return { ok: anyOk, seasons: results, endpoint: "season" };
   }
 
-  importAllBtn.addEventListener("click", async ()=>{
-    if (!state.library) return;
-    importAllBtn.disabled = true;
+  if (importAllBtn) {
+    importAllBtn.addEventListener("click", async ()=>{
+      if (!state.library) return;
+      const button = importAllBtn;
+      if (!button) return;
+      button.disabled = true;
 
-    const lib = (state.library || "").trim();
-    const isCollections = lib.toLowerCase() === "collections";
-    const isTVLib = lib.toLowerCase().includes("tv");
-    const failures = [];
+      const lib = (state.library || "").trim();
+      const isCollections = lib.toLowerCase() === "collections";
+      const isTVLib = lib.toLowerCase().includes("tv");
+      const failures = [];
 
-    showProgressContainer();
-    resetProgressUI();
-    updateProgressUI(0, "Preparing import…");
+      showProgressContainer();
+      resetProgressUI();
+      updateProgressUI(0, "Preparing import…");
 
-    try {
-      const { all } = await fetchAllItemsForLibrary(lib, state.query);
-      const allItems = Array.isArray(all) ? all : [];
-      const importable = allItems.filter(it => it?.assetReady !== false);
-      const skippedItems = allItems.filter(it => it?.assetReady === false);
+      try {
+        const { all } = await fetchAllItemsForLibrary(lib, state.query);
+        const allItems = Array.isArray(all) ? all : [];
+        const importable = allItems.filter(it => it?.assetReady !== false);
+        const skippedItems = allItems.filter(it => it?.assetReady === false);
 
-      for (const skip of skippedItems) {
-        const context = {
-          library: lib,
-          title: skip?.title || skip?.name || "(Untitled)",
-          folder: skip?.folderName || skip?.folder || skip?.name || skip?.title || ""
+        for (const skip of skippedItems) {
+          const context = {
+            library: lib,
+            title: skip?.title || skip?.name || "(Untitled)",
+            folder: skip?.folderName || skip?.folder || skip?.name || skip?.title || ""
+          };
+          pushFailureEntry(failures, context, "Item", "Skipped (asset folder missing)");
+        }
+
+        if (!importable.length) {
+          if (failures.length) {
+            const count = failures.length;
+            updateProgressUI(0, `Import skipped. ${count} item${count === 1 ? "" : "s"} missing asset folders.`);
+            renderErrorList(failures);
+          } else {
+            updateProgressUI(0, "Nothing to import.");
+            renderErrorList([]);
+            scheduleProgressHide(2000);
+          }
+          return;
+        }
+
+        let processed = 0;
+        const total = importable.length;
+        const skipSuffix = skippedItems.length
+          ? ` (skipping ${skippedItems.length} not-ready item${skippedItems.length === 1 ? "" : "s"})`
+          : "";
+        const updateLabel = () => {
+          const pct = total ? (processed / total) * 100 : 100;
+          updateProgressUI(pct, `Importing assets from Plex… ${processed}/${total}${skipSuffix}`);
         };
-        pushFailureEntry(failures, context, "Item", "Skipped (asset folder missing)");
-      }
 
-      if (!importable.length) {
-        if (failures.length) {
-          const count = failures.length;
-          updateProgressUI(0, `Import skipped. ${count} item${count === 1 ? "" : "s"} missing asset folders.`);
+        updateLabel();
+
+        for (const it of importable) {
+          const title = it?.title || it?.name || "(Untitled)";
+          const folderName = it?.folderName || it?.folder || it?.name || it?.title || "";
+          const ratingKey = it?.ratingKey || it?.key || it?.id;
+          const context = { library: lib, title, folder: folderName };
+
+          try {
+            if (isCollections) {
+              const result = await importCollectionAssets(lib, ratingKey, folderName);
+              collectResultFailures(failures, context, result);
+            } else if (isTVLib || isShowItem(it, lib)) {
+              let showData = null;
+              if (ratingKey != null) {
+                try {
+                  const url = `/api/show?library=${encodeURIComponent(lib)}&ratingKey=${encodeURIComponent(ratingKey)}`;
+                  showData = await j(url);
+                } catch (err) {
+                  pushFailureEntry(failures, context, "Show Lookup", err?.message || String(err));
+                }
+              }
+              const showFolder = showData?.folderName || folderName;
+              const seasonsMeta = Array.isArray(showData?.seasons) ? showData.seasons : [];
+              const showResult = await importShowPosterPreferShowEndpoint(lib, ratingKey, showFolder);
+              collectResultFailures(failures, context, showResult);
+              const hasSeasonResults = Array.isArray(showResult.seasons) && showResult.seasons.length > 0;
+              if (!hasSeasonResults && seasonsMeta.length) {
+                const seasonResult = await importAllSeasons(lib, showFolder, seasonsMeta, ratingKey);
+                collectResultFailures(failures, context, seasonResult);
+              }
+            } else {
+              const result = await importMovieAssets(lib, ratingKey, folderName);
+              collectResultFailures(failures, context, result);
+            }
+          } catch (err) {
+            pushFailureEntry(failures, context, "Import", err?.message || String(err));
+          }
+
+          processed += 1;
+          updateLabel();
+        }
+
+        await loadPage(state.page);
+
+        const failureCount = failures.length;
+        if (failureCount) {
+          showProgressContainer();
+          updateProgressUI(100, `Import completed with ${failureCount} failure${failureCount === 1 ? "" : "s"}.`);
           renderErrorList(failures);
         } else {
-          updateProgressUI(0, "Nothing to import.");
+          showProgressContainer();
+          updateProgressUI(100, "Import complete.");
           renderErrorList([]);
-          scheduleProgressHide(2000);
+          scheduleProgressHide(2500);
         }
-        return;
-      }
-
-      let processed = 0;
-      const total = importable.length;
-      const skipSuffix = skippedItems.length
-        ? ` (skipping ${skippedItems.length} not-ready item${skippedItems.length === 1 ? "" : "s"})`
-        : "";
-      const updateLabel = () => {
-        const pct = total ? (processed / total) * 100 : 100;
-        updateProgressUI(pct, `Importing assets from Plex… ${processed}/${total}${skipSuffix}`);
-      };
-
-      updateLabel();
-
-      for (const it of importable) {
-        const title = it?.title || it?.name || "(Untitled)";
-        const folderName = it?.folderName || it?.folder || it?.name || it?.title || "";
-        const ratingKey = it?.ratingKey || it?.key || it?.id;
-        const context = { library: lib, title, folder: folderName };
-
-        try {
-          if (isCollections) {
-            const result = await importCollectionAssets(lib, ratingKey, folderName);
-            collectResultFailures(failures, context, result);
-          } else if (isTVLib || isShowItem(it, lib)) {
-            let showData = null;
-            if (ratingKey != null) {
-              try {
-                const url = `/api/show?library=${encodeURIComponent(lib)}&ratingKey=${encodeURIComponent(ratingKey)}`;
-                showData = await j(url);
-              } catch (err) {
-                pushFailureEntry(failures, context, "Show Lookup", err?.message || String(err));
-              }
-            }
-            const showFolder = showData?.folderName || folderName;
-            const seasonsMeta = Array.isArray(showData?.seasons) ? showData.seasons : [];
-            const showResult = await importShowPosterPreferShowEndpoint(lib, ratingKey, showFolder);
-            collectResultFailures(failures, context, showResult);
-            const hasSeasonResults = Array.isArray(showResult.seasons) && showResult.seasons.length > 0;
-            if (!hasSeasonResults && seasonsMeta.length) {
-              const seasonResult = await importAllSeasons(lib, showFolder, seasonsMeta, ratingKey);
-              collectResultFailures(failures, context, seasonResult);
-            }
-          } else {
-            const result = await importMovieAssets(lib, ratingKey, folderName);
-            collectResultFailures(failures, context, result);
-          }
-        } catch (err) {
-          pushFailureEntry(failures, context, "Import", err?.message || String(err));
-        }
-
-        processed += 1;
-        updateLabel();
-      }
-
-      await loadPage(state.page);
-
-      const failureCount = failures.length;
-      if (failureCount) {
+      } catch (e) {
+        const message = `Import failed: ${e?.message || e}`;
+        pushFailureEntry(failures, { library: lib, title: "", folder: "" }, "Import", message);
         showProgressContainer();
-        updateProgressUI(100, `Import completed with ${failureCount} failure${failureCount === 1 ? "" : "s"}.`);
+        updateProgressUI(0, message);
         renderErrorList(failures);
-      } else {
-        showProgressContainer();
-        updateProgressUI(100, "Import complete.");
-        renderErrorList([]);
-        scheduleProgressHide(2500);
+      } finally {
+        if (button) button.disabled = false;
       }
-    } catch (e) {
-      const message = `Import failed: ${e?.message || e}`;
-      pushFailureEntry(failures, { library: lib, title: "", folder: "" }, "Import", message);
-      showProgressContainer();
-      updateProgressUI(0, message);
-      renderErrorList(failures);
-    } finally {
-      importAllBtn.disabled = false;
-    }
-  });
+    });
+  }
 
   // library + search
   function updateImportAllBtnState(){
