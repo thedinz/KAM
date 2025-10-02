@@ -42,9 +42,11 @@ def movie(library: str = Query(...), ratingKey: int = Query(...)):
     background_exists = False
     poster_url_local = None
     background_url_local = None
+    folder_exists = False
 
     if base:
         movie_folder = os.path.join(base, folder)
+        folder_exists = os.path.isdir(movie_folder)
         # poster
         p = _first_existing(os.path.join(movie_folder, "poster"))
         if p:
@@ -70,6 +72,7 @@ def movie(library: str = Query(...), ratingKey: int = Query(...)):
         "year": year,
         "ratingKey": int(ratingKey),
         "folderName": folder,
+        "folderExists": folder_exists,
         "posterExists": poster_exists,
         "backgroundExists": background_exists,
         "posterUrl": poster_url_local,
