@@ -2,6 +2,7 @@
 import os
 import unicodedata
 import re
+from difflib import SequenceMatcher
 from typing import Optional
 
 ASSETS_ROOT = os.environ.get("KAM_ASSETS_ROOT", "/assets")
@@ -27,21 +28,59 @@ def _best_match(candidates, want: str) -> Optional[str]:
     want_key = _normalize(want)
     if not want_key:
         return None
+
+    normalized_candidates = [(c, _normalize(c)) for c in candidates]
+
     # exact normalized match first
-    for c in candidates:
-        if _normalize(c) == want_key:
-            return c
+    for original, normalized in normalized_candidates:
+        if normalized == want_key:
+            return original
+
     # relaxed: startswith normalized (helps with extra year suffixes, etc.)
-    for c in candidates:
-        if _normalize(c).startswith(want_key) or want_key.startswith(_normalize(c)):
-            return c
+    for original, normalized in normalized_candidates:
+        if normalized.startswith(want_key) or want_key.startswith(normalized):
+            return original
+
+    # fallback: closest fuzzy match when the similarity is very high
+    best_score = 0.0
+    best_candidate = None
+    for original, normalized in normalized_candidates:
+        if not normalized:
+            continue
+        matcher = SequenceMatcher(a=normalized, b=want_key)
+        score = matcher.ratio()
+
+        # Evaluate how much of the shorter string aligns contiguously with the
+        # longer one to tolerate small insertions like "Extended Edition".
+        len_norm = len(normalized)
+        len_want = len(want_key)
+        if len_norm and len_want:
+            if len_norm >= len_want:
+                longer, shorter = normalized, want_key
+            else:
+                longer, shorter = want_key, normalized
+            window_match = SequenceMatcher(a=longer, b=shorter).find_longest_match(
+                0, len(longer), 0, len(shorter)
+            )
+            if shorter:
+                score = max(score, window_match.size / len(shorter))
+
+        if score > best_score:
+            best_score = score
+            best_candidate = original
+
+    # require a conservative minimum similarity to avoid unrelated matches
+    if best_score >= 0.86:
+        return best_candidate
     return None
 
 def resolve_existing_dir_or_422(library: str, folder_name: str) -> str:
     """
     Resolve the asset directory for (library, folder_name) to an EXISTING folder.
     - Never creates directories.
-    - Matching is normalization-based (colon stripped among other punctuation).
+    - Matching is normalization-based (colon stripped among other punctuation)
+      with an additional high-similarity fuzzy fallback for near-identical
+      directory names.
     - Raises FileNotFoundError for caller to convert to 422.
     """
     if not library:
