@@ -1,8 +1,10 @@
 from fastapi import APIRouter, HTTPException, Query
 import os
+from typing import Optional
 
 from ..services.plex import get_plex
 from ..services.assets import folder_name_for
+from ..services.resolve import resolve_existing_dir_or_422
 from .. import config
 
 router = APIRouter()
@@ -21,6 +23,26 @@ def _first_existing(base_no_ext: str):
             return p
     return None
 
+
+def _resolve_existing_folder_basename(library: str, title: Optional[str], year: Optional[int]) -> Optional[str]:
+    """Return the basename of an existing asset folder that best matches the title."""
+    if not title:
+        return None
+
+    candidates = []
+    if year:
+        candidates.append(f"{title} ({year})")
+    candidates.append(title)
+
+    for cand in candidates:
+        try:
+            resolved = resolve_existing_dir_or_422(library, cand)
+        except Exception:
+            continue
+        if resolved:
+            return os.path.basename(resolved.rstrip(os.sep))
+    return None
+
 @router.get("/movie", summary="Single movie details")
 def movie(library: str = Query(...), ratingKey: int = Query(...)):
     # Find the library section and the item
@@ -35,6 +57,9 @@ def movie(library: str = Query(...), ratingKey: int = Query(...)):
     title = getattr(item, "title", None) or "Untitled"
     year = getattr(item, "year", None)
     folder = folder_name_for(title, year)
+    resolved_folder = _resolve_existing_folder_basename(library, title, year)
+    if resolved_folder:
+        folder = resolved_folder
 
     # Map to asset root for this library
     base = config.LIBRARY_MAPPINGS.get(library)
