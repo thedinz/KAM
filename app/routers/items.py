@@ -164,6 +164,7 @@ def list_items(
     out: List[Dict[str, Any]] = []
     for it in page_rows:
         folder = _try_existing_asset_folder(library, it["title"], it["year"])
+        asset_ready = bool(folder)
         if folder and _local_poster_exists(library, folder):
             poster = _fileproxy_poster_url(library, folder)   # <-- /fileproxy now
         else:
@@ -174,6 +175,8 @@ def list_items(
             "year": it["year"],
             "type": it["type"],
             "folder": folder,
+            "folderName": folder,
+            "assetReady": asset_ready,
             "posterUrl": poster,
         })
 

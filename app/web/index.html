@@ -26,7 +26,14 @@
   .card{ background:var(--card); border:1px solid var(--border); border-radius:14px; overflow:hidden; display:flex; flex-direction:column; }
   .poster{ width:100%; aspect-ratio:2/3; height:auto; object-fit:contain; background:#222; display:block; }
   .meta{padding:8px 10px}
-  .title{font-weight:600}
+  .title{font-weight:600; display:flex; align-items:center; gap:6px; flex-wrap:wrap}
+  .ready-badge{display:inline-flex; align-items:center; gap:4px; padding:2px 6px; border-radius:999px; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.04em}
+  .ready-badge.ready{background:#1f8f4d; color:#fff}
+  .ready-badge.not-ready{background:#b91c1c; color:#fff}
+  [data-theme="light"] .ready-badge.ready{background:#22c55e; color:#065f46}
+  [data-theme="light"] .ready-badge.not-ready{background:#fca5a5; color:#7f1d1d}
+  .card[data-ready="false"]{border-color:#532626}
+  [data-theme="light"] .card[data-ready="false"]{border-color:#fca5a5}
   .year{color:var(--muted); font-size:13px}
   dialog{border:none; border-radius:14px; padding:0; max-width:520px; width:calc(100% - 24px)}
   .dlg-body{padding:16px}
@@ -154,6 +161,10 @@
     for (const it of (items || [])) {
       const card = document.createElement("div");
       card.className = "card";
+      const isReady = it?.assetReady !== false;
+      card.dataset.ready = isReady ? "true" : "false";
+      card.setAttribute("data-ready", card.dataset.ready);
+
       const img = document.createElement("img");
       img.className = "poster";
       img.loading = "lazy";
@@ -168,7 +179,15 @@
 
       const t = document.createElement("div");
       t.className = "title";
-      t.textContent = it.title || it.name || "(Untitled)";
+      const titleText = it.title || it.name || "(Untitled)";
+      t.textContent = titleText;
+      const status = document.createElement("span");
+      status.className = `ready-badge ${isReady ? "ready" : "not-ready"}`;
+      status.textContent = isReady ? "✔ Ready" : "✖ Not Ready";
+      status.title = isReady
+        ? "Asset folder found. This item is ready for imports."
+        : "Asset folder missing. This item is not ready for imports.";
+      t.appendChild(status);
 
       const y = document.createElement("div");
       y.className = "year";
@@ -180,9 +199,11 @@
 
       // CHANGED: click to navigate to dedicated page instead of opening the inline upload dialog
       const detailUrl = goToDetail(it);
+      const readinessTooltip = isReady ? "Ready: asset folder found." : "Not ready: asset folder missing.";
+      card.title = readinessTooltip;
       if (detailUrl){
         card.style.cursor = "pointer";
-        card.title = "Open details";
+        card.title = `${readinessTooltip} Click to open details.`;
         card.addEventListener("click", (ev)=>{
           if (ev.metaKey || ev.ctrlKey) {
             window.open(detailUrl, "_blank");
@@ -313,17 +334,36 @@
     errors.textContent = "Importing assets from Plex… (0%)";
 
     try {
-      const { all, totalCount } = await fetchAllItemsForLibrary(lib, state.query);
-      const total = all.length || totalCount || 1;
+      const { all } = await fetchAllItemsForLibrary(lib, state.query);
+      const allItems = all || [];
+      const importable = allItems.filter(it => it?.assetReady !== false);
+      const skipCount = allItems.filter(it => it?.assetReady === false).length;
+
+      if (!importable.length) {
+        const msg = skipCount
+          ? `Nothing to import. ${skipCount} item(s) are missing asset folders.`
+          : "Nothing to import.";
+        errors.textContent = msg;
+        setTimeout(()=>{ errors.textContent = prevErr; }, 3000);
+        return;
+      }
+
       let done = 0;
+      const total = importable.length;
       const bump = () => {
         done++;
         if (done % 5 === 0 || done === total) {
-          errors.textContent = `Importing assets from Plex… (${Math.round((done / total) * 100)}%)`;
+          const pct = total ? Math.round((done / total) * 100) : 100;
+          const skipSuffix = skipCount ? ` – skipping ${skipCount} not-ready item(s)` : "";
+          errors.textContent = `Importing assets from Plex… (${pct}%)${skipSuffix}`;
         }
       };
 
-      for (const it of all) {
+      if (skipCount) {
+        errors.textContent = `Importing assets from Plex… (0%) – skipping ${skipCount} not-ready item(s)`;
+      }
+
+      for (const it of importable) {
         const folderName = it.folderName || it.folder || it.name || it.title || "";
         const ratingKey = it.ratingKey || it.key || it.id;
 
@@ -349,7 +389,10 @@
         bump();
       }
 
-      errors.textContent = "Import complete.";
+      const doneMsg = skipCount
+        ? `Import complete. Skipped ${skipCount} item(s) missing asset folders.`
+        : "Import complete.";
+      errors.textContent = doneMsg;
       await loadPage(state.page);
       setTimeout(()=>{ errors.textContent = ""; }, 1500);
     } catch (e) {
