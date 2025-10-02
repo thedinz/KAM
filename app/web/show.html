@@ -22,6 +22,10 @@
   .missing{font-size:12px; color:#f59e0b; margin-left:6px}
   .upload-row{display:flex; gap:10px; align-items:center; flex-wrap:wrap}
   .upload-row input[type="file"]{flex:1}
+  button.btn:disabled{opacity:0.5; cursor:not-allowed}
+  .upload-row input[type="file"][disabled]{opacity:0.6; cursor:not-allowed}
+  .warning{display:none; background:#450a0a; color:#fecaca; border:1px solid #f87171; border-radius:10px; padding:10px 12px; margin-bottom:14px}
+  .warning strong{margin-right:6px}
   #status{margin-top:10px; color:var(--muted)}
 </style>
 </head>
@@ -31,6 +35,7 @@
   <h1 id="title">Show</h1>
 </header>
 <main>
+  <div id="folderWarning" class="warning"><strong>✖</strong>Asset folder not found. Create the Kometa asset folder first.</div>
   <div class="row">
     <div class="card">
       <div class="label">Series Poster</div>
@@ -73,6 +78,8 @@
 
   $("#back").href = "index.html?lib=" + encodeURIComponent(library);
   const status = $("#status");
+  const folderWarning = $("#folderWarning");
+  const missingMsg = "Create the Kometa asset folder first.";
 
   const els = {
     posterFile: $("#posterFile"),
@@ -90,10 +97,28 @@
 
   const state = {
     folderName: null,
+    folderExists: false,
     plexPosterUrl: null,
     plexBackgroundUrl: null,
     seasons: [] // {index, title, url, urlPlex, exists, plexPosterUrl?}
   };
+
+  function applyFolderState(){
+    const exists = !!state.folderExists;
+    if (folderWarning) folderWarning.style.display = exists ? "none" : "block";
+    const disable = !exists;
+    const controls = [els.posterFile, els.bgFile, els.uploadPoster, els.uploadBg, els.importPoster, els.importBg];
+    for (const el of controls) {
+      if (!el) continue;
+      el.disabled = disable;
+      if (disable && el.tagName === "INPUT") el.value = "";
+    }
+    if (!exists) {
+      status.textContent = missingMsg;
+    } else if (status.textContent === missingMsg) {
+      status.textContent = "";
+    }
+  }
 
   function flag(el, exists){
     el.textContent = exists ? "exists" : "missing";
@@ -117,6 +142,7 @@
 
       // Remember folder/plex URLs if provided
       state.folderName        = data.folderName;
+      state.folderExists      = !!data.folderExists;
       state.plexPosterUrl     = data.plexPosterUrl     || data.posterUrlPlex || null;
       state.plexBackgroundUrl = data.plexBackgroundUrl || data.backgroundUrlPlex || null;
 
@@ -137,6 +163,8 @@
       else { els.posterImg.style.display="none"; }
       if (bgSrc){ els.bgImg.src = bust(bgSrc); els.bgImg.style.display="block"; }
       else { els.bgImg.style.display="none"; }
+
+      applyFolderState();
 
       // Seasons
       state.seasons = (data.seasons || []).map(s => ({
@@ -166,9 +194,15 @@
       const btn = document.createElement("button"); btn.className="btn"; btn.textContent="Upload";
       const importBtn = document.createElement("button"); importBtn.className="btn"; importBtn.textContent="Import";
       const flagSpan = document.createElement("span"); flag(flagSpan, s.exists);
+      const disabled = !state.folderExists;
+      input.disabled = disabled;
+      btn.disabled = disabled;
+      importBtn.disabled = disabled;
+      if (disabled) input.value = "";
 
       // Upload season -> /api/upload_season
       btn.addEventListener("click", async ()=>{
+        if (!state.folderExists) { status.textContent = missingMsg; return; }
         const f = input.files && input.files[0]; if (!f) return;
         const fd = new FormData();
         fd.append("library", library);
@@ -190,6 +224,7 @@
 
       // Import season -> /api/import/season (pass show ratingKey; include url if we have a Plex URL)
       importBtn.addEventListener("click", async ()=>{
+        if (!state.folderExists) { status.textContent = missingMsg; return; }
         status.textContent = "Importing Season " + s.index + "...";
         try {
           const fd = new FormData();
@@ -216,6 +251,7 @@
 
   // Upload series poster/background -> /api/upload_show (kind = poster|background)
   els.uploadPoster.onclick = async ()=>{
+    if (!state.folderExists) { status.textContent = missingMsg; return; }
     const f = els.posterFile.files && els.posterFile.files[0]; if (!f) return;
     const fd = new FormData();
     fd.append("library", library);
@@ -234,6 +270,7 @@
   };
 
   els.uploadBg.onclick = async ()=>{
+    if (!state.folderExists) { status.textContent = missingMsg; return; }
     const f = els.bgFile.files && els.bgFile.files[0]; if (!f) return;
     const fd = new FormData();
     fd.append("library", library);
@@ -253,6 +290,7 @@
 
   // Import series poster/background (use show ratingKey, include URL if API returned one)
   els.importPoster.onclick = async ()=>{
+    if (!state.folderExists) { status.textContent = missingMsg; return; }
     status.textContent = "Importing series poster...";
     try {
       const fd = new FormData();
@@ -270,6 +308,7 @@
   };
 
   els.importBg.onclick = async ()=>{
+    if (!state.folderExists) { status.textContent = missingMsg; return; }
     status.textContent = "Importing background...";
     try {
       const fd = new FormData();
