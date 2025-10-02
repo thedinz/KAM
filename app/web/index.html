@@ -14,7 +14,15 @@
   select,input,button{background:var(--card); color:var(--fg); border:1px solid var(--border); border-radius:10px; padding:8px 10px}
   select:focus,input:focus,button:focus{outline:2px solid var(--accent)}
   #themeToggle{cursor:pointer}
-  #errors{color:#ff7a7a; min-height:1.2em}
+  .import-status{display:none; flex-direction:column; gap:6px; min-width:220px; max-width:340px; color:var(--muted); align-items:flex-start}
+  .import-status.is-active{display:flex}
+  .import-status .progress-wrapper{display:flex; flex-direction:column; gap:4px}
+  .import-status .progress-track{position:relative; width:100%; height:8px; background:var(--border); border-radius:999px; overflow:hidden}
+  .import-status .progress-bar{position:absolute; inset:0; width:0%; background:var(--accent); transition:width .25s ease}
+  .import-status .progress-label{font-size:13px; line-height:1.4}
+  .import-status .error-list{margin:0; padding-left:18px; font-size:13px; line-height:1.4; color:#ff7a7a; display:none}
+  .import-status.has-errors .error-list{display:block}
+  .import-status.has-errors .progress-label{color:#ffb4b4}
   #toolbar{display:flex; gap:8px; align-items:center; flex-wrap:wrap}
   #libSelect{min-width:200px}
   #search{min-width:220px}
@@ -65,7 +73,13 @@
       <button id="lastBtn" class="btn">Last »</button>
     </div>
     <span id="count"></span>
-    <span id="errors"></span>
+    <div id="importStatus" class="import-status" aria-live="polite">
+      <div class="progress-wrapper">
+        <div class="progress-track"><div class="progress-bar"></div></div>
+        <span class="progress-label"></span>
+      </div>
+      <ul class="error-list"></ul>
+    </div>
   </div>
   <div style="margin-left:auto; display:flex; gap:8px; align-items:center">
     <button id="themeToggle" title="Toggle theme">🌓</button>
@@ -113,8 +127,11 @@
   const grid       = document.getElementById("grid");
   const libSelect  = document.getElementById("libSelect");
   const search     = document.getElementById("search");
-  const errors     = document.getElementById("errors");
   const importAllBtn = document.getElementById("importAllBtn");
+  const importStatus = document.getElementById("importStatus");
+  const progressBar = importStatus.querySelector(".progress-bar");
+  const progressLabel = importStatus.querySelector(".progress-label");
+  const errorListEl = importStatus.querySelector(".error-list");
   const firstBtn = document.getElementById("firstBtn");
   const prevBtn  = document.getElementById("prevBtn");
   const nextBtn  = document.getElementById("nextBtn");
@@ -131,11 +148,144 @@
     query: null
   };
 
+  // Progress helpers
+  let progressHideTimer = null;
+
+  function showProgressContainer(){
+    clearTimeout(progressHideTimer);
+    importStatus.classList.add("is-active");
+  }
+
+  function hideProgressContainer(){
+    clearTimeout(progressHideTimer);
+    importStatus.classList.remove("is-active");
+    importStatus.classList.remove("has-errors");
+  }
+
+  function renderErrorList(items){
+    errorListEl.innerHTML = "";
+    const hasErrors = Array.isArray(items) && items.length > 0;
+    importStatus.classList.toggle("has-errors", hasErrors);
+    if (!hasErrors) return;
+    for (const entry of items) {
+      const li = document.createElement("li");
+      const parts = [];
+      if (entry.library) parts.push(`[${entry.library}]`);
+      if (entry.title) parts.push(entry.title);
+      if (entry.folder && entry.folder !== entry.title) parts.push(`(${entry.folder})`);
+      let text = parts.join(" ");
+      if (entry.asset) text = text ? `${text} – ${entry.asset}` : entry.asset;
+      if (entry.message) text = text ? `${text}: ${entry.message}` : entry.message;
+      li.textContent = text || "Unknown issue";
+      errorListEl.appendChild(li);
+    }
+  }
+
+  function resetProgressUI(){
+    progressBar.style.width = "0%";
+    progressLabel.textContent = "";
+    renderErrorList([]);
+  }
+
+  function updateProgressUI(percent, label){
+    if (typeof percent === "number" && !Number.isNaN(percent)) {
+      const clamped = Math.max(0, Math.min(100, Math.round(percent)));
+      progressBar.style.width = `${clamped}%`;
+    }
+    if (label !== undefined) {
+      progressLabel.textContent = label || "";
+    }
+  }
+
+  function scheduleProgressHide(delay = 2500){
+    clearTimeout(progressHideTimer);
+    progressHideTimer = setTimeout(()=>{
+      hideProgressContainer();
+      resetProgressUI();
+    }, delay);
+  }
+
+  function flashStatusMessage(text, delay = 3000){
+    showProgressContainer();
+    resetProgressUI();
+    updateProgressUI(0, text);
+    scheduleProgressHide(delay);
+  }
+
+  function pushFailureEntry(list, context, asset, message){
+    list.push({
+      library: context.library || "",
+      title: context.title || "",
+      folder: context.folder || "",
+      asset,
+      message: message || "Unknown error"
+    });
+  }
+
+  function collectResultFailures(list, context, result){
+    if (!result) return;
+    const hasPoster = result.poster && typeof result.poster === "object";
+    const hasBackground = result.background && typeof result.background === "object";
+    const seasons = Array.isArray(result.seasons) ? result.seasons : [];
+    if (hasPoster && !result.poster.ok) {
+      pushFailureEntry(list, context, "Poster", result.poster.error || "Failed to import poster");
+    }
+    if (hasBackground && !result.background.ok) {
+      pushFailureEntry(list, context, "Background", result.background.error || "Failed to import background");
+    }
+    for (const sea of seasons) {
+      if (sea && sea.ok) continue;
+      const idx = sea && sea.index;
+      let label = "Season";
+      if (idx !== undefined && idx !== null) {
+        const idxNum = Number(idx);
+        if (Number.isFinite(idxNum)) {
+          label = `Season ${String(idxNum).padStart(2, "0")}`;
+        } else {
+          label = `Season ${idx}`;
+        }
+      }
+      pushFailureEntry(list, context, label, (sea && sea.error) || "Failed to import season poster");
+    }
+    if (!result.ok) {
+      const hasSpecific = (
+        (hasPoster && result.poster && result.poster.error)
+        || (hasBackground && result.background && result.background.error)
+        || seasons.some(sea => sea && (!sea.ok || sea.error))
+      );
+      if (!hasSpecific && result.error) {
+        pushFailureEntry(list, context, "Import", result.error);
+      }
+    }
+  }
+
   // Utils
   async function j(url){
     const r = await fetch(url);
     if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
     return r.json();
+  }
+  async function safeJson(response){
+    try {
+      return await response.json();
+    } catch (_) {
+      return null;
+    }
+  }
+  function responseErrorMessage(response, data){
+    if (!response) return "Unknown error";
+    return (
+      (data && (data.detail || data.error || data.message))
+      || `${response.status} ${response.statusText}`
+    );
+  }
+  function normalizeAssetResult(part, fallbackError=null){
+    return {
+      ok: Boolean(part && part.ok),
+      path: part && part.path || null,
+      src: part && part.src || null,
+      error: (part && part.error) || fallbackError || null
+    };
   }
   function esc(s){ return (s||"").replace(/[&<>"]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m])); }
 
@@ -250,7 +400,7 @@
       renderItems(data.items || []);
       updatePager();
     } catch (e) {
-      errors.textContent = String(e);
+      flashStatusMessage(String(e));
     }
   }
 
@@ -288,7 +438,35 @@
     fd.append("library", library);
     if (ratingKey != null) fd.append("ratingKey", String(ratingKey));
     if (folderName) fd.append("folderName", folderName);
-    return fetch("/api/import/movie", { method: "POST", body: fd });
+    try {
+      const response = await fetch("/api/import/movie", { method: "POST", body: fd });
+      const data = await safeJson(response);
+      const results = data && (data.results || data) || {};
+      const message = response.ok ? null : responseErrorMessage(response, data);
+      const poster = normalizeAssetResult(results.poster, message);
+      const background = normalizeAssetResult(results.background, message);
+      const ok = Boolean(
+        (data && typeof data.ok === "boolean" ? data.ok : null) ?? poster.ok || background.ok
+      );
+      return {
+        ok: ok && response.ok,
+        poster,
+        background,
+        seasons: [],
+        error: message || (data && data.error) || null,
+        endpoint: "movie"
+      };
+    } catch (err) {
+      const message = err?.message || String(err);
+      return {
+        ok: false,
+        poster: normalizeAssetResult(null, message),
+        background: normalizeAssetResult(null, message),
+        seasons: [],
+        error: message,
+        endpoint: "movie"
+      };
+    }
   }
 
   async function importCollectionAssets(library, ratingKey, folderName){
@@ -296,35 +474,123 @@
     fd.append("library", library);
     if (ratingKey != null) fd.append("ratingKey", String(ratingKey));
     if (folderName) fd.append("folderName", folderName);
-    return fetch("/api/import/collection", { method: "POST", body: fd });
+    try {
+      const response = await fetch("/api/import/collection", { method: "POST", body: fd });
+      const data = await safeJson(response);
+      const results = data && (data.results || data) || {};
+      const message = response.ok ? null : responseErrorMessage(response, data);
+      const poster = normalizeAssetResult(results.poster, message);
+      const background = normalizeAssetResult(results.background, message);
+      const ok = Boolean(
+        (data && typeof data.ok === "boolean" ? data.ok : null) ?? poster.ok || background.ok
+      );
+      return {
+        ok: ok && response.ok,
+        poster,
+        background,
+        seasons: [],
+        error: message || (data && data.error) || null,
+        endpoint: "collection"
+      };
+    } catch (err) {
+      const message = err?.message || String(err);
+      return {
+        ok: false,
+        poster: normalizeAssetResult(null, message),
+        background: normalizeAssetResult(null, message),
+        seasons: [],
+        error: message,
+        endpoint: "collection"
+      };
+    }
   }
 
   async function importShowPosterPreferShowEndpoint(library, ratingKey, folderName){
-    const tryShow = async () => {
-      const fd = new FormData();
-      fd.append("library", library);
-      if (ratingKey != null) fd.append("ratingKey", String(ratingKey));
-      if (folderName) fd.append("folderName", folderName);
-      const r = await fetch("/api/import/show", { method: "POST", body: fd });
-      return r;
-    };
-    let r;
+    const fd = new FormData();
+    fd.append("library", library);
+    if (ratingKey != null) fd.append("ratingKey", String(ratingKey));
+    if (folderName) fd.append("folderName", folderName);
     try {
-      r = await tryShow();
-      if (!r.ok && r.status !== 404 && r.status !== 405) return r;
-      if (r.ok) return r;
-    } catch(_) {}
-    return importMovieAssets(library, ratingKey, folderName);
+      const response = await fetch("/api/import/show", { method: "POST", body: fd });
+      const data = await safeJson(response);
+      const message = response.ok ? null : responseErrorMessage(response, data);
+      const poster = normalizeAssetResult(data && data.poster, message);
+      const background = normalizeAssetResult(data && data.background, message);
+      const seasonsRaw = Array.isArray(data && data.seasons) ? data.seasons : [];
+      const seasons = seasonsRaw.map(s => ({
+        ok: Boolean(s && s.ok),
+        index: s && (s.index ?? s.season ?? s.number ?? null),
+        path: s && s.path || null,
+        src: s && s.src || null,
+        error: s && s.error || null
+      }));
+      const ok = Boolean(
+        (data && typeof data.ok === "boolean" ? data.ok : null)
+          ?? poster.ok
+          || background.ok
+          || seasons.some(sea => sea.ok)
+      );
+      const result = {
+        ok: ok && response.ok,
+        poster,
+        background,
+        seasons,
+        error: message || (data && data.error) || null,
+        endpoint: "show"
+      };
+      if (response.ok) return result;
+      if (response.status === 404 || response.status === 405) {
+        const fallback = await importMovieAssets(library, ratingKey, folderName);
+        fallback.fallbackReason = message;
+        return fallback;
+      }
+      return result;
+    } catch (err) {
+      const fallback = await importMovieAssets(library, ratingKey, folderName);
+      const message = err?.message || String(err);
+      fallback.fallbackReason = message;
+      return fallback;
+    }
   }
 
-  async function importAllSeasons(library, showFolder, seasons){
+  async function importAllSeasons(library, showFolder, seasons, ratingKey){
+    const results = [];
+    let anyOk = false;
     for (const s of (seasons || [])) {
+      const idxRaw = s && (s.index ?? s.season ?? s.number ?? null);
+      const entry = { ok: false, index: idxRaw ?? null, path: null, src: null, error: null };
+      const idx = Number(idxRaw);
+      if (!Number.isFinite(idx)) {
+        entry.error = `Invalid season index: ${idxRaw}`;
+        results.push(entry);
+        continue;
+      }
       const fs = new FormData();
       fs.append("library", library);
-      fs.append("folderName", showFolder);
-      fs.append("season", String(s.index));
-      await fetch("/api/import/season", { method: "POST", body: fs });
+      if (showFolder) fs.append("folderName", showFolder);
+      fs.append("season", String(idx));
+      if (ratingKey != null) fs.append("ratingKey", String(ratingKey));
+      try {
+        const response = await fetch("/api/import/season", { method: "POST", body: fs });
+        const data = await safeJson(response);
+        if (!response.ok) {
+          entry.error = responseErrorMessage(response, data);
+        } else {
+          entry.ok = Boolean(
+            (data && typeof data.ok === "boolean" ? data.ok : null) ?? response.ok
+          );
+          entry.path = data && data.path || null;
+          entry.src = data && data.src || null;
+          if (!entry.ok) entry.error = data && data.error || null;
+        }
+      } catch (err) {
+        entry.error = err?.message || String(err);
+      }
+      if (!entry.error && !entry.ok) entry.error = "Unknown error";
+      if (entry.ok) anyOk = true;
+      results.push(entry);
     }
+    return { ok: anyOk, seasons: results, endpoint: "season" };
   }
 
   importAllBtn.addEventListener("click", async ()=>{
@@ -334,75 +600,112 @@
     const lib = (state.library || "").trim();
     const isCollections = lib.toLowerCase() === "collections";
     const isTVLib = lib.toLowerCase().includes("tv");
+    const failures = [];
 
-    const prevErr = errors.textContent;
-    errors.textContent = "Importing assets from Plex… (0%)";
+    showProgressContainer();
+    resetProgressUI();
+    updateProgressUI(0, "Preparing import…");
 
     try {
       const { all } = await fetchAllItemsForLibrary(lib, state.query);
-      const allItems = all || [];
+      const allItems = Array.isArray(all) ? all : [];
       const importable = allItems.filter(it => it?.assetReady !== false);
-      const skipCount = allItems.filter(it => it?.assetReady === false).length;
+      const skippedItems = allItems.filter(it => it?.assetReady === false);
+
+      for (const skip of skippedItems) {
+        const context = {
+          library: lib,
+          title: skip?.title || skip?.name || "(Untitled)",
+          folder: skip?.folderName || skip?.folder || skip?.name || skip?.title || ""
+        };
+        pushFailureEntry(failures, context, "Item", "Skipped (asset folder missing)");
+      }
 
       if (!importable.length) {
-        const msg = skipCount
-          ? `Nothing to import. ${skipCount} item(s) are missing asset folders.`
-          : "Nothing to import.";
-        errors.textContent = msg;
-        setTimeout(()=>{ errors.textContent = prevErr; }, 3000);
+        if (failures.length) {
+          const count = failures.length;
+          updateProgressUI(0, `Import skipped. ${count} item${count === 1 ? "" : "s"} missing asset folders.`);
+          renderErrorList(failures);
+        } else {
+          updateProgressUI(0, "Nothing to import.");
+          renderErrorList([]);
+          scheduleProgressHide(2000);
+        }
         return;
       }
 
-      let done = 0;
+      let processed = 0;
       const total = importable.length;
-      const bump = () => {
-        done++;
-        if (done % 5 === 0 || done === total) {
-          const pct = total ? Math.round((done / total) * 100) : 100;
-          const skipSuffix = skipCount ? ` – skipping ${skipCount} not-ready item(s)` : "";
-          errors.textContent = `Importing assets from Plex… (${pct}%)${skipSuffix}`;
-        }
+      const skipSuffix = skippedItems.length
+        ? ` (skipping ${skippedItems.length} not-ready item${skippedItems.length === 1 ? "" : "s"})`
+        : "";
+      const updateLabel = () => {
+        const pct = total ? (processed / total) * 100 : 100;
+        updateProgressUI(pct, `Importing assets from Plex… ${processed}/${total}${skipSuffix}`);
       };
 
-      if (skipCount) {
-        errors.textContent = `Importing assets from Plex… (0%) – skipping ${skipCount} not-ready item(s)`;
-      }
+      updateLabel();
 
       for (const it of importable) {
-        const folderName = it.folderName || it.folder || it.name || it.title || "";
-        const ratingKey = it.ratingKey || it.key || it.id;
+        const title = it?.title || it?.name || "(Untitled)";
+        const folderName = it?.folderName || it?.folder || it?.name || it?.title || "";
+        const ratingKey = it?.ratingKey || it?.key || it?.id;
+        const context = { library: lib, title, folder: folderName };
 
-        if (isCollections) {
-          await importCollectionAssets(lib, ratingKey, folderName);
-          bump();
-          continue;
-        }
-
-        if (isTVLib || String(it.type || "").toLowerCase() === "show" || it.isShow === true) {
-          try {
-            const show = await j(`/api/show?library=${encodeURIComponent(lib)}&ratingKey=${encodeURIComponent(ratingKey)}`);
-            const showFolder = show.folderName || folderName;
-            await importShowPosterPreferShowEndpoint(lib, ratingKey, showFolder);
-            await importAllSeasons(lib, showFolder, show.seasons || []);
-          } catch (e) {
-            await importMovieAssets(lib, ratingKey, folderName);
+        try {
+          if (isCollections) {
+            const result = await importCollectionAssets(lib, ratingKey, folderName);
+            collectResultFailures(failures, context, result);
+          } else if (isTVLib || isShowItem(it, lib)) {
+            let showData = null;
+            if (ratingKey != null) {
+              try {
+                const url = `/api/show?library=${encodeURIComponent(lib)}&ratingKey=${encodeURIComponent(ratingKey)}`;
+                showData = await j(url);
+              } catch (err) {
+                pushFailureEntry(failures, context, "Show Lookup", err?.message || String(err));
+              }
+            }
+            const showFolder = showData?.folderName || folderName;
+            const seasonsMeta = Array.isArray(showData?.seasons) ? showData.seasons : [];
+            const showResult = await importShowPosterPreferShowEndpoint(lib, ratingKey, showFolder);
+            collectResultFailures(failures, context, showResult);
+            const hasSeasonResults = Array.isArray(showResult.seasons) && showResult.seasons.length > 0;
+            if (!hasSeasonResults && seasonsMeta.length) {
+              const seasonResult = await importAllSeasons(lib, showFolder, seasonsMeta, ratingKey);
+              collectResultFailures(failures, context, seasonResult);
+            }
+          } else {
+            const result = await importMovieAssets(lib, ratingKey, folderName);
+            collectResultFailures(failures, context, result);
           }
-        } else {
-          await importMovieAssets(lib, ratingKey, folderName);
+        } catch (err) {
+          pushFailureEntry(failures, context, "Import", err?.message || String(err));
         }
 
-        bump();
+        processed += 1;
+        updateLabel();
       }
 
-      const doneMsg = skipCount
-        ? `Import complete. Skipped ${skipCount} item(s) missing asset folders.`
-        : "Import complete.";
-      errors.textContent = doneMsg;
       await loadPage(state.page);
-      setTimeout(()=>{ errors.textContent = ""; }, 1500);
+
+      const failureCount = failures.length;
+      if (failureCount) {
+        showProgressContainer();
+        updateProgressUI(100, `Import completed with ${failureCount} failure${failureCount === 1 ? "" : "s"}.`);
+        renderErrorList(failures);
+      } else {
+        showProgressContainer();
+        updateProgressUI(100, "Import complete.");
+        renderErrorList([]);
+        scheduleProgressHide(2500);
+      }
     } catch (e) {
-      errors.textContent = "Import failed: " + (e?.message || e);
-      setTimeout(()=>{ errors.textContent = prevErr; }, 3000);
+      const message = `Import failed: ${e?.message || e}`;
+      pushFailureEntry(failures, { library: lib, title: "", folder: "" }, "Import", message);
+      showProgressContainer();
+      updateProgressUI(0, message);
+      renderErrorList(failures);
     } finally {
       importAllBtn.disabled = false;
     }
@@ -452,7 +755,7 @@
         await loadPage(1);
       }
     } catch (e) {
-      errors.textContent = String(e);
+      flashStatusMessage(String(e));
     }
   }
   libSelect.addEventListener("change", async ()=>{
