@@ -1,4 +1,5 @@
 import { defineConfig, type Plugin } from "vite";
+import react from "@vitejs/plugin-react";
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { resolve, join } from "node:path";
 
@@ -48,5 +49,14 @@ export default defineConfig({
     emptyOutDir: true,
   },
   publicDir: "public",
-  plugins: [copyFallbackPlugin()],
+  plugins: [react(), copyFallbackPlugin()],
+  server: {
+    host: "0.0.0.0",
+    port: 5173,
+    proxy: {
+      "/api": "http://localhost:8000",
+      "/collections": "http://localhost:8000",
+      "/fileproxy": "http://localhost:8000",
+    },
+  },
 });
