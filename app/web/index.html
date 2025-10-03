@@ -657,7 +657,10 @@
 
     const rk = encodeURIComponent(it.ratingKey || it.key || it.id || '');
     const lib = encodeURIComponent(state.library || '');
-    const dest = isShowItem(it, state.library) ? 'show.html' : 'movie.html';
+    if (isShowItem(it, state.library)) {
+      return `/libraries/${lib}/shows/${rk}`;
+    }
+    const dest = 'movie.html';
     const url = `${dest}?library=${lib}&ratingKey=${rk}`;
     return url;
   }
