@@ -24,6 +24,6 @@ export function normalizePoster(item) {
     item?.thumb ||
     item?.background ||
     item?.art ||
-    ''
+    '/fallback.png'
   );
 }
