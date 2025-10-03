@@ -6,6 +6,7 @@ import requests
 import xml.etree.ElementTree as ET
 from urllib.parse import quote
 
+from ..services import folder_overrides
 from ..services.resolve import resolve_existing_dir_or_422
 from ..services.sanitize import kometa_sanitize_folder
 
@@ -143,10 +144,16 @@ def get_show(library: str = Query(...), ratingKey: str = Query(...)):
     title, year, thumb, art = meta["title"], meta["year"], meta["thumb"], meta["art"]
     all_seasons = _seasons(ratingKey)
 
-    folder = _existing_folder_name(library, title, year)
-    folder_exists = folder is not None
-    if not folder:
-        folder = kometa_sanitize_folder(f"{title} ({year})" if year else title)
+    override_folder = folder_overrides.get_override(library, ratingKey)
+    folder_exists = False
+    folder = override_folder
+    if folder:
+        folder_exists = True
+    else:
+        folder = _existing_folder_name(library, title, year)
+        folder_exists = folder is not None
+        if not folder:
+            folder = kometa_sanitize_folder(f"{title} ({year})" if year else title)
 
     series_dir_fs = os.path.join(ASSETS_ROOT, library, folder)
 

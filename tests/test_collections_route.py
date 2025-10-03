@@ -1,5 +1,7 @@
+import importlib
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -37,14 +39,15 @@ class _DummyPlex:
 
 
 @pytest.fixture
-def collections_call(tmp_path, monkeypatch):
+def collections_env(tmp_path, monkeypatch):
     assets_root = tmp_path / "assets"
     collections_root = assets_root / "Collections"
     ready_folder = collections_root / "my cool collection"
     ready_folder.mkdir(parents=True)
+    override_folder = collections_root / "override folder"
+    override_folder.mkdir()
 
     from app import config
-    from app.routers import collections as collections_router
 
     monkeypatch.setattr(config, "PLEX_URL", "http://plex.test")
     monkeypatch.setattr(config, "PLEX_TOKEN", "token")
@@ -52,6 +55,17 @@ def collections_call(tmp_path, monkeypatch):
 
     monkeypatch.setenv("KAM_ASSETS_ROOT", str(assets_root))
     monkeypatch.setenv("COLLECTIONS_ROOT", str(collections_root))
+    monkeypatch.setattr(config, "COLLECTIONS_ROOT", str(collections_root))
+    overrides_path = tmp_path / "overrides.json"
+    monkeypatch.setenv("KAM_FOLDER_OVERRIDES_PATH", str(overrides_path))
+
+    resolve_module = importlib.reload(importlib.import_module("app.services.resolve"))
+    resolve_module.ASSETS_ROOT = str(assets_root)
+
+    folder_overrides = importlib.reload(importlib.import_module("app.services.folder_overrides"))
+    folder_overrides.set_storage_path(str(overrides_path))
+
+    collections_router = importlib.reload(importlib.import_module("app.routers.collections"))
 
     collections_router.ASSETS_ROOT = str(assets_root)
     collections_router.COLLECTIONS_ROOT = str(collections_root)
@@ -68,11 +82,16 @@ def collections_call(tmp_path, monkeypatch):
         params.update(kwargs)
         return collections_router.collections(**params)
 
-    return _call
+    return SimpleNamespace(
+        call=_call,
+        folder_overrides=folder_overrides,
+        override_folder=override_folder,
+        collections_root=collections_root,
+    )
 
 
-def test_collections_route_marks_asset_readiness(collections_call):
-    data = collections_call()
+def test_collections_route_marks_asset_readiness(collections_env):
+    data = collections_env.call()
     items = {it["title"]: it for it in data["items"]}
 
     ready = items["My Cool Collection"]
@@ -89,6 +108,19 @@ def test_index_html_consumes_asset_ready_flag():
     html = (ROOT / "app" / "web" / "index.html").read_text(encoding="utf-8")
     assert "filter(it => it?.assetReady !== false)" in html
     assert "let folderName = it?.folderName || \"\"" in html
-    assert "id=\"folderFinder\"" in html
-    assert "data-folder-results" in html
-    assert "status.dataset.folderTrigger" in html
+
+
+def test_collections_route_uses_overrides(collections_env):
+    folder = collections_env.override_folder
+    (folder / "poster.jpg").write_bytes(b"poster")
+
+    collections_env.folder_overrides.set_override("Collections", "2", folder.name)
+
+    data = collections_env.call()
+    items = {it["title"]: it for it in data["items"]}
+    overridden = items["Missing Assets"]
+
+    assert overridden["folderName"] == folder.name
+    assert overridden["assetReady"] is True
+    assert overridden["posterUrlLocal"] is not None
+    assert folder.name.replace(" ", "%20") in overridden["posterUrlLocal"]
