@@ -55,6 +55,12 @@ async def movie_details_page(library: str, ratingKey: str):
     """Serve the movie detail HTML so the SPA-style route works."""
     return FileResponse(WEB_DIR / "movie.html")
 
+
+@app.get("/libraries", include_in_schema=False)
+async def libraries_page():
+    """Serve the main SPA shell when navigating to /libraries."""
+    return FileResponse(WEB_DIR / "index.html")
+
 # ---- SAFE assets mount (env-driven) ----
 # Prefer explicit envs if you set them; otherwise infer from COLLECTIONS_ROOT.
 ASSETS_ROOT = os.getenv("KAM_ASSETS_ROOT") or os.getenv("ASSETS_ROOT")
