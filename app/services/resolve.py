@@ -5,6 +5,8 @@ import unicodedata
 from difflib import SequenceMatcher
 from typing import Optional
 
+from app import config
+
 ASSETS_ROOT = os.environ.get("KAM_ASSETS_ROOT", "/assets")
 
 _ILLEGAL_CTRL = re.compile(r"[\u0000-\u001F]")
@@ -102,7 +104,14 @@ def resolve_existing_dir_or_422(library: str, folder_name: str) -> str:
     """
     if not library:
         raise FileNotFoundError("Missing library")
-    base = os.path.join(ASSETS_ROOT, library)
+
+    mapped_base: Optional[str]
+    if library == "Collections":
+        mapped_base = config.COLLECTIONS_ROOT
+    else:
+        mapped_base = config.LIBRARY_MAPPINGS.get(library)
+
+    base = os.fspath(mapped_base) if mapped_base else os.path.join(ASSETS_ROOT, library)
     if not os.path.isdir(base):
         raise FileNotFoundError(f"Assets library not found: {base}")
 
