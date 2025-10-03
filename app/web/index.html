@@ -655,14 +655,14 @@
     const isCollections = (state.library || '').trim().toLowerCase() === 'collections';
     if (isCollections) return; // unchanged behavior for Collections
 
-    const rk = encodeURIComponent(it.ratingKey || it.key || it.id || '');
-    const lib = encodeURIComponent(state.library || '');
+    const rawRatingKey = it.ratingKey || it.key || it.id || '';
+    const encodedRatingKey = encodeURIComponent(String(rawRatingKey));
+    const rawLibrary = state.library || '';
+    const encodedLibrary = encodeURIComponent(String(rawLibrary));
     if (isShowItem(it, state.library)) {
-      return `/libraries/${lib}/shows/${rk}`;
+      return `show.html?library=${encodedLibrary}&ratingKey=${encodedRatingKey}`;
     }
-    const dest = 'movie.html';
-    const url = `${dest}?library=${lib}&ratingKey=${rk}`;
-    return url;
+    return `/libraries/${encodedLibrary}/movies/${encodedRatingKey}`;
   }
 
   function renderItems(items){

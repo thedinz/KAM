@@ -1,10 +1,12 @@
 # app/main.py
 import logging
 import os
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 
 from .logging_config import configure_logging
 
@@ -44,6 +46,14 @@ app.include_router(imports.router)
 app.include_router(fileproxy.router)
 app.include_router(assets.router)
 app.include_router(ui.router)
+
+WEB_DIR = Path(__file__).resolve().parent / "web"
+
+
+@app.get("/libraries/{library}/movies/{ratingKey}", include_in_schema=False)
+async def movie_details_page(library: str, ratingKey: str):
+    """Serve the movie detail HTML so the SPA-style route works."""
+    return FileResponse(WEB_DIR / "movie.html")
 
 # ---- SAFE assets mount (env-driven) ----
 # Prefer explicit envs if you set them; otherwise infer from COLLECTIONS_ROOT.
