@@ -33,6 +33,7 @@ from .routers import (
     movie,
     tv,
     upload,
+    ui,
 )
 
 app.include_router(libraries.router)
@@ -44,6 +45,7 @@ app.include_router(movie.router)
 app.include_router(imports.router)
 app.include_router(fileproxy.router)
 app.include_router(assets.router)
+app.include_router(ui.router)
 
 WEB_DIR = Path(__file__).resolve().parent / "web"
 
