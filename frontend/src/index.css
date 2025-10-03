@@ -75,6 +75,11 @@ button[disabled] {
   cursor: not-allowed;
 }
 
+a.btn:link,
+a.btn:visited {
+  color: var(--fg);
+}
+
 .btn {
   display: inline-flex;
   align-items: center;
@@ -208,6 +213,12 @@ main {
   padding: 16px;
 }
 
+#grid a.card:link,
+#grid a.card:visited {
+  color: var(--fg);
+  text-decoration: none;
+}
+
 .card {
   background: var(--card);
   border: 1px solid var(--border);
@@ -215,6 +226,13 @@ main {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+}
+
+#grid a.card:hover,
+#grid a.card:focus {
+  color: var(--accent);
+  border-color: var(--accent);
+  outline: none;
 }
 
 .card[role="button"] {
