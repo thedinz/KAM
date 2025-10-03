@@ -12,8 +12,10 @@ export function buildDetailUrl(item, libraryName) {
   if (ratingKey == null) return null;
   const encodedLib = encodeURIComponent(lib);
   const encodedKey = encodeURIComponent(ratingKey);
-  const dest = isShowItem(item, libraryName) ? 'show.html' : 'movie.html';
-  return `${dest}?library=${encodedLib}&ratingKey=${encodedKey}`;
+  if (isShowItem(item, libraryName)) {
+    return `/libraries/${encodedLib}/shows/${encodedKey}`;
+  }
+  return `/libraries/${encodedLib}/movies/${encodedKey}`;
 }
 
 export function normalizePoster(item) {

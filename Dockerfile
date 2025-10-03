@@ -4,6 +4,7 @@ COPY frontend/package*.json ./
 RUN npm install
 COPY frontend/ ./
 COPY app/web/fallback.png ./app/web/fallback.png
+COPY app/web/show-react.html ./app/web/show-react.html
 RUN npm run build
 
 FROM python:3.11-slim
