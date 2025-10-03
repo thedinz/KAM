@@ -48,18 +48,20 @@ app.include_router(assets.router)
 app.include_router(ui.router)
 
 WEB_DIR = Path(__file__).resolve().parent / "web"
+SPA_INDEX = WEB_DIR / "index.html"
+SPA_ASSETS_DIR = WEB_DIR / "spa-assets"
 
 
 @app.get("/libraries/{library}/movies/{ratingKey}", include_in_schema=False)
 async def movie_details_page(library: str, ratingKey: str):
-    """Serve the SPA shell for movie deep links."""
-    return FileResponse(WEB_DIR / "index.html")
+    """Serve the SPA shell so client-side routing can take over."""
+    return FileResponse(SPA_INDEX)
 
 
 @app.get("/libraries", include_in_schema=False)
 async def libraries_page():
     """Serve the main SPA shell when navigating to /libraries."""
-    return FileResponse(WEB_DIR / "index.html")
+    return FileResponse(SPA_INDEX)
 
 # ---- SAFE assets mount (env-driven) ----
 # Prefer explicit envs if you set them; otherwise infer from COLLECTIONS_ROOT.
@@ -76,11 +78,10 @@ else:
     logger.warning("Skipping /assets mount. Not found in container: %r", ASSETS_ROOT)
 
 # Serve SPA build assets separately so they don't rely on the user-configured mount
-app.mount(
-    "/spa-assets",
-    StaticFiles(directory="app/web/spa-assets"),
-    name="spa-assets",
-)
+if SPA_ASSETS_DIR.exists():
+    app.mount("/spa-assets", StaticFiles(directory=SPA_ASSETS_DIR), name="spa-assets")
+else:
+    logger.warning("Skipping /spa-assets mount. Directory not found: %s", SPA_ASSETS_DIR)
 
 # ---- Static Web UI ----
 app.mount("/", StaticFiles(directory="app/web", html=True), name="web")
