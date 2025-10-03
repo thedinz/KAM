@@ -52,8 +52,8 @@ WEB_DIR = Path(__file__).resolve().parent / "web"
 
 @app.get("/libraries/{library}/movies/{ratingKey}", include_in_schema=False)
 async def movie_details_page(library: str, ratingKey: str):
-    """Serve the movie detail HTML so the SPA-style route works."""
-    return FileResponse(WEB_DIR / "movie.html")
+    """Serve the SPA shell for movie deep links."""
+    return FileResponse(WEB_DIR / "index.html")
 
 
 @app.get("/libraries", include_in_schema=False)

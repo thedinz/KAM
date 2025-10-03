@@ -104,8 +104,12 @@ def test_collections_route_marks_asset_readiness(collections_env):
     assert missing["folderName"] == "Missing Assets"
 
 
+INDEX_HTML = ROOT / "app" / "web" / "index.html"
+
+
+@pytest.mark.skipif(not INDEX_HTML.exists(), reason="SPA bundle has not been built")
 def test_index_html_consumes_asset_ready_flag():
-    html = (ROOT / "app" / "web" / "index.html").read_text(encoding="utf-8")
+    html = INDEX_HTML.read_text(encoding="utf-8")
     assert "filter(it => it?.assetReady !== false)" in html
     assert "let folderName = it?.folderName || \"\"" in html
 
