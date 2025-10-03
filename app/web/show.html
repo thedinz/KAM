@@ -31,7 +31,7 @@
 </head>
 <body>
 <header>
-  <a id="back" class="btn" href="index.html">← Back</a>
+  <a id="back" class="btn" href="/libraries">← Back</a>
   <h1 id="title">Show</h1>
 </header>
 <main>
@@ -76,7 +76,10 @@
     return;
   }
 
-  $("#back").href = "index.html?lib=" + encodeURIComponent(library);
+  const baseBackHref = "/libraries";
+  $("#back").href = library
+    ? `${baseBackHref}?lib=${encodeURIComponent(library)}`
+    : baseBackHref;
   const status = $("#status");
   const folderWarning = $("#folderWarning");
   const missingMsg = "Create the Kometa asset folder first.";
