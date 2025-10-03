@@ -109,10 +109,10 @@ docker pull ghcr.io/thedinz/kam:latest
 
 ### 2) Run (simple)
 
-Expose KAM on **7171** and map your assets:
+Expose KAM on **7171** (mapped to the container's port **8000**) and map your assets:
 
 ```bash
-docker run -d   --name kam   -p 7171:7171   -v /mnt/user/kometa/assets:/assets   ghcr.io/thedinz/kam:latest
+docker run -d   --name kam   -p 7171:8000   -v /mnt/user/kometa/assets:/assets   ghcr.io/thedinz/kam:latest
 ```
 
 Open: `http://<your-host>:7171/`
@@ -127,7 +127,7 @@ services:
     image: ghcr.io/thedinz/kam:latest
     container_name: kam
     ports:
-      - "7171:7171"
+      - "7171:8000"
     volumes:
       - /mnt/user/kometa/assets:/assets
     restart: unless-stopped
