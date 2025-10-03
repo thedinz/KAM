@@ -2,6 +2,7 @@ from fastapi import APIRouter, Query
 from math import ceil
 from typing import Optional, List, Dict, Any, Tuple
 from ..services.plex import get_plex
+from ..services import folder_overrides
 from ..services.assets import sanitize_name
 from .. import config
 
@@ -138,15 +139,32 @@ def collections(
                 # Plex art
                 poster_plex = f"{config.PLEX_URL}/library/metadata/{rk}/thumb?X-Plex-Token={config.PLEX_TOKEN}"
 
-                # Local art look-up
-                _poster_path, poster_local, folder_used, folder_exists = _local_poster_for_title(title)
+                override_folder = folder_overrides.get_override("Collections", str(rk)) if rk else None
+
+                poster_local = None
+                folder_used = sanitize_name(title) if title else ""
+                asset_ready = False
+                folder_exists = False
+
+                if override_folder:
+                    folder_used = override_folder
+                    asset_ready = True
+                    folder_exists = True
+                    if COLLECTIONS_ROOT:
+                        override_path = Path(COLLECTIONS_ROOT) / override_folder
+                        poster_path = _first_existing_poster(override_path) if override_path.is_dir() else None
+                        if poster_path:
+                            poster_local = _url_for_local(override_folder, poster_path)
+                else:
+                    _poster_path, poster_local, folder_used, folder_exists = _local_poster_for_title(title)
+                    asset_ready = folder_exists
 
                 item = {
                     "ratingKey": rk,
                     "title": title,
                     "year": None,
                     "folderName": folder_used or (sanitize_name(title) if title else ""),
-                    "assetReady": folder_exists,
+                    "assetReady": asset_ready,
                     # ✅ prefer local for the primary image
                     "posterUrl": poster_local or poster_plex,
                     # also expose both explicitly
