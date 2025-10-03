@@ -672,7 +672,10 @@
 
         for (const it of importable) {
           const title = it?.title || it?.name || "(Untitled)";
-          const folderName = it?.folderName || it?.folder || it?.name || it?.title || "";
+          let folderName = it?.folderName || "";
+          if (!folderName && it?.assetReady !== false) {
+            folderName = it?.folder || it?.name || it?.title || "";
+          }
           const ratingKey = it?.ratingKey || it?.key || it?.id;
           const context = { library: lib, title, folder: folderName };
 
