@@ -172,7 +172,8 @@ Kometa Asset Manager can now be found in the Unraid app store. Simply mount your
 
 1. Open the web UI.
 2. Choose the item (movie, series, collection, or season) you want to update.
-3. Upload artwork. KAM will:
+3. If the item shows a red “Not Ready” badge, activate it to open the **folder finder** dialog, browse/search your Kometa assets, and assign the correct folder. Once paired the badge flips to ✔ Ready.
+4. Upload artwork. KAM will:
 
    * Convert to `.jpg`
    * Remove any existing `poster.*`, `background.*`, or `SeasonNN.*` for that item

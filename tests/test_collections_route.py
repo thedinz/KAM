@@ -89,3 +89,6 @@ def test_index_html_consumes_asset_ready_flag():
     html = (ROOT / "app" / "web" / "index.html").read_text(encoding="utf-8")
     assert "filter(it => it?.assetReady !== false)" in html
     assert "let folderName = it?.folderName || \"\"" in html
+    assert "id=\"folderFinder\"" in html
+    assert "data-folder-results" in html
+    assert "status.dataset.folderTrigger" in html
