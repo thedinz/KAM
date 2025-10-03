@@ -281,18 +281,37 @@ main {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: background 0.2s ease, box-shadow 0.2s ease;
 }
 
 .ready-badge.ready {
   background: #1f8f4d;
   color: #fff;
-  cursor: default;
+  cursor: pointer;
 }
 
 .ready-badge.not-ready {
   background: #b91c1c;
   color: #fff;
   cursor: pointer;
+}
+
+.ready-badge:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.ready-badge.ready:hover,
+.ready-badge.ready:focus-visible {
+  background: #24995a;
+  box-shadow: 0 0 0 2px rgba(36, 153, 90, 0.35);
+}
+
+.ready-badge.not-ready:hover,
+.ready-badge.not-ready:focus-visible {
+  background: #dc2626;
+  box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.35);
 }
 
 [data-theme="light"] .ready-badge.ready {
@@ -303,6 +322,18 @@ main {
 [data-theme="light"] .ready-badge.not-ready {
   background: #fca5a5;
   color: #7f1d1d;
+}
+
+[data-theme="light"] .ready-badge.ready:hover,
+[data-theme="light"] .ready-badge.ready:focus-visible {
+  background: #4ade80;
+  box-shadow: 0 0 0 2px rgba(76, 222, 128, 0.35);
+}
+
+[data-theme="light"] .ready-badge.not-ready:hover,
+[data-theme="light"] .ready-badge.not-ready:focus-visible {
+  background: #fecaca;
+  box-shadow: 0 0 0 2px rgba(254, 202, 202, 0.5);
 }
 
 .card[data-ready="false"] {
