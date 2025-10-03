@@ -19,3 +19,8 @@ Thumbs.db
 
 # Local-only runtime files
 docker-compose.yml
+
+# Built SPA output
+/app/web/*
+!/app/web/fallback.png
+!/app/web/show-react.html
