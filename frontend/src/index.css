@@ -248,11 +248,13 @@ main {
 .ready-badge.ready {
   background: #1f8f4d;
   color: #fff;
+  cursor: default;
 }
 
 .ready-badge.not-ready {
   background: #b91c1c;
   color: #fff;
+  cursor: pointer;
 }
 
 [data-theme="light"] .ready-badge.ready {
