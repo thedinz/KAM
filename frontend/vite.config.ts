@@ -8,6 +8,7 @@ const repoRoot = existsSync(resolve(__dirname, "../app/web"))
   : resolve(__dirname, ".");
 
 const outputDir = resolve(repoRoot, "app/web");
+const spaAssetsDir = "spa-assets";
 const fallbackSource = resolve(repoRoot, "app/web/fallback.png");
 
 let fallbackBuffer: Buffer | null = null;
@@ -51,6 +52,7 @@ export default defineConfig({
   build: {
     outDir: outputDir,
     emptyOutDir: true,
+    assetsDir: spaAssetsDir,
   },
   publicDir: "public",
   plugins: [react(), copyFallbackPlugin()],
