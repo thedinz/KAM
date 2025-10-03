@@ -4,7 +4,7 @@ export function isShowItem(item, libraryName) {
   return lib.includes('tv') || type === 'show' || item?.isShow === true;
 }
 
-export function buildDetailUrl(item, libraryName) {
+export function buildDetailPath(item, libraryName) {
   const lib = (libraryName || '').trim();
   if (!lib) return null;
   if (lib.toLowerCase() === 'collections') return null;
@@ -17,6 +17,8 @@ export function buildDetailUrl(item, libraryName) {
   }
   return `/libraries/${encodedLib}/movies/${encodedKey}`;
 }
+
+export const buildDetailUrl = buildDetailPath;
 
 export function normalizePoster(item) {
   return (
