@@ -86,9 +86,13 @@
     let library = "";
     let ratingKey = "";
 
-    if (parts.length >= 4 && parts[0] === "libraries" && parts[2] === "movies") {
+    const isLibraryMoviePath = parts.length >= 4 && parts[0] === "libraries" && parts[2] === "movies";
+    const ratingKeySegment = parts[3];
+    const hasValidRatingKey = !!ratingKeySegment && !ratingKeySegment.endsWith(".html");
+
+    if (isLibraryMoviePath && hasValidRatingKey) {
       library = decodeURIComponent(parts[1] || "");
-      ratingKey = decodeURIComponent(parts[3] || "");
+      ratingKey = decodeURIComponent(ratingKeySegment);
     } else {
       const u = new URL(location.href);
       library = u.searchParams.get("library") || "";
