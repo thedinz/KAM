@@ -1,3 +1,11 @@
+FROM node:20 AS frontend-build
+WORKDIR /workspace
+COPY frontend/package*.json ./
+RUN npm install
+COPY frontend/ ./
+COPY app/web/fallback.png ./app/web/fallback.png
+RUN npm run build
+
 FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -11,6 +19,7 @@ RUN python -m pip install --upgrade pip && \
     pip install --no-cache-dir -r /tmp/requirements.txt
 
 COPY . /app
+COPY --from=frontend-build /workspace/app/web /app/app/web
 ENV PYTHONPATH=/app
 EXPOSE 8000
 
