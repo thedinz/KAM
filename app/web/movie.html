@@ -29,7 +29,7 @@
 </head>
 <body>
 <header>
-  <a id="back" class="btn" href="index.html">← Back</a>
+  <a id="back" class="btn" href="/libraries">← Back</a>
   <h1>Movie</h1>
 </header>
 <main>
@@ -73,6 +73,7 @@
 
   let library, ratingKey, data;
   const status = $("#status");
+  const back = $("#back");
   const posterFlag = $("#posterFlag");
   const bgFlag = $("#bgFlag");
 
@@ -106,6 +107,17 @@
     const p = getParams();
     library = p.library;
     ratingKey = p.ratingKey;
+
+    back.href = "/libraries";
+    if (library) {
+      back.href = `/libraries?lib=${encodeURIComponent(library)}`;
+    }
+
+    if (!library || !ratingKey) {
+      status.textContent = "Select a library and movie to view details.";
+      return;
+    }
+
     const url = `/api/movie?library=${encodeURIComponent(library)}&ratingKey=${encodeURIComponent(ratingKey)}`;
     data = await j(url);
     render(data);
