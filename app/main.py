@@ -69,5 +69,12 @@ if ASSETS_ROOT and os.path.isdir(ASSETS_ROOT):
 else:
     logger.warning("Skipping /assets mount. Not found in container: %r", ASSETS_ROOT)
 
+# Serve SPA build assets separately so they don't rely on the user-configured mount
+app.mount(
+    "/spa-assets",
+    StaticFiles(directory="app/web/spa-assets"),
+    name="spa-assets",
+)
+
 # ---- Static Web UI ----
 app.mount("/", StaticFiles(directory="app/web", html=True), name="web")
