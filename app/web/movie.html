@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>KAM • Movie</title>
+<style>
+  :root { --bg:#0b0b0f; --fg:#e8e8ee; --muted:#a9a9b5; --card:#15151c; --accent:#5ea1ff; --border:#2a2a36; }
+  [data-theme="light"] { --bg:#ffffff; --fg:#11111a; --muted:#4a4a55; --card:#f6f6fb; --accent:#3b82f6; --border:#d7d7e0; }
+  *{box-sizing:border-box}
+  body{margin:0; font:16px/1.35 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu; background:var(--bg); color:var(--fg)}
+  header{display:flex; gap:12px; align-items:center; padding:14px 16px; border-bottom:1px solid var(--border); position:sticky;
+  top:0; background:var(--bg); z-index:5}
+  header h1{font-size:18px; margin:0 8px 0 0}
+  a.btn,button.btn{background:var(--card); color:var(--fg); border:1px solid var(--border); border-radius:10px; padding:8px 10px
+  ; text-decoration:none}
+  a.btn:hover,button.btn:hover{border-color:var(--accent)}
+  main{padding:16px}
+  .row{display:flex; gap:16px; flex-wrap:wrap}
+  .card{background:var(--card); border:1px solid var(--border); border-radius:12px; padding:12px; overflow:hidden;}
+  .label{font-size:13px; color:var(--muted); margin-bottom:6px}
+  .grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(240px,1fr)); gap:12px; margin-top:12px}
+  .exists{font-size:12px; color:#4ade80; margin-left:6px}
+  .missing{font-size:12px; color:#f59e0b; margin-left:6px}
+  .upload-row{display:flex; gap:10px; align-items:center; flex-wrap:wrap}
+  .upload-row input[type="file"]{flex:1}
+  #status{margin-top:10px; color:var(--muted)}
+</style>
+</head>
+<body>
+<header>
+  <a id="back" class="btn" href="index.html">← Back</a>
+  <h1>Movie</h1>
+</header>
+<main>
+  <div class="row">
+    <div class="card">
+      <div class="label">Poster</div>
+      <img id="posterImg" style="max-height:220px; border-radius:8px; display:none; margin-bottom:8px" />
+      <div class="upload-row">
+        <input type="file" id="posterFile" accept="image/*">
+        <button class="btn" id="importPoster">Import</button>
+        <button class="btn" id="uploadPoster">Upload</button>
+        <span id="posterFlag"></span>
+      </div>
+    </div>
+    <div class="card">
+      <div class="label">Background</div>
+      <img id="bgImg" style="max-height:220px; border-radius:8px; display:none; margin-bottom:8px" />
+      <div class="upload-row">
+        <input type="file" id="bgFile" accept="image/*">
+        <button class="btn" id="uploadBg">Upload</button>
+        <span id="bgFlag"></span>
+      </div>
+    </div>
+  </div>
+  <div id="status"></div>
+</main>
+
+<script>
+  (function () {
+    const t = localStorage.getItem('kam-theme') || 'light';
+    document.documentElement.setAttribute('data-theme', t);
+  })();
+
+  const $ = (sel) => document.querySelector(sel);
+
+  async function j(url) {
+    const r = await fetch(url);
+    if (!r.ok) throw new Error(url + " -> " + r.status);
+    return r.json();
+  }
+
+  let library, ratingKey, data;
+  const status = $("#status");
+  const posterFlag = $("#posterFlag");
+  const bgFlag = $("#bgFlag");
+
+  function flag(el, exists) {
+    el.className = exists ? "exists" : "missing";
+    el.textContent = exists ? "exists" : "missing";
+  }
+
+  function getParams() {
+    const u = new URL(location.href);
+    return {
+      library: u.searchParams.get("library") || "",
+      ratingKey: u.searchParams.get("ratingKey") || "",
+    };
+  }
+
+  async function load() {
+    const p = getParams();
+    library = p.library;
+    ratingKey = p.ratingKey;
+    const url = `/api/movie?library=${encodeURIComponent(library)}&ratingKey=${encodeURIComponent(ratingKey)}`;
+    data = await j(url);
+    render(data);
+  }
+
+  function render(d) {
+    const posterSrc = d.posterUrl || d.posterUrlPlex || "";
+    const bgSrc = d.backgroundUrl || d.backgroundUrlPlex || "";
+
+    const pi = $("#posterImg");
+    if (posterSrc) { pi.src = posterSrc; pi.style.display = "block"; } else { pi.style.display = "none"; }
+    flag(posterFlag, !!d.posterUrl);
+
+    const bi = $("#bgImg");
+    if (bgSrc) { bi.src = bgSrc; bi.style.display = "block"; } else { bi.style.display = "none"; }
+    flag(bgFlag, !!d.backgroundUrl);
+  }
+
+  async function upload(kind, fileInput) {
+    const file = fileInput.files[0];
+    if (!file) { status.textContent = "Choose a file first."; return; }
+    status.textContent = "Uploading...";
+
+    const fd = new FormData();
+    fd.append("library", library);
+    fd.append("ratingKey", data.ratingKey);
+    fd.append("folderName", data.folderName);
+    fd.append("kind", kind);
+    fd.append("file", file);
+
+    const r = await fetch("/api/upload", { method: "POST", body: fd });
+    if (!r.ok) { status.textContent = "Upload failed."; throw new Error(await r.text()); }
+    await r.json();
+
+    const fresh = await j(`/api/movie?library=${encodeURIComponent(library)}&ratingKey=${encodeURIComponent(ratingKey)}`);
+    render(fresh);
+    status.textContent = "Done.";
+  }
+
+  async function importPoster() {
+    status.textContent = "Importing from Plex...";
+    const fd = new FormData();
+    fd.append("library", library);
+    fd.append("ratingKey", data.ratingKey);
+    fd.append("folderName", data.folderName);
+
+    const r = await fetch("/api/import/poster", { method: "POST", body: fd });
+    if (!r.ok) { status.textContent = "Import failed."; throw new Error(await r.text()); }
+    await r.json();
+
+    const fresh = await j(`/api/movie?library=${encodeURIComponent(library)}&ratingKey=${encodeURIComponent(ratingKey)}`);
+    render(fresh);
+    status.textContent = "Done.";
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    $("#uploadPoster").onclick = () => upload("poster", $("#posterFile"));
+    $("#uploadBg").onclick = () => upload("background", $("#bgFile"));
+    $("#importPoster").onclick = () => importPoster();
+    load().catch((e) => (status.textContent = String(e)));
+  });
+</script>
+</body>
+</html>
