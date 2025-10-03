@@ -31,7 +31,9 @@ function ItemCard({ item, library, onRequestFolder }) {
   const year = item?.year;
   const poster = normalizePoster(item);
   const detailPath = buildDetailPath(item, library);
-  const readinessTooltip = ready ? 'Ready: asset folder found.' : 'Not ready: asset folder missing.';
+  const readinessTooltip = ready
+    ? 'Ready: asset folder found. Click to change the assigned folder.'
+    : 'Not ready: asset folder missing. Click to choose a folder.';
 
   const openFolder = (event) => {
     if (!onRequestFolder) return;
@@ -60,12 +62,16 @@ function ItemCard({ item, library, onRequestFolder }) {
           </span>
           <span
             className={`ready-badge ${ready ? 'ready' : 'not-ready'}`}
-            title={ready ? 'Asset folder found. This item is ready for imports.' : 'Asset folder missing. Click to choose a folder.'}
-            role={!ready ? 'button' : undefined}
-            tabIndex={!ready ? 0 : undefined}
-            onClick={!ready ? openFolder : undefined}
-            onKeyDown={!ready ? handleBadgeKey : undefined}
-            aria-haspopup={!ready ? 'dialog' : undefined}
+            title={
+              ready
+                ? 'Asset folder found. Click to change the assigned folder.'
+                : 'Asset folder missing. Click to choose a folder.'
+            }
+            role="button"
+            tabIndex={0}
+            onClick={openFolder}
+            onKeyDown={handleBadgeKey}
+            aria-haspopup="dialog"
           >
             {ready ? '✔ Ready' : '✖ Not Ready'}
           </span>
