@@ -1,10 +1,14 @@
 import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
-import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { resolve, join } from "node:path";
 
-const outputDir = resolve(__dirname, "../app/web");
-const fallbackSource = resolve(__dirname, "../app/web/fallback.png");
+const repoRoot = existsSync(resolve(__dirname, "../app/web"))
+  ? resolve(__dirname, "..")
+  : resolve(__dirname, ".");
+
+const outputDir = resolve(repoRoot, "app/web");
+const fallbackSource = resolve(repoRoot, "app/web/fallback.png");
 
 let fallbackBuffer: Buffer | null = null;
 let reportedMissing = false;
