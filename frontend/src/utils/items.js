@@ -4,17 +4,19 @@ export function isShowItem(item, libraryName) {
   return lib.includes('tv') || type === 'show' || item?.isShow === true;
 }
 
-export function buildDetailUrl(item, libraryName) {
+export function buildDetailPath(item, libraryName) {
   const lib = (libraryName || '').trim();
   if (!lib) return null;
   if (lib.toLowerCase() === 'collections') return null;
   const ratingKey = item?.ratingKey ?? item?.key ?? item?.id;
   if (ratingKey == null) return null;
   const encodedLib = encodeURIComponent(lib);
-  const encodedKey = encodeURIComponent(ratingKey);
-  const dest = isShowItem(item, libraryName) ? 'show.html' : 'movie.html';
-  return `${dest}?library=${encodedLib}&ratingKey=${encodedKey}`;
+  const encodedKey = encodeURIComponent(String(ratingKey));
+  const segment = isShowItem(item, libraryName) ? 'shows' : 'movies';
+  return `/libraries/${encodedLib}/${segment}/${encodedKey}`;
 }
+
+export const buildDetailUrl = buildDetailPath;
 
 export function normalizePoster(item) {
   return (

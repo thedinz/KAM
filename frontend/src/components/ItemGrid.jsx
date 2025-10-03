@@ -1,4 +1,5 @@
-import { buildDetailUrl, normalizePoster } from '../utils/items.js';
+import { Link } from 'react-router-dom';
+import { buildDetailPath, normalizePoster } from '../utils/items.js';
 
 function ItemGrid({ items, library, onRequestFolder, loading, error }) {
   if (loading) {
@@ -29,7 +30,7 @@ function ItemCard({ item, library, onRequestFolder }) {
   const title = item?.title || item?.name || '(Untitled)';
   const year = item?.year;
   const poster = normalizePoster(item);
-  const detailUrl = buildDetailUrl(item, library);
+  const detailPath = buildDetailPath(item, library);
   const readinessTooltip = ready ? 'Ready: asset folder found.' : 'Not ready: asset folder missing.';
 
   const openFolder = (event) => {
@@ -47,30 +48,10 @@ function ItemCard({ item, library, onRequestFolder }) {
     }
   };
 
-  const handleCardClick = (event) => {
-    if (!detailUrl) return;
-    if (event.metaKey || event.ctrlKey) {
-      window.open(detailUrl, '_blank');
-    } else {
-      window.location.href = detailUrl;
-    }
-  };
+  const cardTitle = detailPath ? `${readinessTooltip} Click to open details.` : readinessTooltip;
 
-  return (
-    <div
-      className="card"
-      data-ready={ready ? 'true' : 'false'}
-      title={detailUrl ? `${readinessTooltip} Click to open details.` : readinessTooltip}
-      onClick={detailUrl ? handleCardClick : undefined}
-      role={detailUrl ? 'button' : undefined}
-      tabIndex={detailUrl ? 0 : undefined}
-      onKeyDown={detailUrl ? (event) => {
-        if (event.key === 'Enter' || event.key === ' ') {
-          event.preventDefault();
-          handleCardClick(event);
-        }
-      } : undefined}
-    >
+  const content = (
+    <>
       <img className="poster" src={poster} alt={title} loading="lazy" />
       <div className="meta">
         <div className="title">
@@ -91,6 +72,20 @@ function ItemCard({ item, library, onRequestFolder }) {
         </div>
         <div className="year">{year ? String(year) : ''}</div>
       </div>
+    </>
+  );
+
+  if (detailPath) {
+    return (
+      <Link className="card" data-ready={ready ? 'true' : 'false'} title={cardTitle} to={detailPath}>
+        {content}
+      </Link>
+    );
+  }
+
+  return (
+    <div className="card" data-ready={ready ? 'true' : 'false'} title={cardTitle}>
+      {content}
     </div>
   );
 }
