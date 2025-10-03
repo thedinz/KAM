@@ -393,7 +393,10 @@
           );
         }
 
-        const backHref = `/index.html?lib=${encodeURIComponent(library)}`;
+        const baseBackHref = '/libraries';
+        const backHref = library
+          ? `${baseBackHref}?lib=${encodeURIComponent(library)}`
+          : baseBackHref;
         const header = e('header', null,
           e('a', { href: backHref, className: 'btn' }, '\u2190 Back'),
           e('h1', null, detail && detail.title ? detail.title : 'Show Details'),

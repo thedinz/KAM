@@ -31,7 +31,7 @@
 </head>
 <body>
 <header>
-  <a id="back" class="btn" href="index.html">← Back</a>
+  <a id="back" class="btn" href="/libraries">← Back</a>
   <h1 id="title">Movie</h1>
 </header>
 <main>
@@ -159,7 +159,8 @@
     const params = new URLSearchParams();
     if (state.library) params.set("lib", state.library);
     const query = params.toString();
-    els.back.href = query ? `/index.html?${query}` : `/index.html`;
+    const base = "/libraries";
+    els.back.href = query ? `${base}?${query}` : base;
   }
 
   async function fetchJson(url, options) {
