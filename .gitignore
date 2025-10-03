@@ -24,3 +24,4 @@ docker-compose.yml
 /app/web/*
 !/app/web/fallback.png
 !/app/web/show-react.html
+!/app/web/movie.html
