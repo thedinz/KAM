@@ -1,5 +1,7 @@
+import importlib
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -38,7 +40,7 @@ class _DummyItem:
 
 
 @pytest.fixture
-def movie_call(tmp_path, monkeypatch):
+def movie_env(tmp_path, monkeypatch):
     assets_root = tmp_path / "assets"
     library = "Movies"
     library_path = assets_root / library
@@ -52,15 +54,23 @@ def movie_call(tmp_path, monkeypatch):
     (library_path / "Completely Different (2020)").mkdir()
 
     from app import config
-    from app.services import resolve as resolve_module
-    from app.routers import movie as movie_router
 
     monkeypatch.setattr(config, "LIBRARY_MAPPINGS", {library: str(library_path)})
     monkeypatch.setattr(config, "PLEX_URL", "http://plex.test")
     monkeypatch.setattr(config, "PLEX_TOKEN", "token")
     monkeypatch.setattr(config, "CONFIG_ERRORS", [])
 
-    monkeypatch.setattr(resolve_module, "ASSETS_ROOT", str(assets_root))
+    monkeypatch.setenv("KAM_ASSETS_ROOT", str(assets_root))
+    overrides_path = tmp_path / "overrides.json"
+    monkeypatch.setenv("KAM_FOLDER_OVERRIDES_PATH", str(overrides_path))
+
+    resolve_module = importlib.reload(importlib.import_module("app.services.resolve"))
+    resolve_module.ASSETS_ROOT = str(assets_root)
+
+    folder_overrides = importlib.reload(importlib.import_module("app.services.folder_overrides"))
+    folder_overrides.set_storage_path(str(overrides_path))
+
+    movie_router = importlib.reload(importlib.import_module("app.routers.movie"))
 
     items = {
         1: _DummyItem("Jurassic World: Fallen Kingdom", 2018),
@@ -73,16 +83,35 @@ def movie_call(tmp_path, monkeypatch):
     def _call(rating_key: int):
         return movie_router.movie_api(library=library, ratingKey=rating_key)
 
-    return _call
+    return SimpleNamespace(
+        call=_call,
+        folder_overrides=folder_overrides,
+        library_path=library_path,
+        existing_variant=existing_variant,
+    )
 
 
-def test_movie_route_uses_resolved_folder(movie_call):
-    data = movie_call(1)
+def test_movie_route_uses_resolved_folder(movie_env):
+    data = movie_env.call(1)
     assert data["folderExists"] is True
     assert data["folderName"] == "Jurassic World Fallen Kingdom (Extended Edition) (2018)"
 
 
-def test_movie_route_rejects_unrelated_folder(movie_call):
-    data = movie_call(2)
+def test_movie_route_rejects_unrelated_folder(movie_env):
+    data = movie_env.call(2)
     assert data["folderExists"] is False
     assert data["folderName"] == "Some Other Movie (2021)"
+
+
+def test_movie_route_prefers_override(movie_env):
+    folder = movie_env.library_path / movie_env.existing_variant
+    (folder / "poster.jpg").write_bytes(b"poster")
+    (folder / "background.jpg").write_bytes(b"bg")
+
+    movie_env.folder_overrides.set_override("Movies", "1", folder.name)
+
+    data = movie_env.call(1)
+    assert data["folderName"] == folder.name
+    assert data["folderExists"] is True
+    assert data["posterExists"] is True
+    assert data["backgroundExists"] is True

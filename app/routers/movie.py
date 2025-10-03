@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException, Query
 import os
 from typing import Optional
 
+from ..services import folder_overrides
 from ..services.plex import get_plex
 from ..services.assets import folder_name_for
 from ..services.resolve import resolve_existing_dir_or_422
@@ -57,8 +58,11 @@ def movie(library: str = Query(...), ratingKey: int = Query(...)):
     title = getattr(item, "title", None) or "Untitled"
     year = getattr(item, "year", None)
     folder = folder_name_for(title, year)
+    override_folder = folder_overrides.get_override(library, str(ratingKey))
     resolved_folder = _resolve_existing_folder_basename(library, title, year)
-    if resolved_folder:
+    if override_folder:
+        folder = override_folder
+    elif resolved_folder:
         folder = resolved_folder
 
     # Map to asset root for this library
@@ -67,11 +71,12 @@ def movie(library: str = Query(...), ratingKey: int = Query(...)):
     background_exists = False
     poster_url_local = None
     background_url_local = None
-    folder_exists = False
+    folder_exists = bool(override_folder)
 
     if base:
         movie_folder = os.path.join(base, folder)
-        folder_exists = os.path.isdir(movie_folder)
+        actual_exists = os.path.isdir(movie_folder)
+        folder_exists = folder_exists or actual_exists
         # poster
         p = _first_existing(os.path.join(movie_folder, "poster"))
         if p:
