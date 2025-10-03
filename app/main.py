@@ -50,12 +50,13 @@ app.include_router(ui.router)
 WEB_DIR = Path(__file__).resolve().parent / "web"
 SPA_INDEX = WEB_DIR / "index.html"
 SPA_ASSETS_DIR = WEB_DIR / "spa-assets"
+MOVIE_PAGE = WEB_DIR / "movie.html"
 
 
 @app.get("/libraries/{library}/movies/{ratingKey}", include_in_schema=False)
 async def movie_details_page(library: str, ratingKey: str):
-    """Serve the SPA shell so client-side routing can take over."""
-    return FileResponse(SPA_INDEX)
+    """Serve the dedicated movie HTML shell."""
+    return FileResponse(MOVIE_PAGE)
 
 
 @app.get("/libraries", include_in_schema=False)
