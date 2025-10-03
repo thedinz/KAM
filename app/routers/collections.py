@@ -47,48 +47,61 @@ def _first_existing_poster(dir_path: Path) -> Path | None:
             return p
     return None
 
-def _local_poster_for_title(title: str) -> Tuple[Path | None, str | None, str]:
+def _local_poster_for_title(title: str) -> Tuple[Path | None, str | None, str, bool]:
     """
     Find a local poster for this collection title.
 
-    Returns: (path_on_disk, public_url_or_None, folder_used)
+    Returns: (path_on_disk, public_url_or_None, folder_used, folder_exists)
     """
     if not title or not COLLECTIONS_ROOT:
-        return None, None, ""
+        return None, None, "", False
 
     base = Path(COLLECTIONS_ROOT)
     raw_folder = title
     sani_folder = sanitize_name(title)
+    found_folder = ""
+    found_exists = False
 
     # 1) exact raw
     d1 = base / raw_folder
     if d1.is_dir():
+        found_folder = d1.name
+        found_exists = True
         p = _first_existing_poster(d1)
         if p:
-            return p, _url_for_local(raw_folder, p), raw_folder
+            return p, _url_for_local(d1.name, p), d1.name, True
 
     # 2) exact sanitized
     d2 = base / sani_folder
     if d2.is_dir():
+        found_folder = d2.name
+        found_exists = True
         p = _first_existing_poster(d2)
         if p:
-            return p, _url_for_local(sani_folder, p), sani_folder
+            return p, _url_for_local(d2.name, p), d2.name, True
 
     # 3) case-insensitive match (raw)
     d3 = _case_insensitive_dir(base, raw_folder)
     if d3:
+        found_folder = d3.name
+        found_exists = True
         p = _first_existing_poster(d3)
         if p:
-            return p, _url_for_local(d3.name, p), d3.name
+            return p, _url_for_local(d3.name, p), d3.name, True
 
     # 4) case-insensitive match (sanitized)
     d4 = _case_insensitive_dir(base, sani_folder)
     if d4:
+        found_folder = d4.name
+        found_exists = True
         p = _first_existing_poster(d4)
         if p:
-            return p, _url_for_local(d4.name, p), d4.name
+            return p, _url_for_local(d4.name, p), d4.name, True
 
-    return None, None, ""
+    if found_exists:
+        return None, None, found_folder, True
+
+    return None, None, "", False
 
 def _url_for_local(folder_name: str, file_path: Path) -> str:
     """
@@ -126,13 +139,14 @@ def collections(
                 poster_plex = f"{config.PLEX_URL}/library/metadata/{rk}/thumb?X-Plex-Token={config.PLEX_TOKEN}"
 
                 # Local art look-up
-                poster_path, poster_local, folder_used = _local_poster_for_title(title)
+                _poster_path, poster_local, folder_used, folder_exists = _local_poster_for_title(title)
 
                 item = {
                     "ratingKey": rk,
                     "title": title,
                     "year": None,
-                    "folderName": sanitize_name(title) if title else "",
+                    "folderName": folder_used or (sanitize_name(title) if title else ""),
+                    "assetReady": folder_exists,
                     # ✅ prefer local for the primary image
                     "posterUrl": poster_local or poster_plex,
                     # also expose both explicitly
@@ -147,6 +161,7 @@ def collections(
                         "collections_root": COLLECTIONS_ROOT,
                         "tried_titles": [title, sanitize_name(title)],
                         "folder_used": folder_used,
+                        "asset_ready": folder_exists,
                         "assets_root": ASSETS_ROOT,
                     }
 
