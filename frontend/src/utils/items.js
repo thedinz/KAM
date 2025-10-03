@@ -11,9 +11,11 @@ export function buildDetailPath(item, libraryName) {
   const ratingKey = item?.ratingKey ?? item?.key ?? item?.id;
   if (ratingKey == null) return null;
   const encodedLib = encodeURIComponent(lib);
-  const encodedKey = encodeURIComponent(String(ratingKey));
-  const segment = isShowItem(item, libraryName) ? 'shows' : 'movies';
-  return `/libraries/${encodedLib}/${segment}/${encodedKey}`;
+  const encodedKey = encodeURIComponent(ratingKey);
+  if (isShowItem(item, libraryName)) {
+    return `/libraries/${encodedLib}/shows/${encodedKey}`;
+  }
+  return `/libraries/${encodedLib}/movies/${encodedKey}`;
 }
 
 export const buildDetailUrl = buildDetailPath;
