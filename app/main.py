@@ -21,7 +21,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-from .routers import libraries, items, collections, upload, tv, fileproxy, movie, imports
+from .routers import (
+    assets,
+    collections,
+    fileproxy,
+    imports,
+    items,
+    libraries,
+    movie,
+    tv,
+    upload,
+)
 
 app.include_router(libraries.router)
 app.include_router(items.router)
@@ -31,6 +41,7 @@ app.include_router(tv.router)
 app.include_router(movie.router)
 app.include_router(imports.router)
 app.include_router(fileproxy.router)
+app.include_router(assets.router)
 
 # ---- SAFE assets mount (env-driven) ----
 # Prefer explicit envs if you set them; otherwise infer from COLLECTIONS_ROOT.
