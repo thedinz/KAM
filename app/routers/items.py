@@ -6,6 +6,7 @@ import requests
 import xml.etree.ElementTree as ET
 from urllib.parse import quote
 
+from ..services import folder_overrides
 from ..services.resolve import resolve_existing_dir_or_422
 
 router = APIRouter()
@@ -163,8 +164,9 @@ def list_items(
 
     out: List[Dict[str, Any]] = []
     for it in page_rows:
-        folder = _try_existing_asset_folder(library, it["title"], it["year"])
-        asset_ready = bool(folder)
+        override = folder_overrides.get_override(library, it["ratingKey"])
+        folder = override or _try_existing_asset_folder(library, it["title"], it["year"])
+        asset_ready = True if override else bool(folder)
         if folder and _local_poster_exists(library, folder):
             poster = _fileproxy_poster_url(library, folder)   # <-- /fileproxy now
         else:

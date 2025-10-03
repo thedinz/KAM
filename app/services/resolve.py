@@ -1,27 +1,46 @@
 # app/services/resolve.py
 import os
-import unicodedata
 import re
+import unicodedata
 from difflib import SequenceMatcher
 from typing import Optional
+
+from app import config
 
 ASSETS_ROOT = os.environ.get("KAM_ASSETS_ROOT", "/assets")
 
 _ILLEGAL_CTRL = re.compile(r"[\u0000-\u001F]")
 
+_STOPWORDS = {"the", "a", "an", "movie", "film"}
+
+
+def _tokenize_title(s: str) -> list[str]:
+    """Normalize *s* into lowercase word tokens without punctuation."""
+    if not s:
+        return []
+
+    normalized = unicodedata.normalize("NFKC", str(s))
+    normalized = _ILLEGAL_CTRL.sub("", normalized)
+    normalized = normalized.casefold()
+
+    tokens = [tok for tok in re.split(r"[^0-9a-z]+", normalized) if tok]
+    tokens = [tok for tok in tokens if tok not in _STOPWORDS]
+
+    # Drop trailing year tokens such as "(2023)" so alternate title suffixes
+    # compare on the meaningful words only.
+    while tokens and re.fullmatch(r"\d{4}", tokens[-1]):
+        tokens.pop()
+
+    return tokens
+
+
 def _normalize(s: str) -> str:
     """
     Build a comparison key that ignores punctuation/spacing/case differences,
-    so 'Batman: The Caped Crusader' == 'Batman The Caped Crusader'.
+    and common stop-words/year suffixes so
+    'Batman: The Caped Crusader (2023)' == 'Batman Caped Crusader'.
     """
-    if not s:
-        return ""
-    s = unicodedata.normalize("NFKC", str(s))
-    s = _ILLEGAL_CTRL.sub("", s)
-    s = s.casefold()
-    # drop all non-alphanumeric chars
-    s = "".join(ch for ch in s if ch.isalnum())
-    return s
+    return "".join(_tokenize_title(s))
 
 def _best_match(candidates, want: str) -> Optional[str]:
     """Return the candidate whose normalized name equals the normalized target."""
@@ -85,7 +104,14 @@ def resolve_existing_dir_or_422(library: str, folder_name: str) -> str:
     """
     if not library:
         raise FileNotFoundError("Missing library")
-    base = os.path.join(ASSETS_ROOT, library)
+
+    mapped_base: Optional[str]
+    if library == "Collections":
+        mapped_base = config.COLLECTIONS_ROOT
+    else:
+        mapped_base = config.LIBRARY_MAPPINGS.get(library)
+
+    base = os.fspath(mapped_base) if mapped_base else os.path.join(ASSETS_ROOT, library)
     if not os.path.isdir(base):
         raise FileNotFoundError(f"Assets library not found: {base}")
 
