@@ -249,6 +249,23 @@ labels:
 
 ---
 
+## Building the frontend SPA
+
+The React single-page app lives under `frontend/`.
+To rebuild the production bundle (outputs to `app/web/`):
+
+```bash
+cd frontend
+npm install
+npm run build
+```
+
+Only the shared assets (`app/web/fallback.png` and `app/web/show-react.html`) are tracked in Git.
+The compiled bundle (`app/web/index.html` and `app/web/spa-assets/`) is generated at build-time.
+Re-run `npm run build` whenever frontend dependencies change or before packaging/deploying the app.
+
+---
+
 ## Updates
 
 ```bash

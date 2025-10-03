@@ -9,6 +9,7 @@ function App() {
         <Routes>
           <Route path="/" element={<Navigate to="/libraries" replace />} />
           <Route path="/libraries" element={<LibraryPage />} />
+          <Route path="/libraries/*" element={<LibraryPage />} />
         </Routes>
       </BrowserRouter>
     </ThemeProvider>
