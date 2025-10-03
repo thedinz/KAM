@@ -82,11 +82,20 @@
   }
 
   function getParams() {
-    const u = new URL(location.href);
-    return {
-      library: u.searchParams.get("library") || "",
-      ratingKey: u.searchParams.get("ratingKey") || "",
-    };
+    const parts = window.location.pathname.split("/").filter(Boolean);
+    let library = "";
+    let ratingKey = "";
+
+    if (parts.length >= 4 && parts[0] === "libraries" && parts[2] === "movies") {
+      library = decodeURIComponent(parts[1] || "");
+      ratingKey = decodeURIComponent(parts[3] || "");
+    } else {
+      const u = new URL(location.href);
+      library = u.searchParams.get("library") || "";
+      ratingKey = u.searchParams.get("ratingKey") || "";
+    }
+
+    return { library, ratingKey };
   }
 
   async function load() {
