@@ -78,7 +78,7 @@ def collections_env(tmp_path, monkeypatch):
     monkeypatch.setattr(collections_router, "get_plex", lambda: _DummyPlex(sections))
 
     def _call(**kwargs):
-        params = {"query": None, "page": 1, "page_size": 60}
+        params = {"query": None, "page": 1, "page_size": 60, "not_ready_only": False}
         params.update(kwargs)
         return collections_router.collections(**params)
 
@@ -128,3 +128,16 @@ def test_collections_route_uses_overrides(collections_env):
     assert overridden["assetReady"] is True
     assert overridden["posterUrlLocal"] is not None
     assert folder.name.replace(" ", "%20") in overridden["posterUrlLocal"]
+
+
+def test_collections_route_reports_not_ready_count_and_filters(collections_env):
+    data = collections_env.call()
+
+    assert data["not_ready_count"] == 1
+
+    filtered = collections_env.call(not_ready_only=True)
+
+    assert filtered["not_ready_count"] == 1
+    assert filtered["total_count"] == 1
+    assert len(filtered["items"]) == 1
+    assert filtered["items"][0]["title"] == "Missing Assets"
