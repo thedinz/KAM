@@ -111,6 +111,35 @@ a.btn:focus,
   flex-wrap: wrap;
 }
 
+.not-ready-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: transparent;
+  font-weight: 600;
+}
+
+.not-ready-button .badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--border);
+  font-size: 13px;
+}
+
+.not-ready-button:enabled:hover,
+.not-ready-button:enabled:focus-visible {
+  border-color: var(--accent);
+  color: var(--accent);
+  outline: none;
+}
+
 .library-select {
   min-width: 200px;
 }
@@ -200,6 +229,69 @@ a.btn:focus,
   height: 40px;
   border-radius: 999px;
   font-size: 18px;
+}
+
+.not-ready-header {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  padding: 16px;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+
+.not-ready-heading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.not-ready-heading h1 {
+  margin: 0;
+}
+
+.not-ready-heading p {
+  margin: 4px 0 0;
+  color: var(--muted);
+}
+
+.back-button {
+  border-radius: 999px;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  background: transparent;
+  font-weight: 600;
+}
+
+.back-button:hover,
+.back-button:focus-visible {
+  border-color: var(--accent);
+  color: var(--accent);
+  outline: none;
+}
+
+.not-ready-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
+  color: var(--muted);
+}
+
+.badge-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--border);
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.not-ready-pager {
+  justify-content: center;
+  margin: 16px;
 }
 
 main {
