@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import ArtworkCard from '../components/ArtworkCard.jsx';
 import { responseErrorMessage, safeJson } from '../utils/api.js';
-import { useTheme } from '../theme/ThemeProvider.jsx';
 
 const MISSING_FOLDER_MESSAGE = 'Create the Kometa asset folder first.';
 
@@ -24,7 +23,6 @@ function MovieDetailPage() {
   const library = rawLibrary ? String(rawLibrary) : '';
   const ratingKey = rawRatingKey ? String(rawRatingKey) : '';
 
-  const { toggleTheme } = useTheme();
 
   const [detail, setDetail] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -250,9 +248,9 @@ function MovieDetailPage() {
         <h1>{headerTitle}</h1>
         {headerYear ? <span className="detail-year">({headerYear})</span> : null}
         <span className="detail-header-gap" aria-hidden="true" />
-        <button type="button" className="theme-toggle" onClick={toggleTheme} title="Toggle theme">
-          🌓
-        </button>
+        <Link className="settings-link" to="/settings" aria-label="Open settings">
+          <span aria-hidden="true">⚙</span>
+        </Link>
       </header>
       <main className="detail-main">
         {loading ? (

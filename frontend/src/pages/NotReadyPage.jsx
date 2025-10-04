@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import FolderFinderModal from '../components/FolderFinderModal.jsx';
 import ItemGrid from '../components/ItemGrid.jsx';
 import { useLibraryItemsContext } from '../hooks/LibraryItemsProvider.jsx';
-import { useTheme } from '../theme/ThemeProvider.jsx';
 
 function NotReadyPage() {
   const navigate = useNavigate();
@@ -17,7 +16,6 @@ function NotReadyPage() {
     setNotReadyCount,
     updateItem,
   } = useLibraryItemsContext();
-  const { toggleTheme } = useTheme();
 
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -164,9 +162,9 @@ function NotReadyPage() {
           <span className="badge-label">{notReadyLabel}</span>
           <span>{pageLabel}</span>
         </div>
-        <button type="button" className="theme-toggle" onClick={toggleTheme} title="Toggle theme">
-          🌓
-        </button>
+        <Link className="settings-link" to="/settings" aria-label="Open settings">
+          <span aria-hidden="true">⚙</span>
+        </Link>
       </header>
       <main>
         <ItemGrid
