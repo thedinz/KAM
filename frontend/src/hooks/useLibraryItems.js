@@ -23,7 +23,6 @@ export function useLibraryItems({ initialLibrary } = {}) {
   const [notReadyOnly, setNotReadyOnlyState] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [notReadyCount, setNotReadyCount] = useState(0);
 
   const fetchAbort = useRef(null);
   const initialLibraryRef = useRef(initialLibrary);
@@ -272,7 +271,6 @@ export function useLibraryItems({ initialLibrary } = {}) {
       loading,
       error,
       reload,
-      notReadyCount,
       setNotReadyCount,
       refreshNotReadyCount,
       fetchAllForLibrary,
@@ -296,7 +294,6 @@ export function useLibraryItems({ initialLibrary } = {}) {
       loading,
       error,
       reload,
-      notReadyCount,
       setNotReadyCount,
       refreshNotReadyCount,
       fetchAllForLibrary,

@@ -41,7 +41,6 @@ function LibraryPage() {
     reload,
     fetchAllForLibrary,
     updateItem,
-    notReadyCount,
   } = useLibraryItemsContext();
 
   const { toggleTheme } = useTheme();
