@@ -31,6 +31,7 @@ from .routers import (
     items,
     libraries,
     movie,
+    settings,
     tv,
     upload,
     ui,
@@ -42,6 +43,7 @@ app.include_router(collections.router)
 app.include_router(upload.router)
 app.include_router(tv.router)
 app.include_router(movie.router)
+app.include_router(settings.router)
 app.include_router(imports.router)
 app.include_router(fileproxy.router)
 app.include_router(assets.router)
