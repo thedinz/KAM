@@ -41,15 +41,21 @@ function FolderFinderModal({ isOpen, library, item, onClose, onFolderAssigned })
   const [searchTerm, setSearchTerm] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [assigning, setAssigning] = useState(false);
+  const [currentFolder, setCurrentFolder] = useState('');
   const debounceRef = useRef();
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      setCurrentFolder('');
+      return;
+    }
     setSearchInput('');
     setSearchTerm('');
     setSelection(null);
     setError('');
-  }, [isOpen, effectiveLibrary]);
+    const initialFolder = item?.folderName || item?.folder || '';
+    setCurrentFolder(initialFolder || '');
+  }, [isOpen, effectiveLibrary, item]);
 
   const loadFolders = useCallback(
     async ({ path = '', query = '', preserveSelection = false } = {}) => {
@@ -191,6 +197,10 @@ function FolderFinderModal({ isOpen, library, item, onClose, onFolderAssigned })
           <div className="dialog-body">
             <h2 id="folderFinderHeading">Select Asset Folder</h2>
             <p className="folder-context">{contextLabel}</p>
+            <p className="folder-current" aria-live="polite">
+              Current folder:{' '}
+              {currentFolder ? <strong>{currentFolder}</strong> : <span>Not assigned</span>}
+            </p>
             <nav aria-label="Folder breadcrumbs">
               <ol className="breadcrumbs">
                 {breadcrumbs.map((crumb, index) => (
