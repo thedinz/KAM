@@ -85,6 +85,13 @@ function LibraryPage() {
     setNotReadyOnly((prev) => !prev);
   }, [setNotReadyOnly]);
 
+  const handleViewNotReady = useCallback(() => {
+    if (!library) return;
+    const lib = library.trim();
+    if (!lib) return;
+    navigate(`/libraries/${encodeURIComponent(lib)}/not-ready`);
+  }, [library, navigate]);
+
   const [importState, setImportState] = useState({ active: false, percent: 0, label: '', errors: [] });
   const hideTimerRef = useRef();
   const [isImporting, setIsImporting] = useState(false);
@@ -290,6 +297,8 @@ function LibraryPage() {
     );
   }, [library, notReadyCount, notReadyOnly, handleToggleNotReady]);
 
+  const notReadyButtonDisabled = !library || (Number(notReadyCount) || 0) <= 0;
+
   return (
     <div>
       <header>
@@ -311,6 +320,9 @@ function LibraryPage() {
           onLast={handleLast}
           countLabel={countLabel}
           notReadyControl={notReadyControl}
+          onViewNotReady={handleViewNotReady}
+          notReadyCount={notReadyCount}
+          notReadyDisabled={notReadyButtonDisabled}
         >
           <ImportStatusPanel
             active={importState.active}
