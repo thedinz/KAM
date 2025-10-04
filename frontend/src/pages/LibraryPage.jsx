@@ -30,9 +30,12 @@ function LibraryPage() {
     setPage,
     totalPages,
     totalCount,
+    notReadyCount,
     items,
     query,
     setQuery,
+    notReadyOnly,
+    setNotReadyOnly,
     loading,
     error,
     reload,
@@ -79,11 +82,9 @@ function LibraryPage() {
   const handleNext = useCallback(() => setPage(Math.min(totalPages || 1, page + 1)), [setPage, page, totalPages]);
   const handleLast = useCallback(() => setPage(totalPages || 1), [setPage, totalPages]);
 
-  const handleViewNotReady = useCallback(() => {
-    if (!library || !notReadyCount) return;
-    const encoded = encodeURIComponent(library);
-    navigate(`/libraries/${encoded}/not-ready`);
-  }, [library, notReadyCount, navigate]);
+  const handleToggleNotReady = useCallback(() => {
+    setNotReadyOnly((prev) => !prev);
+  }, [setNotReadyOnly]);
 
   const [importState, setImportState] = useState({ active: false, percent: 0, label: '', errors: [] });
   const hideTimerRef = useRef();
@@ -146,7 +147,7 @@ function LibraryPage() {
     showStatus({ active: true, percent: 0, label: 'Preparing import…', errors: [] });
 
     try {
-      const { items: allItems = [] } = await fetchAllForLibrary(lib, query);
+      const { items: allItems = [] } = await fetchAllForLibrary(lib, query, { notReadyOnly });
       const importable = allItems.filter((item) => item?.assetReady !== false);
       const skipped = allItems.filter((item) => item?.assetReady === false);
 
@@ -257,7 +258,7 @@ function LibraryPage() {
     } finally {
       setIsImporting(false);
     }
-  }, [library, fetchAllForLibrary, query, reload, showStatus, hideStatus]);
+  }, [library, fetchAllForLibrary, query, notReadyOnly, reload, showStatus, hideStatus]);
 
   const countLabel = useMemo(() => {
     const count = Number(totalCount) || 0;
@@ -270,6 +271,25 @@ function LibraryPage() {
       ? 'Import all collection posters/backgrounds from Plex into Kometa asset folders'
       : 'Import all posters/backgrounds (and TV seasons) from Plex into Kometa asset folders'
     : 'Choose a library first.';
+
+  const notReadyControl = useMemo(() => {
+    if (!library && !notReadyOnly) return null;
+    const disabled = !library || (!notReadyCount && !notReadyOnly);
+    const label = `Show items missing asset folders (${notReadyCount})`;
+    return (
+      <button
+        type="button"
+        className={`ready-badge not-ready${notReadyOnly ? ' active' : ''}`}
+        onClick={handleToggleNotReady}
+        aria-pressed={notReadyOnly}
+        disabled={disabled}
+        title={label}
+        data-active={notReadyOnly || undefined}
+      >
+        Not Ready {notReadyCount}
+      </button>
+    );
+  }, [library, notReadyCount, notReadyOnly, handleToggleNotReady]);
 
   return (
     <div>
@@ -291,9 +311,7 @@ function LibraryPage() {
           onNext={handleNext}
           onLast={handleLast}
           countLabel={countLabel}
-          notReadyCount={notReadyCount}
-          onViewNotReady={handleViewNotReady}
-          notReadyDisabled={!library || notReadyCount <= 0}
+          notReadyControl={notReadyControl}
         >
           <ImportStatusPanel
             active={importState.active}
