@@ -21,6 +21,7 @@ function LibraryPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const urlLibrary = searchParams.get('lib') || '';
+  const lastUrlLibraryRef = useRef(urlLibrary);
   const {
     libraries,
     library,
@@ -50,6 +51,10 @@ function LibraryPage() {
 
   useEffect(() => {
     if (!urlLibrary) return;
+    if (lastUrlLibraryRef.current === urlLibrary) return;
+
+    lastUrlLibraryRef.current = urlLibrary;
+
     if (urlLibrary !== library) {
       setLibrary(urlLibrary);
     }
