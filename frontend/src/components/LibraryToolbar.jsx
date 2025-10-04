@@ -14,9 +14,7 @@ function LibraryToolbar({
   onNext,
   onLast,
   countLabel,
-  notReadyCount = 0,
-  onViewNotReady,
-  notReadyDisabled = false,
+  notReadyControl,
   children,
 }) {
   const showNotReadyButton = Boolean(onViewNotReady);
@@ -104,6 +102,8 @@ function LibraryToolbar({
       <span className="count-label" id="count">
         {countLabel}
       </span>
+
+      {notReadyControl}
 
       {children}
     </div>
