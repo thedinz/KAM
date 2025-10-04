@@ -17,8 +17,10 @@ export function useLibraryItems({ initialLibrary } = {}) {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
+  const [notReadyCount, setNotReadyCount] = useState(0);
   const [items, setItems] = useState([]);
   const [query, setQuery] = useState('');
+  const [notReadyOnly, setNotReadyOnlyState] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -62,11 +64,12 @@ export function useLibraryItems({ initialLibrary } = {}) {
   }, [fetchLibraries]);
 
   const loadItems = useCallback(
-    async ({ targetLibrary, targetPage, searchTerm } = {}) => {
+    async ({ targetLibrary, targetPage, searchTerm, notReadyOnly: overrideNotReadyOnly } = {}) => {
       const lib = targetLibrary ?? library;
       if (!lib) return;
       const desiredPage = targetPage ?? page;
       const q = searchTerm ?? query;
+      const notReady = overrideNotReadyOnly ?? notReadyOnly;
       const normalized = lib.trim().toLowerCase();
       const base = normalized === 'collections' ? '/collections' : '/api/items';
       const params = new URLSearchParams();
@@ -77,6 +80,9 @@ export function useLibraryItems({ initialLibrary } = {}) {
       params.set('page_size', String(PAGE_SIZE));
       if (q) {
         params.set('query', q);
+      }
+      if (notReady) {
+        params.set('not_ready_only', 'true');
       }
 
       if (fetchAbort.current) {
@@ -97,17 +103,19 @@ export function useLibraryItems({ initialLibrary } = {}) {
         setItems(Array.isArray(data?.items) ? data.items : []);
         setTotalPages(data?.total_pages || 1);
         setTotalCount(data?.total_count || (Array.isArray(data?.items) ? data.items.length : 0));
+        setNotReadyCount(data?.not_ready_count || 0);
       } catch (err) {
         if (err.name === 'AbortError') return;
         setItems([]);
         setTotalPages(1);
         setTotalCount(0);
+        setNotReadyCount(0);
         setError(err.message || 'Failed to load items');
       } finally {
         setLoading(false);
       }
     },
-    [library, page, query]
+    [library, page, query, notReadyOnly]
   );
 
   useEffect(() => {
@@ -131,12 +139,20 @@ export function useLibraryItems({ initialLibrary } = {}) {
     setQuery(nextQuery);
   }, []);
 
+  const changeNotReadyOnly = useCallback((nextValue) => {
+    setPage(1);
+    setNotReadyOnlyState((prev) => {
+      const resolved = typeof nextValue === 'function' ? nextValue(prev) : nextValue;
+      return Boolean(resolved);
+    });
+  }, []);
+
   const reload = useCallback(() => {
     loadItems();
   }, [loadItems]);
 
   const fetchAllForLibrary = useCallback(
-    async (lib, searchTerm) => {
+    async (lib, searchTerm, options = {}) => {
       if (!lib) return { items: [], totalPages: 0, totalCount: 0 };
       const normalized = lib.trim().toLowerCase();
       const base = normalized === 'collections' ? '/collections' : '/api/items';
@@ -147,6 +163,9 @@ export function useLibraryItems({ initialLibrary } = {}) {
       params.set('page_size', String(PAGE_SIZE));
       if (searchTerm) {
         params.set('query', searchTerm);
+      }
+      if (options?.notReadyOnly) {
+        params.set('not_ready_only', 'true');
       }
 
       const makeUrl = (pageNumber) => {
@@ -164,6 +183,7 @@ export function useLibraryItems({ initialLibrary } = {}) {
       const allItems = Array.isArray(firstData?.items) ? [...firstData.items] : [];
       const totalPagesResp = firstData?.total_pages || 1;
       const totalCountResp = firstData?.total_count || allItems.length;
+      const notReadyCountResp = firstData?.not_ready_count || 0;
 
       for (let p = 2; p <= totalPagesResp; p += 1) {
         const response = await fetch(makeUrl(p));
@@ -177,7 +197,12 @@ export function useLibraryItems({ initialLibrary } = {}) {
         }
       }
 
-      return { items: allItems, totalPages: totalPagesResp, totalCount: totalCountResp };
+      return {
+        items: allItems,
+        totalPages: totalPagesResp,
+        totalCount: totalCountResp,
+        notReadyCount: notReadyCountResp,
+      };
     },
     []
   );
@@ -202,9 +227,12 @@ export function useLibraryItems({ initialLibrary } = {}) {
       setPage: changePage,
       totalPages,
       totalCount,
+      notReadyCount,
       items,
       query,
       setQuery: changeQuery,
+      notReadyOnly,
+      setNotReadyOnly: changeNotReadyOnly,
       loading,
       error,
       reload,
@@ -220,9 +248,12 @@ export function useLibraryItems({ initialLibrary } = {}) {
       changePage,
       totalPages,
       totalCount,
+      notReadyCount,
       items,
       query,
       changeQuery,
+      notReadyOnly,
+      changeNotReadyOnly,
       loading,
       error,
       reload,

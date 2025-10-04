@@ -314,6 +314,11 @@ main {
   box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.35);
 }
 
+.ready-badge.not-ready.active {
+  background: #dc2626;
+  box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.35);
+}
+
 [data-theme="light"] .ready-badge.ready {
   background: #22c55e;
   color: #065f46;
@@ -332,6 +337,11 @@ main {
 
 [data-theme="light"] .ready-badge.not-ready:hover,
 [data-theme="light"] .ready-badge.not-ready:focus-visible {
+  background: #fecaca;
+  box-shadow: 0 0 0 2px rgba(254, 202, 202, 0.5);
+}
+
+[data-theme="light"] .ready-badge.not-ready.active {
   background: #fecaca;
   box-shadow: 0 0 0 2px rgba(254, 202, 202, 0.5);
 }

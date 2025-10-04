@@ -44,14 +44,27 @@ def items_env(tmp_path, monkeypatch):
                     "ratingKey": "11",
                     "type": "movie",
                     "thumb": "/thumb",
-                }
+                },
+                {
+                    "title": "Needs Assets",
+                    "year": 2020,
+                    "ratingKey": "22",
+                    "type": "movie",
+                    "thumb": "/thumb2",
+                },
             ]
         return []
 
     monkeypatch.setattr(items_router, "_plex_list", fake_plex_list)
 
     def _call(**kwargs):
-        params = {"library": library, "page": 1, "page_size": 60, "query": None}
+        params = {
+            "library": library,
+            "page": 1,
+            "page_size": 60,
+            "query": None,
+            "not_ready_only": False,
+        }
         params.update(kwargs)
         return items_router.list_items(**params)
 
@@ -66,6 +79,25 @@ def test_items_route_prefers_override(items_env):
     items_env.folder_overrides.set_override("Movies", "11", items_env.folder.name)
 
     data = items_env.call()
-    assert data["items"][0]["folderName"] == items_env.folder.name
-    assert data["items"][0]["assetReady"] is True
-    assert data["items"][0]["posterUrl"].startswith("/fileproxy")
+    items = {it["ratingKey"]: it for it in data["items"]}
+
+    overridden = items["11"]
+    assert overridden["folderName"] == items_env.folder.name
+    assert overridden["assetReady"] is True
+    assert overridden["posterUrl"].startswith("/fileproxy")
+
+
+def test_items_route_reports_not_ready_count_and_filters(items_env):
+    data = items_env.call()
+
+    assert data["not_ready_count"] == 1
+
+    by_key = {it["ratingKey"]: it for it in data["items"]}
+    assert by_key["22"]["assetReady"] is False
+
+    filtered = items_env.call(not_ready_only=True)
+
+    assert filtered["not_ready_count"] == 1
+    assert filtered["total_count"] == 1
+    assert len(filtered["items"]) == 1
+    assert filtered["items"][0]["ratingKey"] == "22"
