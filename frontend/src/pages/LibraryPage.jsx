@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import FolderFinderModal from '../components/FolderFinderModal.jsx';
 import ImportStatusPanel from '../components/ImportStatusPanel.jsx';
 import ItemGrid from '../components/ItemGrid.jsx';
 import LibraryToolbar from '../components/LibraryToolbar.jsx';
 import { useLibraryItemsContext } from '../hooks/LibraryItemsProvider.jsx';
-import { useTheme } from '../theme/ThemeProvider.jsx';
 import { responseErrorMessage, safeJson } from '../utils/api.js';
 import { isShowItem } from '../utils/items.js';
 import {
@@ -43,7 +42,6 @@ function LibraryPage() {
     updateItem,
   } = useLibraryItemsContext();
 
-  const { toggleTheme } = useTheme();
 
   const [searchInput, setSearchInput] = useState(query || '');
   const searchTimerRef = useRef();
@@ -331,9 +329,9 @@ function LibraryPage() {
             errors={importState.errors}
           />
         </LibraryToolbar>
-        <button type="button" className="theme-toggle" onClick={toggleTheme} title="Toggle theme">
-          🌓
-        </button>
+        <Link className="settings-link" to="/settings" aria-label="Open settings">
+          <span aria-hidden="true">⚙</span>
+        </Link>
       </header>
       <main>
         <ItemGrid
