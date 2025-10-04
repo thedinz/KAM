@@ -14,8 +14,18 @@ function LibraryToolbar({
   onNext,
   onLast,
   countLabel,
+  notReadyCount = 0,
+  onViewNotReady,
+  notReadyDisabled = false,
   children,
 }) {
+  const showNotReadyButton = Boolean(onViewNotReady);
+  const notReadyDisplay = Number(notReadyCount) || 0;
+  const disableNotReady = notReadyDisabled || notReadyDisplay <= 0;
+  const notReadyTitle = disableNotReady
+    ? 'No not-ready items to review yet.'
+    : 'Show only items missing asset folders.';
+
   return (
     <div className="page-header-tools" id="toolbar">
       <label className="sr-only" htmlFor="librarySelect">
@@ -54,6 +64,24 @@ function LibraryToolbar({
       <button type="button" onClick={onImportAll} disabled={importDisabled} title={importTitle}>
         Import Assets
       </button>
+
+      {showNotReadyButton ? (
+        <button
+          type="button"
+          className="not-ready-button"
+          onClick={onViewNotReady}
+          disabled={disableNotReady}
+          title={notReadyTitle}
+        >
+          Not Ready
+          <span
+            className="badge"
+            aria-label={`${notReadyDisplay.toLocaleString()} not-ready items`}
+          >
+            {notReadyDisplay.toLocaleString()}
+          </span>
+        </button>
+      ) : null}
 
       <div className="pager" id="pager">
         <button type="button" onClick={onFirst} disabled={page <= 1}>
