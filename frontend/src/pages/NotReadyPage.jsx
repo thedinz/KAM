@@ -58,12 +58,19 @@ function NotReadyPage() {
       setLoading(true);
       setError('');
       const params = new URLSearchParams();
-      params.set('library', targetLibrary);
+      const trimmedLibrary = targetLibrary.trim();
+      const isCollections = trimmedLibrary.toLowerCase() === 'collections';
       params.set('page', String(desiredPage));
       params.set('page_size', String(pageSize));
       params.set('not_ready_only', '1');
       try {
-        const response = await fetch(`/api/items?${params.toString()}`);
+        let endpoint = '/api/items';
+        if (isCollections) {
+          endpoint = '/collections';
+        } else {
+          params.set('library', trimmedLibrary);
+        }
+        const response = await fetch(`${endpoint}?${params.toString()}`);
         const data = await response.json();
         if (!response.ok) {
           const message = data?.detail || data?.error || `${response.status} ${response.statusText}`;
