@@ -23,6 +23,7 @@ export function useLibraryItems({ initialLibrary } = {}) {
   const [notReadyOnly, setNotReadyOnlyState] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [notReadyCount, setNotReadyCount] = useState(0);
 
   const fetchAbort = useRef(null);
   const initialLibraryRef = useRef(initialLibrary);
@@ -151,6 +152,41 @@ export function useLibraryItems({ initialLibrary } = {}) {
     loadItems();
   }, [loadItems]);
 
+  const refreshNotReadyCount = useCallback(
+    async (targetLibrary) => {
+      const lib = targetLibrary ?? library;
+      if (!lib) return 0;
+      const normalized = lib.trim().toLowerCase();
+      const base = normalized === 'collections' ? '/collections' : '/api/items';
+      const params = new URLSearchParams();
+      if (base !== '/collections') {
+        params.set('library', lib);
+      }
+      params.set('page', '1');
+      params.set('page_size', '1');
+      try {
+        const response = await fetch(`${base}?${params.toString()}`);
+        if (!response.ok) {
+          const message = `${response.status} ${response.statusText}`;
+          throw new Error(message);
+        }
+        const data = await response.json();
+        const nextNotReady =
+          typeof data?.not_ready_count === 'number'
+            ? data.not_ready_count
+            : typeof data?.notReadyCount === 'number'
+            ? data.notReadyCount
+            : 0;
+        setNotReadyCount(nextNotReady);
+        return nextNotReady;
+      } catch (err) {
+        console.warn('Failed to refresh not-ready count', err);
+        return notReadyCount;
+      }
+    },
+    [library, notReadyCount]
+  );
+
   const fetchAllForLibrary = useCallback(
     async (lib, searchTerm, options = {}) => {
       if (!lib) return { items: [], totalPages: 0, totalCount: 0 };
@@ -236,6 +272,9 @@ export function useLibraryItems({ initialLibrary } = {}) {
       loading,
       error,
       reload,
+      notReadyCount,
+      setNotReadyCount,
+      refreshNotReadyCount,
       fetchAllForLibrary,
       updateItem,
       pageSize: PAGE_SIZE,
@@ -257,6 +296,9 @@ export function useLibraryItems({ initialLibrary } = {}) {
       loading,
       error,
       reload,
+      notReadyCount,
+      setNotReadyCount,
+      refreshNotReadyCount,
       fetchAllForLibrary,
       updateItem,
     ]
