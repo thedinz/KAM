@@ -15,11 +15,14 @@ function LibraryToolbar({
   onLast,
   countLabel,
   notReadyControl,
+  onViewNotReady = null,
+  notReadyCount = 0,
+  notReadyDisabled = false,
   children,
 }) {
-  const showNotReadyButton = Boolean(onViewNotReady);
+  const showNotReadyButton = typeof onViewNotReady === 'function';
   const notReadyDisplay = Number(notReadyCount) || 0;
-  const disableNotReady = notReadyDisabled || notReadyDisplay <= 0;
+  const disableNotReady = Boolean(notReadyDisabled) || notReadyDisplay <= 0;
   const notReadyTitle = disableNotReady
     ? 'No not-ready items to review yet.'
     : 'Show only items missing asset folders.';
