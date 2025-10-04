@@ -17,7 +17,6 @@ export function useLibraryItems({ initialLibrary } = {}) {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
-  const [notReadyCount, setNotReadyCount] = useState(0);
   const [items, setItems] = useState([]);
   const [query, setQuery] = useState('');
   const [notReadyOnly, setNotReadyOnlyState] = useState(false);
