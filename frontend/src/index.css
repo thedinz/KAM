@@ -382,6 +382,13 @@ main {
   color: var(--muted);
 }
 
+.folder-current {
+  margin: -4px 0 16px;
+  font-size: 13px;
+  color: var(--fg);
+  line-height: 1.4;
+}
+
 .breadcrumbs {
   display: flex;
   flex-wrap: wrap;
