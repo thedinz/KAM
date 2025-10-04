@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import FolderFinderModal from '../components/FolderFinderModal.jsx';
 import ImportStatusPanel from '../components/ImportStatusPanel.jsx';
 import ItemGrid from '../components/ItemGrid.jsx';
 import LibraryToolbar from '../components/LibraryToolbar.jsx';
-import { useLibraryItems } from '../hooks/useLibraryItems.js';
+import { useLibraryItemsContext } from '../hooks/LibraryItemsProvider.jsx';
 import { useTheme } from '../theme/ThemeProvider.jsx';
 import { responseErrorMessage, safeJson } from '../utils/api.js';
 import { isShowItem } from '../utils/items.js';
@@ -19,8 +19,9 @@ import {
 } from '../utils/importers.js';
 
 function LibraryPage() {
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const initialLibrary = searchParams.get('lib') || undefined;
+  const urlLibrary = searchParams.get('lib') || '';
   const {
     libraries,
     library,
@@ -37,7 +38,8 @@ function LibraryPage() {
     reload,
     fetchAllForLibrary,
     updateItem,
-  } = useLibraryItems({ initialLibrary });
+    notReadyCount,
+  } = useLibraryItemsContext();
 
   const { toggleTheme } = useTheme();
 
@@ -45,6 +47,13 @@ function LibraryPage() {
   const searchTimerRef = useRef();
 
   useEffect(() => setSearchInput(query || ''), [query]);
+
+  useEffect(() => {
+    if (!urlLibrary) return;
+    if (urlLibrary !== library) {
+      setLibrary(urlLibrary);
+    }
+  }, [urlLibrary, library, setLibrary]);
 
   useEffect(() => {
     if (!library) return;
@@ -69,6 +78,12 @@ function LibraryPage() {
   const handlePrev = useCallback(() => setPage(Math.max(1, page - 1)), [setPage, page]);
   const handleNext = useCallback(() => setPage(Math.min(totalPages || 1, page + 1)), [setPage, page, totalPages]);
   const handleLast = useCallback(() => setPage(totalPages || 1), [setPage, totalPages]);
+
+  const handleViewNotReady = useCallback(() => {
+    if (!library || !notReadyCount) return;
+    const encoded = encodeURIComponent(library);
+    navigate(`/libraries/${encoded}/not-ready`);
+  }, [library, notReadyCount, navigate]);
 
   const [importState, setImportState] = useState({ active: false, percent: 0, label: '', errors: [] });
   const hideTimerRef = useRef();
@@ -276,6 +291,9 @@ function LibraryPage() {
           onNext={handleNext}
           onLast={handleLast}
           countLabel={countLabel}
+          notReadyCount={notReadyCount}
+          onViewNotReady={handleViewNotReady}
+          notReadyDisabled={!library || notReadyCount <= 0}
         >
           <ImportStatusPanel
             active={importState.active}

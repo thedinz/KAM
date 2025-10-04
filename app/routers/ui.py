@@ -15,3 +15,9 @@ _SHOW_REACT = _WEB_DIR / "show-react.html"
 async def show_details_page(library: str, ratingKey: str):
     """Serve the dedicated React show shell so its bundle can hydrate."""
     return FileResponse(_SHOW_REACT)
+
+
+@router.get("/libraries/{library}/not-ready")
+async def not_ready_page(library: str):
+    """Serve the SPA shell for the not-ready view."""
+    return FileResponse(_SPA_INDEX)

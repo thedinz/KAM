@@ -21,6 +21,7 @@ export function useLibraryItems({ initialLibrary } = {}) {
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [notReadyCount, setNotReadyCount] = useState(0);
 
   const fetchAbort = useRef(null);
   const initialLibraryRef = useRef(initialLibrary);
@@ -97,6 +98,13 @@ export function useLibraryItems({ initialLibrary } = {}) {
         setItems(Array.isArray(data?.items) ? data.items : []);
         setTotalPages(data?.total_pages || 1);
         setTotalCount(data?.total_count || (Array.isArray(data?.items) ? data.items.length : 0));
+        const nextNotReady =
+          typeof data?.not_ready_count === 'number'
+            ? data.not_ready_count
+            : typeof data?.notReadyCount === 'number'
+            ? data.notReadyCount
+            : 0;
+        setNotReadyCount(nextNotReady);
       } catch (err) {
         if (err.name === 'AbortError') return;
         setItems([]);
@@ -134,6 +142,41 @@ export function useLibraryItems({ initialLibrary } = {}) {
   const reload = useCallback(() => {
     loadItems();
   }, [loadItems]);
+
+  const refreshNotReadyCount = useCallback(
+    async (targetLibrary) => {
+      const lib = targetLibrary ?? library;
+      if (!lib) return 0;
+      const normalized = lib.trim().toLowerCase();
+      const base = normalized === 'collections' ? '/collections' : '/api/items';
+      const params = new URLSearchParams();
+      if (base !== '/collections') {
+        params.set('library', lib);
+      }
+      params.set('page', '1');
+      params.set('page_size', '1');
+      try {
+        const response = await fetch(`${base}?${params.toString()}`);
+        if (!response.ok) {
+          const message = `${response.status} ${response.statusText}`;
+          throw new Error(message);
+        }
+        const data = await response.json();
+        const nextNotReady =
+          typeof data?.not_ready_count === 'number'
+            ? data.not_ready_count
+            : typeof data?.notReadyCount === 'number'
+            ? data.notReadyCount
+            : 0;
+        setNotReadyCount(nextNotReady);
+        return nextNotReady;
+      } catch (err) {
+        console.warn('Failed to refresh not-ready count', err);
+        return notReadyCount;
+      }
+    },
+    [library, notReadyCount]
+  );
 
   const fetchAllForLibrary = useCallback(
     async (lib, searchTerm) => {
@@ -208,6 +251,9 @@ export function useLibraryItems({ initialLibrary } = {}) {
       loading,
       error,
       reload,
+      notReadyCount,
+      setNotReadyCount,
+      refreshNotReadyCount,
       fetchAllForLibrary,
       updateItem,
       pageSize: PAGE_SIZE,
@@ -226,6 +272,9 @@ export function useLibraryItems({ initialLibrary } = {}) {
       loading,
       error,
       reload,
+      notReadyCount,
+      setNotReadyCount,
+      refreshNotReadyCount,
       fetchAllForLibrary,
       updateItem,
     ]
