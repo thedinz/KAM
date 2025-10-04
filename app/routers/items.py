@@ -128,6 +128,7 @@ def list_items(
     page: int = Query(1, ge=1),
     page_size: int = Query(60, ge=1, le=500),
     query: Optional[str] = Query(None),
+    not_ready_only: bool = Query(False, alias="not_ready_only"),
 ):
     """
     Prefer local poster.jpg via fileproxy if it actually exists; otherwise fall back to Plex thumb.
@@ -155,23 +156,19 @@ def list_items(
         })
     rows.sort(key=lambda x: x["title"].lower())
 
-    total_count = len(rows)
-    total_pages = max(1, (total_count + page_size - 1) // page_size)
-    page = min(max(1, page), total_pages)
-    start = (page - 1) * page_size
-    end = min(start + page_size, total_count)
-    page_rows = rows[start:end]
-
-    out: List[Dict[str, Any]] = []
-    for it in page_rows:
+    enriched: List[Dict[str, Any]] = []
+    not_ready_count = 0
+    for it in rows:
         override = folder_overrides.get_override(library, it["ratingKey"])
         folder = override or _try_existing_asset_folder(library, it["title"], it["year"])
         asset_ready = True if override else bool(folder)
+        if not asset_ready:
+            not_ready_count += 1
         if folder and _local_poster_exists(library, folder):
             poster = _fileproxy_poster_url(library, folder)   # <-- /fileproxy now
         else:
             poster = _plex_poster_url(it["ratingKey"], it["thumb"])
-        out.append({
+        enriched.append({
             "ratingKey": it["ratingKey"],
             "title": it["title"],
             "year": it["year"],
@@ -182,9 +179,22 @@ def list_items(
             "posterUrl": poster,
         })
 
+    if not_ready_only:
+        filtered_rows = [it for it in enriched if not it.get("assetReady")]
+    else:
+        filtered_rows = enriched
+
+    total_count = len(filtered_rows)
+    total_pages = max(1, (total_count + page_size - 1) // page_size)
+    page = min(max(1, page), total_pages)
+    start = (page - 1) * page_size
+    end = min(start + page_size, total_count)
+    page_rows = filtered_rows[start:end]
+
     return {
         "page": page,
         "total_pages": total_pages,
         "total_count": total_count,
-        "items": out,
+        "items": page_rows,
+        "not_ready_count": not_ready_count,
     }

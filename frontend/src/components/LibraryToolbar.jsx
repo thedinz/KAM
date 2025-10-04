@@ -14,6 +14,7 @@ function LibraryToolbar({
   onNext,
   onLast,
   countLabel,
+  notReadyControl,
   children,
 }) {
   return (
@@ -76,6 +77,8 @@ function LibraryToolbar({
       <span className="count-label" id="count">
         {countLabel}
       </span>
+
+      {notReadyControl}
 
       {children}
     </div>
