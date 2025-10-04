@@ -125,6 +125,7 @@ def collections(
     query: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(60, ge=1, le=200),
+    not_ready_only: bool = Query(False, alias="not_ready_only"),
 ):
     plex = get_plex()
     rows: List[Dict[str, Any]] = []
@@ -202,6 +203,11 @@ def collections(
         q = query.lower()
         items = [i for i in items if q in (i.get("title") or "").lower()]
 
+    not_ready_count = sum(1 for i in items if not i.get("assetReady"))
+
+    if not_ready_only:
+        items = [i for i in items if not i.get("assetReady")]
+
     # Paginate
     total = len(items)
     pages = max(1, ceil(total / page_size))
@@ -216,4 +222,5 @@ def collections(
         "total_count": total,
         "total_pages": pages,
         "items": items[start:end],
+        "not_ready_count": not_ready_count,
     }
