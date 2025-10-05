@@ -35,7 +35,6 @@ function LibraryPage() {
     query,
     setQuery,
     notReadyOnly,
-    setNotReadyOnly,
     loading,
     error,
     reload,
@@ -83,10 +82,6 @@ function LibraryPage() {
   const handlePrev = useCallback(() => setPage(Math.max(1, page - 1)), [setPage, page]);
   const handleNext = useCallback(() => setPage(Math.min(totalPages || 1, page + 1)), [setPage, page, totalPages]);
   const handleLast = useCallback(() => setPage(totalPages || 1), [setPage, totalPages]);
-
-  const handleToggleNotReady = useCallback(() => {
-    setNotReadyOnly((prev) => !prev);
-  }, [setNotReadyOnly]);
 
   const handleViewNotReady = useCallback(() => {
     if (!library) return;
@@ -281,25 +276,6 @@ function LibraryPage() {
       : 'Import all posters/backgrounds (and TV seasons) from Plex into Kometa asset folders'
     : 'Choose a library first.';
 
-  const notReadyControl = useMemo(() => {
-    if (!library && !notReadyOnly) return null;
-    const disabled = !library || (!notReadyCount && !notReadyOnly);
-    const label = `Show items missing asset folders (${notReadyCount})`;
-    return (
-      <button
-        type="button"
-        className={`ready-badge not-ready${notReadyOnly ? ' active' : ''}`}
-        onClick={handleToggleNotReady}
-        aria-pressed={notReadyOnly}
-        disabled={disabled}
-        title={label}
-        data-active={notReadyOnly || undefined}
-      >
-        Not Ready {notReadyCount}
-      </button>
-    );
-  }, [library, notReadyCount, notReadyOnly, handleToggleNotReady]);
-
   const notReadyButtonDisabled = !library || (Number(notReadyCount) || 0) <= 0;
 
   return (
@@ -322,7 +298,6 @@ function LibraryPage() {
           onNext={handleNext}
           onLast={handleLast}
           countLabel={countLabel}
-          notReadyControl={notReadyControl}
           onViewNotReady={handleViewNotReady}
           notReadyCount={notReadyCount}
           notReadyDisabled={notReadyButtonDisabled}
