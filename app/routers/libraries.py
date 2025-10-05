@@ -9,10 +9,14 @@ Env format (in your .env):
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Dict, List, Optional
 
-from ..services import library_mappings as library_mappings_service
+from ..services import (
+    kometa_config as kometa_config_service,
+    library_mappings as library_mappings_service,
+    settings as settings_service,
+)
 
 router = APIRouter()
 
@@ -100,18 +104,15 @@ class LibrarySectionInfo(BaseModel):
     key: Optional[str] = None
     assetPath: Optional[str] = None
     collectionsPath: Optional[str] = None
+    collectionAssetPaths: List[str] = Field(default_factory=list)
 
 
 @router.get("/api/settings/libraries", response_model=List[LibrarySectionInfo])
 def list_available_libraries() -> List[LibrarySectionInfo]:
     """Return Plex libraries alongside any stored mapping metadata."""
-    from ..services import (
-        library_mappings as library_mappings_service,
-        plex_settings,
-    )
+    from ..services import plex_settings
     from ..services.plex import get_plex
 
-    # Ensure Plex credentials are available (raises HTTPException when invalid)
     plex_settings.get_plex_config()
 
     plex = get_plex()
@@ -123,6 +124,14 @@ def list_available_libraries() -> List[LibrarySectionInfo]:
     stored = library_mappings_service.load_library_mappings()
     mappings = library_mappings_service.sanitize_library_mappings(stored)
     mapping_lookup = {item["library"]: item for item in mappings}
+
+    settings_payload = settings_service.load_settings()
+    config_path = (
+        settings_payload.get("kometaConfigPath")
+        if isinstance(settings_payload, dict)
+        else ""
+    )
+    config_summaries = kometa_config_service.load_library_summaries(config_path)
 
     results: List[LibrarySectionInfo] = []
     for section in sections:
@@ -140,11 +149,48 @@ def list_available_libraries() -> List[LibrarySectionInfo]:
             "key": key_str,
             "assetPath": None,
             "collectionsPath": None,
+            "collectionAssetPaths": [],
         }
         mapping = mapping_lookup.get(name)
         if mapping:
             entry["assetPath"] = mapping.get("assetPath") or None
             entry["collectionsPath"] = mapping.get("collectionsPath") or None
+
+        config_info = config_summaries.get(name)
+        if config_info:
+            config_asset = config_info.get("assetPath")
+            if config_asset and not entry["assetPath"]:
+                entry["assetPath"] = config_asset
+
+            suggestions: List[str] = []
+            if entry["collectionsPath"]:
+                suggestions.append(entry["collectionsPath"])
+            suggestions.extend(config_info.get("collectionsPaths") or [])
+
+            deduped: List[str] = []
+            for path in suggestions:
+                if path and path not in deduped:
+                    deduped.append(path)
+
+            entry["collectionAssetPaths"] = deduped
+            if not entry["collectionsPath"] and deduped:
+                entry["collectionsPath"] = deduped[0]
+
+        results.append(LibrarySectionInfo(**entry))
+
+    seen_names = {item.name for item in results}
+    for name, info in config_summaries.items():
+        if name in seen_names:
+            continue
+        suggestions = [path for path in info.get("collectionsPaths", []) if path]
+        entry = {
+            "name": name,
+            "type": "config",
+            "key": None,
+            "assetPath": info.get("assetPath"),
+            "collectionsPath": suggestions[0] if suggestions else None,
+            "collectionAssetPaths": suggestions,
+        }
         results.append(LibrarySectionInfo(**entry))
 
     results.sort(key=lambda item: (item.name.lower(), item.key or ""))
