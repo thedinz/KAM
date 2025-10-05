@@ -118,6 +118,7 @@ docker run -d \
   -p 7171:8000 \
   -v /mnt/user/kometa/assets:/assets \
   -v /mnt/user/kometa/config:/config:ro \
+  -e KOMETA_CONFIG_PATH=/config/config.yml \
   ghcr.io/thedinz/kam:latest
 ```
 
@@ -136,6 +137,8 @@ services:
     container_name: kam
     ports:
       - "7171:8000"
+    environment:
+      KOMETA_CONFIG_PATH: /config/config.yml
     volumes:
       - /mnt/user/kometa/assets:/assets
       - /mnt/user/kometa/config:/config:ro
@@ -161,6 +164,9 @@ PLEX_TOKEN=CHANGE_ME
 # Map Plex libraries to asset folders inside container
 # e.g. Movies:/assets/Movies,Kids Movies:/assets/Kids Movies
 LIBRARIES=Movies:/assets/Movies,Kids Movies:/assets/Kids Movies
+
+# Optional: Path to your Kometa config inside the container
+KOMETA_CONFIG_PATH=/config/config.yml
 
 # Runtime
 PORT=8000
