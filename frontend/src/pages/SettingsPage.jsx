@@ -1,6 +1,47 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
+import FolderFinderModal from '../components/FolderFinderModal.jsx';
 import { useTheme } from '../theme/ThemeProvider.jsx';
+
+const initialModalState = {
+  open: false,
+  libraries: [],
+  primaryLibrary: '',
+  intent: 'asset',
+  defaultTarget: 'asset',
+  initialAssetPath: '',
+  initialCollectionsPath: '',
+};
+
+const normalizeText = (value) => {
+  if (value == null) return '';
+  const text = String(value).trim();
+  return text;
+};
+
+const canonicalizeMappings = (raw) => {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((entry) => ({
+      library: normalizeText(entry?.library ?? entry?.name),
+      assetPath: normalizeText(entry?.assetPath),
+      collectionsPath: normalizeText(entry?.collectionsPath),
+    }))
+    .filter((entry) => entry.library && entry.assetPath)
+    .sort((a, b) => a.library.localeCompare(b.library));
+};
+
+const areMappingsEqual = (left, right) => {
+  const a = canonicalizeMappings(left);
+  const b = canonicalizeMappings(right);
+  if (a.length !== b.length) return false;
+  return a.every(
+    (entry, index) =>
+      entry.library === b[index].library &&
+      entry.assetPath === b[index].assetPath &&
+      normalizeText(entry.collectionsPath) === normalizeText(b[index].collectionsPath)
+  );
+};
 
 function SettingsPage() {
   const {
@@ -9,6 +50,11 @@ function SettingsPage() {
     plexUrl,
     plexToken,
     savedSettings,
+    libraryMappings,
+    savedLibraryMappings,
+    libraries,
+    librariesLoading,
+    librariesError,
     loading,
     saving,
     error,
@@ -16,8 +62,16 @@ function SettingsPage() {
     updateSettings,
     saveSettings,
     revertSettings,
+    refreshLibraries,
+    setLibraryMapping,
+    setLibraryMappings,
   } = useTheme();
+
   const [status, setStatus] = useState(null);
+  const [selectedLibraries, setSelectedLibraries] = useState([]);
+  const [modalState, setModalState] = useState(initialModalState);
+  const selectAllRef = useRef(null);
+
   const savedPlexUrl = savedSettings?.plexUrl || '';
   const savedPlexToken = savedSettings?.plexToken || '';
 
@@ -27,16 +81,111 @@ function SettingsPage() {
     }
   }, [error]);
 
+  useEffect(() => {
+    if (librariesError) {
+      setStatus({ type: 'error', message: librariesError });
+    }
+  }, [librariesError]);
+
   const busy = loading || saving;
+  const combinedBusy = busy || librariesLoading;
+
+  const libraryRows = useMemo(() => {
+    const infoMap = new Map(
+      (Array.isArray(libraries) ? libraries : []).map((entry) => [
+        normalizeText(entry.name),
+        {
+          name: normalizeText(entry.name),
+          type: normalizeText(entry.type),
+          key: normalizeText(entry.key),
+          assetPath: normalizeText(entry.assetPath),
+          collectionsPath: normalizeText(entry.collectionsPath),
+        },
+      ])
+    );
+    const currentMap = new Map(
+      canonicalizeMappings(libraryMappings).map((entry) => [entry.library, entry])
+    );
+    const savedMap = new Map(
+      canonicalizeMappings(savedLibraryMappings).map((entry) => [entry.library, entry])
+    );
+    const names = new Set([
+      ...infoMap.keys(),
+      ...currentMap.keys(),
+      ...savedMap.keys(),
+    ]);
+
+    return Array.from(names)
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b))
+      .map((name) => {
+        const info = infoMap.get(name) || { name, type: '', key: '', assetPath: '', collectionsPath: '' };
+        const current = currentMap.get(name);
+        const saved = savedMap.get(name);
+        const assetPath = normalizeText(current?.assetPath ?? info.assetPath);
+        const collectionsPath = normalizeText(current?.collectionsPath ?? info.collectionsPath);
+        const savedAssetPath = normalizeText(saved?.assetPath ?? info.assetPath);
+        const savedCollectionsPath = normalizeText(saved?.collectionsPath ?? info.collectionsPath);
+        const isDirty =
+          assetPath !== savedAssetPath || normalizeText(collectionsPath) !== normalizeText(savedCollectionsPath);
+        return {
+          name,
+          type: info.type,
+          key: info.key,
+          assetPath,
+          collectionsPath,
+          savedAssetPath,
+          savedCollectionsPath,
+          isDirty,
+        };
+      });
+  }, [libraries, libraryMappings, savedLibraryMappings]);
+
+  const libraryRowMap = useMemo(() => new Map(libraryRows.map((row) => [row.name, row])), [libraryRows]);
+
+  useEffect(() => {
+    if (!selectAllRef.current) return;
+    const total = libraryRows.length;
+    const selected = selectedLibraries.length;
+    selectAllRef.current.indeterminate = selected > 0 && selected < total;
+  }, [selectedLibraries, libraryRows.length]);
+
+  useEffect(() => {
+    const available = new Set(libraryRows.map((row) => row.name));
+    setSelectedLibraries((prev) => {
+      const filtered = prev.filter((name) => available.has(name));
+      if (
+        filtered.length === prev.length &&
+        filtered.every((name, index) => name === prev[index])
+      ) {
+        return prev;
+      }
+      return filtered;
+    });
+  }, [libraryRows]);
+
+  const mappingsDirty = useMemo(
+    () => !areMappingsEqual(libraryMappings, savedLibraryMappings),
+    [libraryMappings, savedLibraryMappings]
+  );
+
   const isDirty = useMemo(() => {
     return (
-      theme !== savedTheme || plexUrl !== savedPlexUrl || plexToken !== savedPlexToken
+      theme !== savedTheme ||
+      plexUrl !== savedPlexUrl ||
+      plexToken !== savedPlexToken ||
+      mappingsDirty
     );
-  }, [theme, savedTheme, plexUrl, savedPlexUrl, plexToken, savedPlexToken]);
+  }, [theme, savedTheme, plexUrl, savedPlexUrl, plexToken, savedPlexToken, mappingsDirty]);
+
+  const selectedRows = selectedLibraries
+    .map((name) => libraryRowMap.get(name))
+    .filter(Boolean);
+  const selectionHasAsset = selectedRows.length > 0 && selectedRows.every((row) => row.assetPath);
+  const selectionHasCollections = selectedRows.some((row) => row.collectionsPath);
 
   const handleThemeChange = (event) => {
-    const next = event.target.value;
-    applyTheme(next);
+    applyTheme(event.target.value);
     setStatus(null);
   };
 
@@ -48,6 +197,199 @@ function SettingsPage() {
   const handlePlexTokenChange = (event) => {
     updateSettings({ plexToken: event.target.value });
     setStatus(null);
+  };
+
+  const handleToggleLibrary = (libraryName) => {
+    setStatus(null);
+    setSelectedLibraries((prev) =>
+      prev.includes(libraryName)
+        ? prev.filter((item) => item !== libraryName)
+        : [...prev, libraryName]
+    );
+  };
+
+  const handleToggleAll = (event) => {
+    setStatus(null);
+    if (event.target.checked) {
+      setSelectedLibraries(libraryRows.map((row) => row.name));
+    } else {
+      setSelectedLibraries([]);
+    }
+  };
+
+  const closeModal = () => {
+    setModalState(initialModalState);
+  };
+
+  const openModal = (librariesList, intent, defaultTarget) => {
+    const uniqueNames = Array.from(new Set(librariesList.map((name) => normalizeText(name)).filter(Boolean)));
+    if (!uniqueNames.length) {
+      setStatus({ type: 'error', message: 'Select at least one library first.' });
+      return;
+    }
+    const primary = uniqueNames[0];
+    const primaryRow = libraryRowMap.get(primary);
+    setStatus(null);
+    setModalState({
+      open: true,
+      libraries: uniqueNames,
+      primaryLibrary: primary,
+      intent: intent || 'asset',
+      defaultTarget: defaultTarget || (intent === 'collections' ? 'collections' : 'asset'),
+      initialAssetPath: primaryRow?.assetPath || '',
+      initialCollectionsPath: primaryRow?.collectionsPath || '',
+    });
+  };
+
+  const handleModalConfirm = (values, meta = {}) => {
+    const target = modalState.intent || 'asset';
+    const names = modalState.libraries;
+    const assetPath = normalizeText(values?.assetPath);
+    const collectionsPath =
+      values?.collectionsPath === undefined ? undefined : normalizeText(values.collectionsPath);
+
+    if (!names.length) {
+      closeModal();
+      return;
+    }
+
+    if (target !== 'collections' && !assetPath) {
+      setStatus({ type: 'error', message: 'Select an asset folder before applying changes.' });
+      return;
+    }
+    if (target !== 'asset' && collectionsPath === undefined) {
+      setStatus({ type: 'error', message: 'Select a collections folder before applying changes.' });
+      return;
+    }
+
+    if (target === 'collections') {
+      setLibraryMappings(names, { collectionsPath });
+      setStatus({
+        type: 'success',
+        message:
+          names.length > 1
+            ? `Updated collections folders for ${names.length} libraries.`
+            : `Updated collections folder for ${names[0]}.`,
+      });
+    } else {
+      const updates = collectionsPath === undefined ? { assetPath } : { assetPath, collectionsPath };
+      setLibraryMappings(names, updates);
+      const folderName = meta?.assetSelection?.name || meta?.assetSelection?.path || assetPath;
+      setStatus({
+        type: 'success',
+        message:
+          names.length > 1
+            ? `Applied ${folderName || 'selected folder'} to ${names.length} libraries.`
+            : `Updated asset folder for ${names[0]}.`,
+      });
+    }
+
+    closeModal();
+  };
+
+  const handleOpenAssetModal = (libraryName) => {
+    openModal([libraryName], 'asset', 'asset');
+  };
+
+  const handleOpenCollectionsModal = (libraryName) => {
+    const row = libraryRowMap.get(libraryName);
+    if (!row?.assetPath) {
+      setStatus({
+        type: 'error',
+        message: `${libraryName} needs an asset folder before setting a collections folder.`,
+      });
+      return;
+    }
+    openModal([libraryName], 'collections', 'collections');
+  };
+
+  const handleApplyAssetToSelection = () => {
+    if (!selectedLibraries.length) {
+      setStatus({ type: 'error', message: 'Select one or more libraries first.' });
+      return;
+    }
+    openModal(selectedLibraries, 'asset', 'asset');
+  };
+
+  const handleApplyCollectionsToSelection = () => {
+    if (!selectedLibraries.length) {
+      setStatus({ type: 'error', message: 'Select one or more libraries first.' });
+      return;
+    }
+    if (!selectionHasAsset) {
+      setStatus({
+        type: 'error',
+        message: 'All selected libraries need asset folders before setting collections folders.',
+      });
+      return;
+    }
+    openModal(selectedLibraries, 'collections', 'collections');
+  };
+
+  const handleClearCollections = (libraryName) => {
+    const row = libraryRowMap.get(libraryName);
+    if (!row?.assetPath) {
+      setStatus({
+        type: 'error',
+        message: `${libraryName} must have an asset folder before clearing collections.`,
+      });
+      return;
+    }
+    setLibraryMapping(libraryName, { collectionsPath: '' });
+    setStatus({
+      type: 'success',
+      message: `Cleared collections folder for ${libraryName}.`,
+    });
+  };
+
+  const handleClearCollectionsSelected = () => {
+    if (!selectionHasCollections) {
+      setStatus({ type: 'error', message: 'Select libraries with collections folders to clear.' });
+      return;
+    }
+    const rowsToClear = selectedRows.filter((row) => row.collectionsPath);
+    rowsToClear.forEach((row) => {
+      setLibraryMapping(row.name, { collectionsPath: '' });
+    });
+    setStatus({
+      type: 'success',
+      message: `Cleared collections folders for ${rowsToClear.length} libraries.`,
+    });
+  };
+
+  const handleClearMapping = (libraryName) => {
+    const row = libraryRowMap.get(libraryName);
+    if (!row?.assetPath) {
+      setStatus({ type: 'error', message: `${libraryName} does not have an asset folder to clear.` });
+      return;
+    }
+    setLibraryMapping(libraryName, { assetPath: '', collectionsPath: '' });
+    setStatus({ type: 'success', message: `Cleared mapping for ${libraryName}.` });
+  };
+
+  const handleClearMappingsSelected = () => {
+    const rowsToClear = selectedRows.filter((row) => row.assetPath);
+    if (!rowsToClear.length) {
+      setStatus({ type: 'error', message: 'Select libraries with asset folders to clear mappings.' });
+      return;
+    }
+    rowsToClear.forEach((row) => {
+      setLibraryMapping(row.name, { assetPath: '', collectionsPath: '' });
+    });
+    setStatus({
+      type: 'success',
+      message: `Cleared mappings for ${rowsToClear.length} libraries.`,
+    });
+  };
+
+  const handleRefreshLibraries = async () => {
+    setStatus(null);
+    try {
+      await refreshLibraries();
+      setStatus({ type: 'success', message: 'Plex libraries refreshed.' });
+    } catch (err) {
+      setStatus({ type: 'error', message: err?.message || 'Failed to refresh libraries.' });
+    }
   };
 
   const handleSubmit = async (event) => {
@@ -65,6 +407,12 @@ function SettingsPage() {
       revertSettings();
       setStatus({ type: 'error', message });
     }
+  };
+
+  const handleRevert = () => {
+    revertSettings();
+    setSelectedLibraries([]);
+    setStatus({ type: 'success', message: 'Changes reverted.' });
   };
 
   return (
@@ -139,19 +487,182 @@ function SettingsPage() {
               <button type="submit" className="btn" disabled={busy || !isDirty}>
                 Save Changes
               </button>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={handleRevert}
+                disabled={busy || !isDirty}
+              >
+                Revert
+              </button>
             </div>
           </form>
-          {status ? (
-            <div
-              className={`settings-status ${status.type}`}
-              role={status.type === 'error' ? 'alert' : 'status'}
-              aria-live="polite"
-            >
-              {status.message}
-            </div>
-          ) : null}
         </section>
+
+        <section className="settings-card">
+          <h2>Plex Libraries</h2>
+          <p className="settings-description">
+            Map Plex libraries to asset folders. Use the controls below to assign folders, apply paths to
+            multiple libraries, and manage optional collections folders.
+          </p>
+          <div className="settings-libraries-toolbar">
+            <div className="settings-libraries-group">
+              <button
+                type="button"
+                onClick={handleApplyAssetToSelection}
+                disabled={!selectedLibraries.length || combinedBusy}
+              >
+                Set asset folder for selected
+              </button>
+              <button
+                type="button"
+                onClick={handleApplyCollectionsToSelection}
+                disabled={!selectedLibraries.length || !selectionHasAsset || combinedBusy}
+              >
+                Set collections folder for selected
+              </button>
+              <button
+                type="button"
+                onClick={handleClearCollectionsSelected}
+                disabled={!selectionHasCollections || combinedBusy}
+              >
+                Clear collections folders
+              </button>
+              <button
+                type="button"
+                onClick={handleClearMappingsSelected}
+                disabled={!selectedRows.some((row) => row.assetPath) || combinedBusy}
+              >
+                Clear mappings
+              </button>
+            </div>
+            <div className="settings-libraries-group">
+              <button type="button" onClick={handleRefreshLibraries} disabled={combinedBusy}>
+                {librariesLoading ? 'Refreshing…' : 'Refresh libraries'}
+              </button>
+            </div>
+          </div>
+          <div className="settings-libraries-table-wrapper" aria-live="polite">
+            {librariesLoading ? <p className="settings-libraries-status">Loading libraries…</p> : null}
+            {!librariesLoading && !libraryRows.length ? (
+              <p className="settings-libraries-status">No libraries are available. Configure Plex and refresh.</p>
+            ) : null}
+            {libraryRows.length ? (
+              <table className="settings-libraries-table">
+                <thead>
+                  <tr>
+                    <th scope="col" className="library-select">
+                      <input
+                        type="checkbox"
+                        ref={selectAllRef}
+                        checked={libraryRows.length > 0 && selectedLibraries.length === libraryRows.length}
+                        onChange={handleToggleAll}
+                        disabled={!libraryRows.length || combinedBusy}
+                        aria-label="Select all libraries"
+                      />
+                    </th>
+                    <th scope="col">Library</th>
+                    <th scope="col">Asset folder</th>
+                    <th scope="col">Collections folder</th>
+                    <th scope="col">Status</th>
+                    <th scope="col" className="library-actions">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {libraryRows.map((row) => {
+                    const isSelected = selectedLibraries.includes(row.name);
+                    return (
+                      <tr key={row.name} className={row.isDirty ? 'is-dirty' : undefined}>
+                        <td className="library-select">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => handleToggleLibrary(row.name)}
+                            disabled={combinedBusy}
+                            aria-label={`Select ${row.name}`}
+                          />
+                        </td>
+                        <th scope="row">
+                          <div className="library-name">{row.name}</div>
+                          <div className="library-meta">
+                            {row.type ? <span className="library-tag">{row.type}</span> : null}
+                            {row.key ? <span className="library-tag">Key {row.key}</span> : null}
+                          </div>
+                        </th>
+                        <td>
+                          {row.assetPath ? <code>{row.assetPath}</code> : <span className="placeholder">Not set</span>}
+                        </td>
+                        <td>
+                          {row.collectionsPath ? (
+                            <code>{row.collectionsPath}</code>
+                          ) : (
+                            <span className="placeholder">Not set</span>
+                          )}
+                        </td>
+                        <td>
+                          {row.isDirty ? <span className="status-unsaved">Unsaved changes</span> : <span>Saved</span>}
+                        </td>
+                        <td className="library-actions">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenAssetModal(row.name)}
+                            disabled={combinedBusy}
+                          >
+                            Set asset folder
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenCollectionsModal(row.name)}
+                            disabled={combinedBusy || !row.assetPath}
+                          >
+                            Set collections folder
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleClearCollections(row.name)}
+                            disabled={combinedBusy || !row.collectionsPath}
+                          >
+                            Clear collections
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleClearMapping(row.name)}
+                            disabled={combinedBusy || !row.assetPath}
+                          >
+                            Clear mapping
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            ) : null}
+          </div>
+        </section>
+
+        {status ? (
+          <div
+            className={`settings-status ${status.type}`}
+            role={status.type === 'error' ? 'alert' : 'status'}
+            aria-live="polite"
+          >
+            {status.message}
+          </div>
+        ) : null}
       </main>
+      <FolderFinderModal
+        isOpen={modalState.open}
+        context="settings"
+        library={modalState.primaryLibrary}
+        settingsLibraries={modalState.libraries}
+        defaultTarget={modalState.defaultTarget}
+        settingsIntent={modalState.intent}
+        initialAssetPath={modalState.initialAssetPath}
+        initialCollectionsPath={modalState.initialCollectionsPath}
+        onClose={closeModal}
+        onSettingsConfirm={handleModalConfirm}
+      />
     </div>
   );
 }

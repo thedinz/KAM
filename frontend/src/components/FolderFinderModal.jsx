@@ -30,11 +30,54 @@ function makeBreadcrumbs(currentPath, query) {
   return crumbs;
 }
 
-function FolderFinderModal({ isOpen, library, item, onClose, onFolderAssigned }) {
-  const effectiveLibrary = item?.library || library;
+const normalizeText = (value) => {
+  if (value == null) return '';
+  const text = String(value).trim();
+  return text;
+};
+
+const formatLibraryList = (libraries) => {
+  if (!libraries?.length) return 'No libraries selected';
+  if (libraries.length === 1) return libraries[0];
+  if (libraries.length === 2) return `${libraries[0]} and ${libraries[1]}`;
+  const [first, second, ...rest] = libraries;
+  return `${first}, ${second}, +${rest.length} more`;
+};
+
+function FolderFinderModal({
+  isOpen,
+  library,
+  item,
+  onClose,
+  onFolderAssigned,
+  context = 'library',
+  settingsLibraries = [],
+  defaultTarget = 'asset',
+  settingsIntent = 'asset',
+  initialAssetPath = '',
+  initialCollectionsPath = '',
+  onSettingsConfirm,
+}) {
+  const isSettingsMode = context === 'settings';
+  const normalizedInitialAsset = normalizeText(initialAssetPath);
+  const normalizedInitialCollections = normalizeText(initialCollectionsPath);
+  const effectiveLibrary = useMemo(() => {
+    if (isSettingsMode) {
+      const provided = normalizeText(library);
+      if (provided) return provided;
+      const first = settingsLibraries.map(normalizeText).find((name) => name);
+      if (first) return first;
+    }
+    const fromItem = normalizeText(item?.library);
+    if (fromItem) return fromItem;
+    return normalizeText(library);
+  }, [isSettingsMode, library, settingsLibraries, item]);
   const [currentPath, setCurrentPath] = useState('');
   const [results, setResults] = useState([]);
   const [selection, setSelection] = useState(null);
+  const [assetSelection, setAssetSelection] = useState(null);
+  const [collectionsSelection, setCollectionsSelection] = useState(null);
+  const [target, setTarget] = useState(defaultTarget === 'collections' ? 'collections' : 'asset');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [searchInput, setSearchInput] = useState('');
@@ -52,21 +95,71 @@ function FolderFinderModal({ isOpen, library, item, onClose, onFolderAssigned })
     setSearchInput('');
     setSearchTerm('');
     setSelection(null);
+    setAssetSelection(null);
+    setCollectionsSelection(null);
     setError('');
-    const initialFolder = item?.folderName || item?.folder || '';
-    setCurrentFolder(initialFolder || '');
-  }, [isOpen, effectiveLibrary, item]);
+    if (isSettingsMode) {
+      const initial =
+        defaultTarget === 'collections'
+          ? normalizedInitialCollections
+          : normalizedInitialAsset;
+      setCurrentFolder(initial || '');
+    } else {
+      const initialFolder = item?.folderName || item?.folder || '';
+      setCurrentFolder(normalizeText(initialFolder));
+    }
+  }, [
+    isOpen,
+    effectiveLibrary,
+    item,
+    isSettingsMode,
+    defaultTarget,
+    normalizedInitialAsset,
+    normalizedInitialCollections,
+  ]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setTarget(defaultTarget === 'collections' ? 'collections' : 'asset');
+  }, [isOpen, defaultTarget]);
+
+  useEffect(() => {
+    if (!isOpen || !isSettingsMode) return;
+    if (target === 'collections') {
+      const text = normalizeText(collectionsSelection?.path ?? normalizedInitialCollections);
+      setCurrentFolder(text || '');
+    } else {
+      const text = normalizeText(assetSelection?.path ?? normalizedInitialAsset);
+      setCurrentFolder(text || '');
+    }
+  }, [
+    isOpen,
+    isSettingsMode,
+    target,
+    assetSelection,
+    collectionsSelection,
+    normalizedInitialAsset,
+    normalizedInitialCollections,
+  ]);
 
   const loadFolders = useCallback(
     async ({ path = '', query = '', preserveSelection = false } = {}) => {
       if (!effectiveLibrary) {
         setResults([]);
-        setError('No library mapping available for this item.');
+        setError(isSettingsMode ? 'Select a library before browsing folders.' : 'No library mapping available for this item.');
         return;
       }
       setLoading(true);
       if (!preserveSelection) {
-        setSelection(null);
+        if (isSettingsMode) {
+          if (target === 'collections') {
+            setCollectionsSelection(null);
+          } else {
+            setAssetSelection(null);
+          }
+        } else {
+          setSelection(null);
+        }
       }
       setError('');
       setIsSearching(Boolean(query));
@@ -98,7 +191,7 @@ function FolderFinderModal({ isOpen, library, item, onClose, onFolderAssigned })
         setLoading(false);
       }
     },
-    [effectiveLibrary]
+    [effectiveLibrary, isSettingsMode, target]
   );
 
   useEffect(() => {
@@ -120,16 +213,32 @@ function FolderFinderModal({ isOpen, library, item, onClose, onFolderAssigned })
     loadFolders({ path: currentPath, query: searchTerm, preserveSelection: false });
   }, [searchTerm, isOpen, currentPath, loadFolders]);
 
-  const breadcrumbs = useMemo(() => makeBreadcrumbs(currentPath, isSearching ? searchTerm : ''), [currentPath, isSearching, searchTerm]);
+  const breadcrumbs = useMemo(
+    () => makeBreadcrumbs(currentPath, isSearching ? searchTerm : ''),
+    [currentPath, isSearching, searchTerm]
+  );
 
   const contextLabel = useMemo(() => {
+    if (isSettingsMode) {
+      return `Libraries: ${formatLibraryList(settingsLibraries)}`;
+    }
     const title = item?.title || item?.name || '(Untitled)';
     if (!effectiveLibrary) return title;
     return `Library: ${effectiveLibrary} • Item: ${title}`;
-  }, [effectiveLibrary, item]);
+  }, [isSettingsMode, settingsLibraries, item, effectiveLibrary]);
+
+  const displayCurrentFolder = currentFolder ? currentFolder : '';
 
   const handleSelect = (entry) => {
-    setSelection(entry);
+    if (isSettingsMode) {
+      if (target === 'collections') {
+        setCollectionsSelection(entry);
+      } else {
+        setAssetSelection(entry);
+      }
+    } else {
+      setSelection(entry);
+    }
     setError('');
   };
 
@@ -146,9 +255,53 @@ function FolderFinderModal({ isOpen, library, item, onClose, onFolderAssigned })
     setSearchTerm('');
   };
 
+  const resolvedAssetPath = assetSelection?.path || normalizedInitialAsset;
+  const resolvedCollectionsPath = collectionsSelection?.path || normalizedInitialCollections;
+  const requireAsset = settingsIntent !== 'collections';
+  const requireCollections = settingsIntent === 'collections';
+  const canConfirmSettings = (
+    (!requireAsset || Boolean(resolvedAssetPath)) &&
+    (!requireCollections || Boolean(resolvedCollectionsPath))
+  );
+
+  const activeSelection = isSettingsMode
+    ? target === 'collections'
+      ? collectionsSelection
+      : assetSelection
+    : selection;
+
   const handleConfirm = async (event) => {
     event.preventDefault();
-    if (!selection) {
+    if (isSettingsMode) {
+      if (!onSettingsConfirm) {
+        onClose?.();
+        return;
+      }
+      if (requireAsset && !resolvedAssetPath) {
+        setError('Select an asset folder before confirming.');
+        return;
+      }
+      if (requireCollections && !resolvedCollectionsPath) {
+        setError('Select a collections folder before confirming.');
+        return;
+      }
+      const payload = {};
+      if (requireAsset && resolvedAssetPath) {
+        payload.assetPath = resolvedAssetPath;
+      } else if (!requireAsset && assetSelection?.path) {
+        payload.assetPath = assetSelection.path;
+      }
+      if (settingsIntent !== 'asset') {
+        if (requireCollections && resolvedCollectionsPath) {
+          payload.collectionsPath = resolvedCollectionsPath;
+        } else if (!requireCollections && collectionsSelection?.path) {
+          payload.collectionsPath = collectionsSelection.path;
+        }
+      }
+      onSettingsConfirm(payload, { assetSelection, collectionsSelection });
+      return;
+    }
+    if (!activeSelection) {
       setError('Select a folder before confirming.');
       return;
     }
@@ -159,7 +312,7 @@ function FolderFinderModal({ isOpen, library, item, onClose, onFolderAssigned })
     const ratingKey = item?.ratingKey ?? item?.key ?? item?.id;
     const payload = {
       library: effectiveLibrary,
-      folderName: selection.name,
+      folderName: activeSelection.name,
     };
     if (ratingKey != null) {
       payload.ratingKey = String(ratingKey);
@@ -177,8 +330,8 @@ function FolderFinderModal({ isOpen, library, item, onClose, onFolderAssigned })
         const message = data?.detail || data?.error || `${response.status} ${response.statusText}`;
         throw new Error(message);
       }
-      const folderName = data?.folderName || selection.name;
-      onFolderAssigned?.({ folderName, details: data, selection });
+      const folderName = data?.folderName || activeSelection.name;
+      onFolderAssigned?.({ folderName, details: data, selection: activeSelection });
     } catch (err) {
       setError(err.message || 'Failed to assign folder');
     } finally {
@@ -195,12 +348,41 @@ function FolderFinderModal({ isOpen, library, item, onClose, onFolderAssigned })
       <div className="dialog-panel folder-dlg" role="dialog" aria-modal="true" aria-labelledby="folderFinderHeading">
         <form onSubmit={handleConfirm}>
           <div className="dialog-body">
-            <h2 id="folderFinderHeading">Select Asset Folder</h2>
+            <h2 id="folderFinderHeading">
+              {isSettingsMode ? 'Select Library Folder' : 'Select Asset Folder'}
+            </h2>
             <p className="folder-context">{contextLabel}</p>
             <p className="folder-current" aria-live="polite">
-              Current folder:{' '}
-              {currentFolder ? <strong>{currentFolder}</strong> : <span>Not assigned</span>}
+              {isSettingsMode ? (
+                <>
+                  Current {target === 'collections' ? 'collections' : 'asset'} folder:{' '}
+                  {displayCurrentFolder ? <strong>{displayCurrentFolder}</strong> : <span>Not assigned</span>}
+                </>
+              ) : (
+                <>
+                  Current folder:{' '}
+                  {displayCurrentFolder ? <strong>{displayCurrentFolder}</strong> : <span>Not assigned</span>}
+                </>
+              )}
             </p>
+            {isSettingsMode ? (
+              <div className="folder-targets" role="group" aria-label="Folder type">
+                <button
+                  type="button"
+                  className={target === 'asset' ? 'is-active' : ''}
+                  onClick={() => setTarget('asset')}
+                >
+                  Asset folder
+                </button>
+                <button
+                  type="button"
+                  className={target === 'collections' ? 'is-active' : ''}
+                  onClick={() => setTarget('collections')}
+                >
+                  Collections folder
+                </button>
+              </div>
+            ) : null}
             <nav aria-label="Folder breadcrumbs">
               <ol className="breadcrumbs">
                 {breadcrumbs.map((crumb, index) => (
@@ -237,12 +419,15 @@ function FolderFinderModal({ isOpen, library, item, onClose, onFolderAssigned })
               {loading && <li className="folder-empty">Loading folders…</li>}
               {!loading && !results.length && (
                 <li className="folder-empty">
-                  {isSearching && searchTerm ? 'No folders matched your search.' : 'No folders available in this location.'}
+                  {isSearching && searchTerm
+                    ? 'No folders matched your search.'
+                    : 'No folders available in this location.'}
                 </li>
               )}
               {!loading &&
                 results.map((entry) => {
-                  const isSelected = selection?.path === entry.path && selection?.name === entry.name;
+                  const isSelected =
+                    activeSelection?.path === entry.path && activeSelection?.name === entry.name;
                   return (
                     <li
                       key={`${entry.path}-${entry.name}`}
@@ -270,8 +455,12 @@ function FolderFinderModal({ isOpen, library, item, onClose, onFolderAssigned })
             <button type="button" onClick={onClose} disabled={assigning}>
               Cancel
             </button>
-            <button type="submit" className="btn" disabled={!selection || assigning}>
-              {assigning ? 'Assigning…' : 'Use This Folder'}
+            <button
+              type="submit"
+              className="btn"
+              disabled={isSettingsMode ? !canConfirmSettings : !activeSelection || assigning}
+            >
+              {isSettingsMode ? 'Apply selection' : assigning ? 'Assigning…' : 'Use This Folder'}
             </button>
           </div>
         </form>
