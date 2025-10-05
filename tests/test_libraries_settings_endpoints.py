@@ -72,12 +72,24 @@ def test_settings_libraries_endpoint_lists_sections(monkeypatch):
                 }
             ],
         },
+        sections=[
+            _DummySection("TV Shows", "show", "2"),
+            _DummySection("Documentaries", "show", "3"),
+            _DummySection("Movies", "movie", "1"),
+        ],
     )
 
     resp = client.get("/api/settings/libraries")
     assert resp.status_code == 200
     data = resp.json()
     assert data == [
+        {
+            "name": "Documentaries",
+            "type": "show",
+            "key": "3",
+            "assetPath": None,
+            "collectionsPath": None,
+        },
         {
             "name": "Movies",
             "type": "movie",
@@ -163,6 +175,10 @@ def test_settings_libraries_endpoint_handles_empty_mappings(monkeypatch):
             "plexToken": "token",
             "libraryMappings": [],
         },
+        sections=[
+            _DummySection("TV Shows", "show", "2"),
+            _DummySection("Movies", "movie", "1"),
+        ],
     )
 
     resp = client.get("/api/settings/libraries")
