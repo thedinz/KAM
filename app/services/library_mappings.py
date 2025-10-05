@@ -13,6 +13,11 @@ __all__ = [
     "set_cached_mappings",
     "get_cached_mappings",
     "clear_cache",
+    "load_library_mappings",
+    "get_library_map",
+    "get_library_entry",
+    "get_asset_path",
+    "get_collections_path",
 ]
 
 _CACHE: Optional[List[Dict[str, Any]]] = None
@@ -109,3 +114,89 @@ def get_cached_mappings() -> Optional[List[Dict[str, Any]]]:
 def clear_cache() -> None:
     """Clear the cached mappings."""
     set_cached_mappings(None)
+
+
+def _load_from_settings() -> List[Dict[str, Any]]:
+    """Return sanitized mappings from persisted settings with env fallback."""
+    try:
+        from . import settings as settings_service  # Local import to avoid cycle
+
+        payload = settings_service.load_settings()
+        raw = payload.get("libraryMappings") if isinstance(payload, dict) else None
+    except Exception:
+        raw = None
+
+    mappings = sanitize_library_mappings(raw)
+    if mappings:
+        return mappings
+    return seed_from_env()
+
+
+def load_library_mappings() -> List[Dict[str, Any]]:
+    """Return sanitized library mappings from settings (cached)."""
+    cached = get_cached_mappings()
+    if cached is not None:
+        return cached
+
+    mappings = _load_from_settings()
+    set_cached_mappings(mappings)
+    return copy.deepcopy(mappings)
+
+
+def get_library_map() -> Dict[str, Dict[str, Any]]:
+    """Return a library -> mapping lookup."""
+    mappings = load_library_mappings()
+    lookup: Dict[str, Dict[str, Any]] = {}
+    for item in mappings:
+        library = str(item.get("library") or "")
+        if not library:
+            continue
+        lookup[library] = dict(item)
+    return lookup
+
+
+def get_library_entry(library: str) -> Optional[Dict[str, Any]]:
+    """Return the mapping entry for *library* (if any)."""
+    if not library:
+        return None
+    mapping = get_library_map().get(str(library))
+    return dict(mapping) if mapping else None
+
+
+def get_asset_path(library: str) -> Optional[str]:
+    """Return the configured asset path for *library* (if any)."""
+    entry = get_library_entry(library)
+    if not entry:
+        return None
+    path = normalize_path(entry.get("assetPath"))
+    return path or None
+
+
+def _default_collections_root() -> Optional[str]:
+    return normalize_path(os.environ.get("COLLECTIONS_ROOT"))
+
+
+def get_collections_path(library: Optional[str] = None) -> Optional[str]:
+    """Return the collections path for *library* or the global default."""
+    if library:
+        entry = get_library_entry(library)
+        if entry:
+            path = normalize_path(entry.get("collectionsPath"))
+            if path:
+                return path
+
+    explicit = get_library_entry("Collections")
+    if explicit:
+        explicit_coll = normalize_path(explicit.get("collectionsPath") or explicit.get("assetPath"))
+        if explicit_coll:
+            return explicit_coll
+
+    fallback = _default_collections_root()
+    if fallback:
+        return fallback
+
+    for entry in load_library_mappings():
+        candidate = normalize_path(entry.get("collectionsPath"))
+        if candidate:
+            return candidate
+    return None
