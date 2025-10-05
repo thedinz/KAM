@@ -57,6 +57,8 @@ function FolderFinderModal({
   initialAssetPath = '',
   initialCollectionsPath = '',
   onSettingsConfirm,
+  settingsCanClearAsset = false,
+  settingsCanClearCollections = false,
 }) {
   const isSettingsMode = context === 'settings';
   const normalizedInitialAsset = normalizeText(initialAssetPath);
@@ -280,6 +282,11 @@ function FolderFinderModal({
   const canConfirmSettings =
     (!requireAsset || Boolean(resolvedAssetPath)) &&
     (!requireCollections || Boolean(resolvedCollectionsPath));
+  const canClearCurrent = isSettingsMode
+    ? target === 'collections'
+      ? settingsCanClearCollections
+      : settingsCanClearAsset
+    : false;
 
   const activeSelection = isSettingsMode
     ? target === 'collections'
@@ -352,6 +359,19 @@ function FolderFinderModal({
     } finally {
       setAssigning(false);
     }
+  };
+
+  const handleClear = () => {
+    if (!isSettingsMode || !onSettingsConfirm) {
+      return;
+    }
+    setError('');
+    const clearTarget = target === 'collections' ? 'collections' : 'asset';
+    const payload =
+      clearTarget === 'collections'
+        ? { collectionsPath: '' }
+        : { assetPath: '', collectionsPath: '' };
+    onSettingsConfirm(payload, { clearTarget });
   };
 
   if (!isOpen) {
@@ -467,6 +487,11 @@ function FolderFinderModal({
             </p>
           </div>
           <div className="actions">
+            {isSettingsMode ? (
+              <button type="button" onClick={handleClear} disabled={!canClearCurrent || assigning}>
+                {target === 'collections' ? 'Clear collections folder' : 'Clear asset folder'}
+              </button>
+            ) : null}
             <button type="button" onClick={onClose} disabled={assigning}>
               Cancel
             </button>
