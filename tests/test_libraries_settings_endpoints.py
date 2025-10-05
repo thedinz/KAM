@@ -76,6 +76,7 @@ def test_settings_libraries_endpoint_lists_sections(monkeypatch):
             _DummySection("TV Shows", "show", "2"),
             _DummySection("Documentaries", "show", "3"),
             _DummySection("Movies", "movie", "1"),
+            _DummySection("Music", "artist", "4"),
         ],
     )
 
@@ -104,6 +105,37 @@ def test_settings_libraries_endpoint_lists_sections(monkeypatch):
             "assetPath": None,
             "collectionsPath": None,
         },
+    ]
+
+
+def test_settings_libraries_endpoint_omits_music_sections(monkeypatch):
+    client = _create_libraries_client(
+        monkeypatch,
+        {
+            "theme": "dark",
+            "plexUrl": "http://plex.example:32400",
+            "plexToken": "token",
+            "libraryMappings": [],
+        },
+        sections=[
+            _DummySection("Music", "artist", "4"),
+            _DummySection("Concerts", "audio", "5"),
+            _DummySection("Movies", "movie", "1"),
+        ],
+    )
+
+    resp = client.get("/api/settings/libraries")
+    assert resp.status_code == 200
+    data = resp.json()
+
+    assert data == [
+        {
+            "name": "Movies",
+            "type": "movie",
+            "key": "1",
+            "assetPath": None,
+            "collectionsPath": None,
+        }
     ]
 
 
