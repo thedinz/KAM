@@ -4,10 +4,10 @@ from typing import Optional, Tuple
 
 from ..services import folder_overrides
 from ..services import plex_settings
+from ..services import library_mappings as library_mappings_service
 from ..services.plex import get_plex
 from ..services.assets import folder_name_for
 from ..services.resolve import resolve_existing_dir_or_422
-from .. import config
 
 router = APIRouter()
 
@@ -74,7 +74,7 @@ def movie(library: str = Query(...), ratingKey: int = Query(...)):
         folder = resolved_folder
 
     # Map to asset root for this library
-    base = config.LIBRARY_MAPPINGS.get(library)
+    base = library_mappings_service.get_asset_path(library)
     poster_exists = False
     background_exists = False
     poster_url_local = None

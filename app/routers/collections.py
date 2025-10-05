@@ -4,8 +4,8 @@ from typing import Optional, List, Dict, Any, Tuple
 from ..services.plex import get_plex
 from ..services import folder_overrides
 from ..services import plex_settings
+from ..services import library_mappings as library_mappings_service
 from ..services.assets import sanitize_name
-from .. import config
 
 import os
 from pathlib import Path
@@ -15,10 +15,6 @@ router = APIRouter()
 
 # Container paths (must match your docker-compose volume mounts)
 ASSETS_ROOT = os.environ.get("KAM_ASSETS_ROOT") or os.environ.get("ASSETS_ROOT") or ""
-COLLECTIONS_ROOT = (
-    os.environ.get("COLLECTIONS_ROOT")
-    or (os.path.join(ASSETS_ROOT, "Collections") if ASSETS_ROOT else "")
-)
 
 # Try lots of common names (Kometa variants differ)
 LOCAL_FILENAMES = (
@@ -49,16 +45,24 @@ def _first_existing_poster(dir_path: Path) -> Path | None:
             return p
     return None
 
-def _local_poster_for_title(title: str) -> Tuple[Path | None, str | None, str, bool]:
+def _collections_root_for_library(library: str | None) -> Path | None:
+    path = library_mappings_service.get_collections_path(library)
+    if not path:
+        return None
+    return Path(path)
+
+
+def _local_poster_for_title(
+    title: str, base: Path | None
+) -> Tuple[Path | None, str | None, str, bool]:
     """
     Find a local poster for this collection title.
 
     Returns: (path_on_disk, public_url_or_None, folder_used, folder_exists)
     """
-    if not title or not COLLECTIONS_ROOT:
+    if not title or not base:
         return None, None, "", False
 
-    base = Path(COLLECTIONS_ROOT)
     raw_folder = title
     sani_folder = sanitize_name(title)
     found_folder = ""
@@ -71,7 +75,7 @@ def _local_poster_for_title(title: str) -> Tuple[Path | None, str | None, str, b
         found_exists = True
         p = _first_existing_poster(d1)
         if p:
-            return p, _url_for_local(d1.name, p), d1.name, True
+            return p, _url_for_local(base, d1.name, p), d1.name, True
 
     # 2) exact sanitized
     d2 = base / sani_folder
@@ -80,7 +84,7 @@ def _local_poster_for_title(title: str) -> Tuple[Path | None, str | None, str, b
         found_exists = True
         p = _first_existing_poster(d2)
         if p:
-            return p, _url_for_local(d2.name, p), d2.name, True
+            return p, _url_for_local(base, d2.name, p), d2.name, True
 
     # 3) case-insensitive match (raw)
     d3 = _case_insensitive_dir(base, raw_folder)
@@ -89,7 +93,7 @@ def _local_poster_for_title(title: str) -> Tuple[Path | None, str | None, str, b
         found_exists = True
         p = _first_existing_poster(d3)
         if p:
-            return p, _url_for_local(d3.name, p), d3.name, True
+            return p, _url_for_local(base, d3.name, p), d3.name, True
 
     # 4) case-insensitive match (sanitized)
     d4 = _case_insensitive_dir(base, sani_folder)
@@ -98,26 +102,35 @@ def _local_poster_for_title(title: str) -> Tuple[Path | None, str | None, str, b
         found_exists = True
         p = _first_existing_poster(d4)
         if p:
-            return p, _url_for_local(d4.name, p), d4.name, True
+            return p, _url_for_local(base, d4.name, p), d4.name, True
 
     if found_exists:
         return None, None, found_folder, True
 
     return None, None, "", False
 
-def _url_for_local(folder_name: str, file_path: Path) -> str:
+def _url_for_local(base: Path, folder_name: str, file_path: Path) -> str:
     """
-    Build the public URL for a local poster. Requires /assets to be mounted to ASSETS_ROOT in main.py.
+    Build the public URL for a local poster via the fileproxy.
     Adds cache-buster based on mtime so the UI flips immediately.
     """
-    url = f"/assets/Collections/{quote(folder_name)}/{file_path.name}"
+    resolved = file_path
+    try:
+        resolved_base = base.resolve()
+        resolved = file_path.resolve()
+        resolved.relative_to(resolved_base)
+    except Exception:
+        try:
+            resolved = file_path.resolve()
+        except Exception:
+            resolved = file_path
+    url = f"/fileproxy?path={quote(str(resolved))}"
     try:
         ts = int(file_path.stat().st_mtime)
     except Exception:
         ts = 0
     if ts:
-        sep = "&" if "?" in url else "?"
-        url = f"{url}{sep}t={ts}"
+        url = f"{url}&t={ts}" if "?" in url else f"{url}?t={ts}"
     return url
 
 
@@ -137,6 +150,7 @@ def collections(
     # Gather collections from all libraries
     for sec in plex.library.sections():
         try:
+            name = str(getattr(sec, "title", "") or "")
             for coll in sec.collections():
                 rk = getattr(coll, "ratingKey", None)
                 title = (getattr(coll, "title", None) or "").strip()
@@ -146,7 +160,11 @@ def collections(
                 if plex_url and plex_token:
                     poster_plex = f"{plex_url}/library/metadata/{rk}/thumb?X-Plex-Token={plex_token}"
 
-                override_folder = folder_overrides.get_override("Collections", str(rk)) if rk else None
+                library_name = name
+                collections_base = _collections_root_for_library(library_name)
+                override_folder = (
+                    folder_overrides.get_override(library_name, str(rk)) if rk else None
+                )
 
                 poster_local = None
                 folder_used = sanitize_name(title) if title else ""
@@ -157,17 +175,27 @@ def collections(
                     folder_used = override_folder
                     asset_ready = True
                     folder_exists = True
-                    if COLLECTIONS_ROOT:
-                        override_path = Path(COLLECTIONS_ROOT) / override_folder
-                        poster_path = _first_existing_poster(override_path) if override_path.is_dir() else None
+                    if collections_base:
+                        override_path = collections_base / override_folder
+                        poster_path = (
+                            _first_existing_poster(override_path)
+                            if override_path.is_dir()
+                            else None
+                        )
                         if poster_path:
-                            poster_local = _url_for_local(override_folder, poster_path)
+                            poster_local = _url_for_local(collections_base, override_folder, poster_path)
                 else:
-                    _poster_path, poster_local, folder_used, folder_exists = _local_poster_for_title(title)
+                    (
+                        _poster_path,
+                        poster_local,
+                        folder_used,
+                        folder_exists,
+                    ) = _local_poster_for_title(title, collections_base)
                     asset_ready = folder_exists
 
                 item = {
                     "ratingKey": rk,
+                    "library": library_name,
                     "title": title,
                     "year": None,
                     "folderName": folder_used or (sanitize_name(title) if title else ""),
@@ -183,7 +211,7 @@ def collections(
                 # Remove this once you're happy:
                 if poster_local is None:
                     item["_debug"] = {
-                        "collections_root": COLLECTIONS_ROOT,
+                        "collections_root": str(collections_base) if collections_base else None,
                         "tried_titles": [title, sanitize_name(title)],
                         "folder_used": folder_used,
                         "asset_ready": folder_exists,
