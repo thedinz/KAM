@@ -60,6 +60,18 @@ def save_settings(data: Dict[str, Any]) -> Dict[str, Any]:
         return merged
 
 
+def save_library_mappings(mappings: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Persist only the library mappings while preserving other settings."""
+    with _LOCK:
+        sanitized = library_mappings.sanitize_library_mappings(mappings)
+        current = _load_locked()
+        current["libraryMappings"] = _clone_mappings(sanitized)
+        _write_locked(current)
+        _clear_plex_cache()
+        _clear_library_mapping_cache()
+        return copy.deepcopy(current)
+
+
 def _merge_with_defaults(data: Dict[str, Any] | None) -> Dict[str, Any]:
     merged = copy.deepcopy(_DEFAULT_SETTINGS)
     if data:
