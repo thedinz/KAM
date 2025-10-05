@@ -110,7 +110,7 @@ docker pull ghcr.io/thedinz/kam:latest
 
 ### 2) Run (simple)
 
-Expose KAM on **7171** (mapped to the container's port **8000**) and map your assets and Kometa config directory:
+Expose KAM on **7171** (mapped to the container's port **8000**) and map your assets and Kometa config:
 
 ```bash
 docker run -d \
@@ -118,6 +118,7 @@ docker run -d \
   -p 7171:8000 \
   -v /mnt/user/kometa/assets:/assets \
   -v /mnt/user/kometa/config:/config:ro \
+  -e KOMETA_CONFIG_PATH=/config/config.yml \
   ghcr.io/thedinz/kam:latest
 ```
 
@@ -136,6 +137,8 @@ services:
     container_name: kam
     ports:
       - "7171:8000"
+    environment:
+      KOMETA_CONFIG_PATH: /config/config.yml
     volumes:
       - /mnt/user/kometa/assets:/assets
       - /mnt/user/kometa/config:/config:ro
@@ -165,8 +168,8 @@ PLEX_TOKEN=CHANGE_ME
 # e.g. Movies:/assets/Movies,Kids Movies:/assets/Kids Movies
 LIBRARIES=Movies:/assets/Movies,Kids Movies:/assets/Kids Movies
 
-# Optional: seed the Kometa config path (otherwise set it in Settings)
-# KOMETA_CONFIG_PATH=/config/config.yml
+# Optional: Path to your Kometa config inside the container
+KOMETA_CONFIG_PATH=/config/config.yml
 
 # Runtime
 PORT=8000
