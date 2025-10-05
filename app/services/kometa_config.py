@@ -49,10 +49,41 @@ def normalize_config_path(value: Any, base_dir: Optional[Path] = None) -> str:
             base = Path(base_dir)
         except TypeError:  # pragma: no cover - defensive
             base = None
+
         if base and not os.path.isabs(normalized):
-            candidate = normalize_path(str(base.joinpath(normalized)))
-            if candidate and os.path.exists(candidate):
-                return candidate
+            candidates: List[str] = []
+
+            def _add_candidate(root: Path, fragment: str) -> None:
+                try:
+                    combined = root.joinpath(fragment)
+                except Exception:  # pragma: no cover - defensive
+                    return
+                try:
+                    combined = combined.resolve(strict=False)
+                except Exception:  # pragma: no cover - defensive
+                    pass
+                candidate = normalize_path(str(combined))
+                if candidate and candidate not in candidates:
+                    candidates.append(candidate)
+
+            name = base.name
+            if name and normalized.startswith(f"{name}/"):
+                trimmed = normalized[len(name) + 1 :]
+                if trimmed:
+                    _add_candidate(base, trimmed)
+
+            _add_candidate(base, normalized)
+
+            parent = base.parent
+            if parent != base:
+                _add_candidate(parent, normalized)
+
+            for candidate in candidates:
+                if os.path.exists(candidate):
+                    return candidate
+
+            if candidates:
+                return candidates[0]
 
     return normalized
 
