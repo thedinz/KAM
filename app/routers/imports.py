@@ -2,17 +2,16 @@
 import logging
 import os
 import xml.etree.ElementTree as ET
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import requests
 from fastapi import APIRouter, Form, HTTPException, Query
 
+from ..services import plex_settings
 from ..services.resolve import resolve_existing_dir_or_422
 
 router = APIRouter()
 
-PLEX_URL        = os.environ.get("PLEX_URL", "").rstrip("/")
-PLEX_TOKEN      = os.environ.get("PLEX_TOKEN", "")
 # Allow opting out for self-signed Plex certs: export PLEX_VERIFY_SSL=false
 PLEX_VERIFY_SSL = os.environ.get("PLEX_VERIFY_SSL", "true").lower() != "false"
 
@@ -21,9 +20,10 @@ TOKEN_MASK = "***"
 
 
 def _mask_token(value: Optional[str]) -> Optional[str]:
-    if not value or not PLEX_TOKEN:
+    plex_token = plex_settings.get_plex_token()
+    if not value or not plex_token:
         return value
-    return value.replace(PLEX_TOKEN, TOKEN_MASK)
+    return value.replace(plex_token, TOKEN_MASK)
 
 
 def _safe_url(url: Optional[str]) -> Optional[str]:
@@ -51,10 +51,12 @@ def _safe_headers(headers: Optional[dict]) -> Optional[dict]:
         safe[token_key] = TOKEN_MASK
     return safe
 
-def _require_plex():
-    if not PLEX_URL or not PLEX_TOKEN:
+def _require_plex() -> Tuple[str, str]:
+    cfg = plex_settings.get_plex_config()
+    if not cfg.url or not cfg.token:
         logger.error("Plex configuration missing (PLEX_URL or PLEX_TOKEN)")
         raise HTTPException(status_code=500, detail="PLEX_URL or PLEX_TOKEN not set")
+    return cfg.url, cfg.token
 
 def _dest_dir_or_422(library: str, folderName: str) -> str:
     try:
@@ -124,11 +126,11 @@ def _json_or_xml(path: str) -> Dict[str, Any] | str:
     """
     Return JSON dict if server answered JSON; otherwise return XML text.
     """
-    _require_plex()
-    url = f"{PLEX_URL}{path}"
-    headers = {"Accept": "application/json", "X-Plex-Token": PLEX_TOKEN}
+    plex_url, plex_token = _require_plex()
+    url = f"{plex_url}{path}"
+    headers = {"Accept": "application/json", "X-Plex-Token": plex_token}
     logger.debug("Requesting Plex metadata from %s", _safe_url(url))
-    r = _get(url, params={"X-Plex-Token": PLEX_TOKEN}, headers=headers)
+    r = _get(url, params={"X-Plex-Token": plex_token}, headers=headers)
     ctype = (r.headers.get("Content-Type") or "").lower()
     if "application/json" in ctype:
         logger.debug("Received JSON metadata for %s", path)
@@ -173,8 +175,8 @@ def _resolve_art_path_from_metadata(rating_key: str) -> Optional[str]:
     return None
 
 def _poster_url_for_rating_key(rating_key: str) -> str:
-    _require_plex()
-    direct = f"{PLEX_URL}/library/metadata/{rating_key}/thumb?X-Plex-Token={PLEX_TOKEN}"
+    plex_url, plex_token = _require_plex()
+    direct = f"{plex_url}/library/metadata/{rating_key}/thumb?X-Plex-Token={plex_token}"
     try:
         logger.debug(
             "Attempting direct poster URL for ratingKey=%s: %s",
@@ -189,11 +191,11 @@ def _poster_url_for_rating_key(rating_key: str) -> str:
         if not thumb_path:
             logger.warning("Poster path resolution failed for ratingKey=%s", rating_key)
             raise HTTPException(status_code=502, detail=f"Could not resolve poster path for ratingKey={rating_key}")
-        return f"{PLEX_URL}{thumb_path}?X-Plex-Token={PLEX_TOKEN}"
+        return f"{plex_url}{thumb_path}?X-Plex-Token={plex_token}"
 
 def _art_url_for_rating_key(rating_key: str) -> str:
-    _require_plex()
-    direct = f"{PLEX_URL}/library/metadata/{rating_key}/art?X-Plex-Token={PLEX_TOKEN}"
+    plex_url, plex_token = _require_plex()
+    direct = f"{plex_url}/library/metadata/{rating_key}/art?X-Plex-Token={plex_token}"
     try:
         logger.debug(
             "Attempting direct background URL for ratingKey=%s: %s",
@@ -208,7 +210,7 @@ def _art_url_for_rating_key(rating_key: str) -> str:
         if not art_path:
             logger.warning("Background path resolution failed for ratingKey=%s", rating_key)
             raise HTTPException(status_code=502, detail=f"Could not resolve background path for ratingKey={rating_key}")
-        return f"{PLEX_URL}{art_path}?X-Plex-Token={PLEX_TOKEN}"
+        return f"{plex_url}{art_path}?X-Plex-Token={plex_token}"
 
 def _children_for_show(rating_key: str) -> List[Dict[str, Any]]:
     logger.debug("Fetching seasons for show ratingKey=%s", rating_key)
@@ -269,12 +271,13 @@ def _season_poster_url(show_rating_key: str, season_index: int) -> str:
             show_rating_key,
         )
         raise HTTPException(status_code=404, detail=f"Season {season_index} not found in Plex")
+    plex_url, plex_token = _require_plex()
     thumb = target.get("thumb")
     rk    = target.get("ratingKey")
     if thumb:
-        return f"{PLEX_URL}{thumb}?X-Plex-Token={PLEX_TOKEN}"
+        return f"{plex_url}{thumb}?X-Plex-Token={plex_token}"
     if rk:
-        return f"{PLEX_URL}/library/metadata/{rk}/thumb?X-Plex-Token={PLEX_TOKEN}"
+        return f"{plex_url}/library/metadata/{rk}/thumb?X-Plex-Token={plex_token}"
     logger.warning(
         "Season poster URL unavailable for show %s season %s", show_rating_key, season_index
     )

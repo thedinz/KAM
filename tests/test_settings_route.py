@@ -38,10 +38,18 @@ def test_put_settings_updates_file(settings_modules):
     assert resp.model_dump() == {"theme": "light"}
 
     stored = json.loads(path.read_text(encoding="utf-8"))
-    assert stored == {"theme": "light"}
+    assert stored == {
+        "plexToken": None,
+        "plexUrl": None,
+        "theme": "light",
+    }
 
     # Ensure the service merges persisted values with defaults
-    assert service.load_settings() == {"theme": "light"}
+    assert service.load_settings() == {
+        "plexToken": None,
+        "plexUrl": None,
+        "theme": "light",
+    }
 
 
 def test_put_settings_rejects_invalid_theme(settings_modules):

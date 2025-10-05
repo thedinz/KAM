@@ -1,7 +1,8 @@
 import os
+from typing import List
 
-PLEX_URL = os.environ.get("PLEX_URL")
-PLEX_TOKEN = os.environ.get("PLEX_TOKEN")
+from .services import plex_settings
+
 PORT = int(os.environ.get("PORT", "8080"))
 
 LIBRARY_MAPPINGS = {}
@@ -12,8 +13,12 @@ for e in filter(None, (x.strip() for x in raw.split(","))):
         name, path = e.split(":", 1)
         LIBRARY_MAPPINGS[name.strip()] = path.strip()
 
-CONFIG_ERRORS = []
-if not PLEX_URL: CONFIG_ERRORS.append("Missing PLEX_URL")
-if not PLEX_TOKEN: CONFIG_ERRORS.append("Missing PLEX_TOKEN")
-if not LIBRARY_MAPPINGS:
-    CONFIG_ERRORS.append("Missing LIBRARIES (e.g. Movies:/assets/Movies,Collections:/assets/Collections)")
+def get_config_errors() -> List[str]:
+    errors: List[str] = []
+    if not plex_settings.get_plex_url():
+        errors.append("Missing PLEX_URL")
+    if not plex_settings.get_plex_token():
+        errors.append("Missing PLEX_TOKEN")
+    if not LIBRARY_MAPPINGS:
+        errors.append("Missing LIBRARIES (e.g. Movies:/assets/Movies,Collections:/assets/Collections)")
+    return errors
