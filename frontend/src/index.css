@@ -940,6 +940,16 @@ main {
   word-break: break-all;
 }
 
+.settings-libraries-table .collection-suggestions {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.settings-libraries-table .collection-suggestions code {
+  font-size: 12px;
+}
+
 .settings-libraries-table tr.is-dirty {
   background: rgba(94, 161, 255, 0.08);
 }
