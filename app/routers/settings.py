@@ -7,6 +7,7 @@ from typing import List, Literal
 from urllib.parse import urlparse
 
 from ..services import (
+    kometa_config as kometa_config_service,
     library_mappings as library_mappings_service,
     settings as settings_service,
 )
@@ -52,6 +53,7 @@ class SettingsPayload(BaseModel):
     theme: Literal["light", "dark"]
     plexUrl: str = Field(default="")
     plexToken: str = Field(default="")
+    kometaConfigPath: str = Field(default="")
     libraryMappings: List[LibraryMappingPayload] = Field(default_factory=list)
 
     @field_validator("libraryMappings", mode="after")
@@ -87,6 +89,11 @@ class SettingsPayload(BaseModel):
         if not isinstance(value, str):
             value = str(value)
         return value.strip()
+
+    @field_validator("kometaConfigPath", mode="before")
+    @classmethod
+    def _validate_kometa_config(cls, value: str | None) -> str:
+        return kometa_config_service.normalize_config_path(value)
 
 
 @router.get("/api/settings", response_model=SettingsPayload)
