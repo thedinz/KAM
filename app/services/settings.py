@@ -9,7 +9,7 @@ import threading
 from pathlib import Path
 from typing import Any, Dict, List
 
-from . import library_mappings
+from . import kometa_config, library_mappings
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +18,9 @@ _DEFAULT_SETTINGS: Dict[str, Any] = {
     "plexUrl": os.environ.get("PLEX_URL") or "",
     "plexToken": os.environ.get("PLEX_TOKEN") or "",
     "libraryMappings": library_mappings.seed_from_env(),
+    "kometaConfigPath": kometa_config.normalize_config_path(
+        os.environ.get("KOMETA_CONFIG_PATH")
+    ),
 }
 
 _DEF_BASE = (
@@ -95,6 +98,11 @@ def _sanitize_payload(data: Dict[str, Any] | None) -> Dict[str, Any]:
     if "libraryMappings" in data:
         sanitized["libraryMappings"] = library_mappings.sanitize_library_mappings(
             data.get("libraryMappings")
+        )
+
+    if "kometaConfigPath" in data:
+        sanitized["kometaConfigPath"] = kometa_config.normalize_config_path(
+            data.get("kometaConfigPath")
         )
 
     return sanitized

@@ -18,6 +18,7 @@ def settings_modules(tmp_path, monkeypatch):
     monkeypatch.setenv("KAM_SETTINGS_PATH", str(settings_path))
     monkeypatch.setenv("PLEX_URL", "http://plex.example:32400")
     monkeypatch.setenv("PLEX_TOKEN", "initial-token")
+    monkeypatch.setenv("KOMETA_CONFIG_PATH", "/config/config.yml")
     monkeypatch.setenv(
         "LIBRARIES",
         "Movies:/assets/Movies,TV Shows:/assets/TV Shows",
@@ -38,6 +39,7 @@ def test_defaults_without_library_env(tmp_path, monkeypatch):
     monkeypatch.setenv("KAM_SETTINGS_PATH", str(settings_path))
     monkeypatch.delenv("LIBRARIES", raising=False)
     monkeypatch.delenv("COLLECTIONS_ROOT", raising=False)
+    monkeypatch.delenv("KOMETA_CONFIG_PATH", raising=False)
 
     library_module = importlib.reload(
         importlib.import_module("app.services.library_mappings")
@@ -52,6 +54,7 @@ def test_defaults_without_library_env(tmp_path, monkeypatch):
         "theme": "dark",
         "plexUrl": "",
         "plexToken": "",
+        "kometaConfigPath": "",
         "libraryMappings": [],
     }
 
@@ -64,6 +67,7 @@ def test_get_settings_returns_defaults(settings_modules):
         "theme": "dark",
         "plexUrl": "http://plex.example:32400",
         "plexToken": "initial-token",
+        "kometaConfigPath": "/config/config.yml",
         "libraryMappings": [
             {
                 "library": "Movies",
@@ -86,6 +90,7 @@ def test_put_settings_updates_file(settings_modules):
         theme="light",
         plexUrl="http://plex.changed",
         plexToken="  updated-token  ",
+        kometaConfigPath="  /data/config.yml  ",
         libraryMappings=[
             {
                 "library": "Movies",
@@ -104,6 +109,7 @@ def test_put_settings_updates_file(settings_modules):
         "theme": "light",
         "plexUrl": "http://plex.changed",
         "plexToken": "updated-token",
+        "kometaConfigPath": "/data/config.yml",
         "libraryMappings": [
             {
                 "library": "Movies",
@@ -123,6 +129,7 @@ def test_put_settings_updates_file(settings_modules):
         "theme": "light",
         "plexUrl": "http://plex.changed",
         "plexToken": "updated-token",
+        "kometaConfigPath": "/data/config.yml",
         "libraryMappings": [
             {
                 "library": "Movies",
@@ -142,6 +149,7 @@ def test_put_settings_updates_file(settings_modules):
         "theme": "light",
         "plexUrl": "http://plex.changed",
         "plexToken": "updated-token",
+        "kometaConfigPath": "/data/config.yml",
         "libraryMappings": [
             {
                 "library": "Movies",
@@ -209,6 +217,7 @@ def test_save_settings_sanitizes_library_mappings(settings_modules):
             "collectionsPath": "/collections/movies",
         }
     ]
+    assert stored["kometaConfigPath"] == "/config/config.yml"
 
     persisted = json.loads(path.read_text(encoding="utf-8"))
     assert persisted["libraryMappings"] == [
@@ -218,6 +227,7 @@ def test_save_settings_sanitizes_library_mappings(settings_modules):
             "collectionsPath": "/collections/movies",
         }
     ]
+    assert persisted["kometaConfigPath"] == "/config/config.yml"
 
 
 def test_save_settings_clears_library_mapping_cache(settings_modules):
@@ -271,6 +281,7 @@ def test_save_library_mappings_updates_only_mapping_data(settings_modules):
 
     assert updated["theme"] == "light"
     assert updated["plexUrl"] == "http://plex.custom"
+    assert updated["kometaConfigPath"] == "/config/config.yml"
     assert updated["libraryMappings"] == [
         {
             "library": "Movies",
@@ -297,5 +308,6 @@ def test_save_library_mappings_updates_only_mapping_data(settings_modules):
             "collectionsPath": "/collections/tv",
         },
     ]
+    assert persisted["kometaConfigPath"] == "/config/config.yml"
 
     assert library_module.get_cached_mappings() is None

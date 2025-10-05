@@ -33,6 +33,8 @@ function SettingsPage() {
     savedTheme,
     plexUrl,
     plexToken,
+    kometaConfigPath,
+    savedKometaConfigPath,
     savedSettings,
     libraryMappings,
     savedLibraryMappings,
@@ -64,6 +66,7 @@ function SettingsPage() {
 
   const savedPlexUrl = savedSettings?.plexUrl || '';
   const savedPlexToken = savedSettings?.plexToken || '';
+  const savedKometaPath = savedKometaConfigPath || savedSettings?.kometaConfigPath || '';
 
   useEffect(() => {
     if (error) {
@@ -148,6 +151,9 @@ function SettingsPage() {
             key: normalizeText(entry?.key ?? entry?.id),
             assetPath: normalizePathValue(entry?.assetPath),
             collectionsPath: normalizePathValue(entry?.collectionsPath),
+            collectionAssetPaths: Array.isArray(entry?.collectionAssetPaths)
+              ? entry.collectionAssetPaths.map((value) => normalizePathValue(value)).filter(Boolean)
+              : [],
           },
         ];
       })
@@ -167,13 +173,29 @@ function SettingsPage() {
             key: '',
             assetPath: '',
             collectionsPath: '',
+            collectionAssetPaths: [],
           };
         const current = currentMap.get(name);
         const saved = savedMap.get(name);
         const assetPath = normalizePathValue(current?.assetPath ?? info.assetPath);
-        const collectionsPath = normalizePathValue(current?.collectionsPath ?? info.collectionsPath);
+        const infoCollectionsPath = normalizePathValue(info.collectionsPath);
+        const infoCollectionPaths = Array.isArray(info.collectionAssetPaths)
+          ? info.collectionAssetPaths
+          : [];
+        const fallbackCollectionsPath = infoCollectionsPath || infoCollectionPaths[0] || '';
+        const collectionsPath = normalizePathValue(
+          current?.collectionsPath ?? fallbackCollectionsPath
+        );
         const savedAssetPath = normalizePathValue(saved?.assetPath ?? info.assetPath);
-        const savedCollectionsPath = normalizePathValue(saved?.collectionsPath ?? info.collectionsPath);
+        const savedCollectionsPath = normalizePathValue(
+          saved?.collectionsPath ?? fallbackCollectionsPath
+        );
+        const collectionSuggestions = Array.from(
+          new Set([collectionsPath, ...infoCollectionPaths].filter(Boolean))
+        );
+        const collectionSuggestionExtras = collectionSuggestions.filter(
+          (value) => value !== collectionsPath
+        );
         const isDirty = assetPath !== savedAssetPath || collectionsPath !== savedCollectionsPath;
         return {
           name,
@@ -184,6 +206,8 @@ function SettingsPage() {
           savedAssetPath,
           savedCollectionsPath,
           isDirty,
+          collectionSuggestions,
+          collectionSuggestionExtras,
         };
       });
   }, [libraries, libraryMappings, savedLibraryMappings]);
@@ -223,7 +247,10 @@ function SettingsPage() {
       return hasUnsavedChanges;
     }
     const settingsChanged =
-      theme !== savedTheme || plexUrl !== savedPlexUrl || plexToken !== savedPlexToken;
+      theme !== savedTheme ||
+      plexUrl !== savedPlexUrl ||
+      plexToken !== savedPlexToken ||
+      kometaConfigPath !== savedKometaPath;
     return settingsChanged || mappingsDirty;
   }, [
     hasUnsavedChanges,
@@ -233,6 +260,8 @@ function SettingsPage() {
     savedPlexUrl,
     plexToken,
     savedPlexToken,
+    kometaConfigPath,
+    savedKometaPath,
     mappingsDirty,
   ]);
 
@@ -253,6 +282,11 @@ function SettingsPage() {
 
   const handlePlexTokenChange = (event) => {
     updateSettings({ plexToken: event.target.value });
+    setStatus(null);
+  };
+
+  const handleKometaConfigPathChange = (event) => {
+    updateSettings({ kometaConfigPath: event.target.value });
     setStatus(null);
   };
 
@@ -556,6 +590,25 @@ function SettingsPage() {
                 />
               </label>
             </div>
+            <div className="settings-section">
+              <h3>Kometa</h3>
+              <p className="settings-description">
+                Provide the path to your Kometa configuration file so KAM can scan it for asset
+                folders.
+              </p>
+              <label className="settings-input">
+                <span>Kometa config path</span>
+                <input
+                  type="text"
+                  name="kometaConfigPath"
+                  value={kometaConfigPath}
+                  onChange={handleKometaConfigPathChange}
+                  placeholder="/config/config.yml"
+                  autoComplete="off"
+                  disabled={busy}
+                />
+              </label>
+            </div>
           </form>
         </section>
 
@@ -644,6 +697,17 @@ function SettingsPage() {
                           ) : (
                             <span className="placeholder">Not set</span>
                           )}
+                          {row.collectionSuggestionExtras?.length ? (
+                            <div className="collection-suggestions">
+                              Suggested:{' '}
+                              {row.collectionSuggestionExtras.map((value, index) => (
+                                <span key={value}>
+                                  {index > 0 ? ', ' : ''}
+                                  <code>{value}</code>
+                                </span>
+                              ))}
+                            </div>
+                          ) : null}
                         </td>
                         <td>
                           {row.isDirty ? <span className="status-unsaved">Unsaved changes</span> : <span>Saved</span>}

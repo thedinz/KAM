@@ -89,8 +89,13 @@ def list_asset_folders(
 ):
     parent_value = parent if isinstance(parent, str) else None
     search_value = search if isinstance(search, str) else None
+    if isinstance(settings, bool):
+        settings_flag = settings
+    else:
+        default_value = getattr(settings, "default", settings)
+        settings_flag = bool(default_value)
 
-    root = _library_root(library, settings_mode=settings)
+    root = _library_root(library, settings_mode=settings_flag)
     current = root
     if parent_value:
         rel = Path(parent_value)
