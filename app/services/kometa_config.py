@@ -53,55 +53,30 @@ def normalize_config_path(value: Any, base_dir: Optional[Path] = None) -> str:
         if base and not os.path.isabs(normalized):
             candidates: List[str] = []
 
-            def _add_candidate(value: str) -> None:
-                candidate = normalize_path(value)
-                if candidate and candidate not in candidates:
-                    candidates.append(candidate)
-
-            def _join_and_add(root: Path, fragment: str) -> None:
+            def _add_candidate(root: Path, fragment: str) -> None:
                 try:
                     combined = root.joinpath(fragment)
                 except Exception:  # pragma: no cover - defensive
                     return
-                _add_candidate(str(combined))
                 try:
-                    resolved = combined.resolve(strict=False)
+                    combined = combined.resolve(strict=False)
                 except Exception:  # pragma: no cover - defensive
-                    return
-                _add_candidate(str(resolved))
+                    pass
+                candidate = normalize_path(str(combined))
+                if candidate and candidate not in candidates:
+                    candidates.append(candidate)
 
-            fragments: List[str] = []
             name = base.name
             if name and normalized.startswith(f"{name}/"):
                 trimmed = normalized[len(name) + 1 :]
                 if trimmed:
-                    fragments.append(trimmed)
-            fragments.append(normalized)
+                    _add_candidate(base, trimmed)
 
-            roots: List[Path] = []
+            _add_candidate(base, normalized)
 
-            def _add_root(path: Path) -> None:
-                if path not in roots:
-                    roots.append(path)
-
-            _add_root(base)
-            try:
-                resolved_base = base.resolve(strict=False)
-            except Exception:  # pragma: no cover - defensive
-                resolved_base = None
-            if resolved_base:
-                _add_root(resolved_base)
-
-            for root in list(roots):
-                parent = root.parent
-                if parent != root:
-                    _add_root(parent)
-
-            for root in roots:
-                for fragment in fragments:
-                    _join_and_add(root, fragment)
-
-            _add_candidate(normalized)
+            parent = base.parent
+            if parent != base:
+                _add_candidate(parent, normalized)
 
             for candidate in candidates:
                 if os.path.exists(candidate):
