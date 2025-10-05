@@ -17,6 +17,8 @@ const initialModalState = {
   defaultTarget: 'asset',
   initialAssetPath: '',
   initialCollectionsPath: '',
+  canClearAsset: false,
+  canClearCollections: false,
 };
 
 const normalizeText = (value) => {
@@ -47,7 +49,6 @@ function SettingsPage() {
     saveSettings,
     revertSettings,
     refreshLibraries,
-    setLibraryMapping,
     setLibraryMappings,
   } = useTheme();
 
@@ -239,7 +240,6 @@ function SettingsPage() {
     .map((name) => libraryRowMap.get(name))
     .filter(Boolean);
   const selectionHasAsset = selectedRows.length > 0 && selectedRows.every((row) => row.assetPath);
-  const selectionHasCollections = selectedRows.some((row) => row.collectionsPath);
 
   const handleThemeChange = (event) => {
     applyTheme(event.target.value);
@@ -286,6 +286,9 @@ function SettingsPage() {
     }
     const primary = uniqueNames[0];
     const primaryRow = libraryRowMap.get(primary);
+    const modalRows = uniqueNames.map((name) => libraryRowMap.get(name)).filter(Boolean);
+    const canClearAsset = modalRows.some((row) => row.assetPath);
+    const canClearCollections = modalRows.some((row) => row.collectionsPath);
     setStatus(null);
     setModalState({
       open: true,
@@ -295,20 +298,63 @@ function SettingsPage() {
       defaultTarget: defaultTarget || (intent === 'collections' ? 'collections' : 'asset'),
       initialAssetPath: primaryRow?.assetPath || '',
       initialCollectionsPath: primaryRow?.collectionsPath || '',
+      canClearAsset,
+      canClearCollections,
     });
   };
 
   const handleModalConfirm = (values, meta = {}) => {
     const target = modalState.intent || 'asset';
     const names = modalState.libraries;
-    const assetPath = normalizeText(values?.assetPath);
-    const collectionsPath =
-      values?.collectionsPath === undefined ? undefined : normalizeText(values.collectionsPath);
 
     if (!names.length) {
       closeModal();
       return;
     }
+
+    if (meta?.clearTarget === 'asset') {
+      const rowsToClear = names
+        .map((name) => libraryRowMap.get(name))
+        .filter((row) => row?.assetPath);
+      if (!rowsToClear.length) {
+        setStatus({ type: 'error', message: 'Select libraries with asset folders to clear mappings.' });
+        return;
+      }
+      setLibraryMappings(names, { assetPath: '', collectionsPath: '' });
+      setStatus({
+        type: 'success',
+        message:
+          rowsToClear.length > 1
+            ? `Cleared mappings for ${rowsToClear.length} libraries.`
+            : `Cleared mapping for ${rowsToClear[0].name}.`,
+      });
+      closeModal();
+      return;
+    }
+
+    if (meta?.clearTarget === 'collections') {
+      const rowsToClear = names
+        .map((name) => libraryRowMap.get(name))
+        .filter((row) => row?.collectionsPath);
+      if (!rowsToClear.length) {
+        setStatus({ type: 'error', message: 'Select libraries with collections folders to clear.' });
+        return;
+      }
+      setLibraryMappings(names, { collectionsPath: '' });
+      setStatus({
+        type: 'success',
+        message:
+          rowsToClear.length > 1
+            ? `Cleared collections folders for ${rowsToClear.length} libraries.`
+            : `Cleared collections folder for ${rowsToClear[0].name}.`,
+      });
+      closeModal();
+      return;
+    }
+
+    const assetPath = normalizeText(values?.assetPath);
+    const collectionsPath =
+      values?.collectionsPath === undefined ? undefined : normalizeText(values.collectionsPath);
 
     if (target !== 'collections' && !assetPath) {
       setStatus({ type: 'error', message: 'Select an asset folder before applying changes.' });
@@ -381,62 +427,6 @@ function SettingsPage() {
       return;
     }
     openModal(selectedLibraries, 'collections', 'collections');
-  };
-
-  const handleClearCollections = (libraryName) => {
-    const row = libraryRowMap.get(libraryName);
-    if (!row?.assetPath) {
-      setStatus({
-        type: 'error',
-        message: `${libraryName} must have an asset folder before clearing collections.`,
-      });
-      return;
-    }
-    setLibraryMapping(libraryName, { collectionsPath: '' });
-    setStatus({
-      type: 'success',
-      message: `Cleared collections folder for ${libraryName}.`,
-    });
-  };
-
-  const handleClearCollectionsSelected = () => {
-    if (!selectionHasCollections) {
-      setStatus({ type: 'error', message: 'Select libraries with collections folders to clear.' });
-      return;
-    }
-    const rowsToClear = selectedRows.filter((row) => row.collectionsPath);
-    rowsToClear.forEach((row) => {
-      setLibraryMapping(row.name, { collectionsPath: '' });
-    });
-    setStatus({
-      type: 'success',
-      message: `Cleared collections folders for ${rowsToClear.length} libraries.`,
-    });
-  };
-
-  const handleClearMapping = (libraryName) => {
-    const row = libraryRowMap.get(libraryName);
-    if (!row?.assetPath) {
-      setStatus({ type: 'error', message: `${libraryName} does not have an asset folder to clear.` });
-      return;
-    }
-    setLibraryMapping(libraryName, { assetPath: '', collectionsPath: '' });
-    setStatus({ type: 'success', message: `Cleared mapping for ${libraryName}.` });
-  };
-
-  const handleClearMappingsSelected = () => {
-    const rowsToClear = selectedRows.filter((row) => row.assetPath);
-    if (!rowsToClear.length) {
-      setStatus({ type: 'error', message: 'Select libraries with asset folders to clear mappings.' });
-      return;
-    }
-    rowsToClear.forEach((row) => {
-      setLibraryMapping(row.name, { assetPath: '', collectionsPath: '' });
-    });
-    setStatus({
-      type: 'success',
-      message: `Cleared mappings for ${rowsToClear.length} libraries.`,
-    });
   };
 
   const handleRefreshLibraries = async () => {
@@ -578,20 +568,6 @@ function SettingsPage() {
               >
                 Set collections folder for selected
               </button>
-              <button
-                type="button"
-                onClick={handleClearCollectionsSelected}
-                disabled={!selectionHasCollections || combinedBusy}
-              >
-                Clear collections folders
-              </button>
-              <button
-                type="button"
-                onClick={handleClearMappingsSelected}
-                disabled={!selectedRows.some((row) => row.assetPath) || combinedBusy}
-              >
-                Clear mappings
-              </button>
             </div>
             <div className="settings-libraries-group">
               <button type="button" onClick={handleRefreshLibraries} disabled={combinedBusy}>
@@ -674,20 +650,6 @@ function SettingsPage() {
                           >
                             Set collections folder
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => handleClearCollections(row.name)}
-                            disabled={combinedBusy || !row.collectionsPath}
-                          >
-                            Clear collections
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleClearMapping(row.name)}
-                            disabled={combinedBusy || !row.assetPath}
-                          >
-                            Clear mapping
-                          </button>
                         </td>
                       </tr>
                     );
@@ -717,6 +679,8 @@ function SettingsPage() {
         settingsIntent={modalState.intent}
         initialAssetPath={modalState.initialAssetPath}
         initialCollectionsPath={modalState.initialCollectionsPath}
+        settingsCanClearAsset={modalState.canClearAsset}
+        settingsCanClearCollections={modalState.canClearCollections}
         onClose={closeModal}
         onSettingsConfirm={handleModalConfirm}
       />
