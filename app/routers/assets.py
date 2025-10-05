@@ -48,9 +48,19 @@ def _library_root(library: str) -> Path:
                 )
             candidate = assets_root / library
             root = candidate if candidate.is_dir() else assets_root
-    if not root.is_dir():
+
+    try:
+        resolved_root = root.resolve()
+    except FileNotFoundError:
         raise HTTPException(status_code=404, detail=f"Assets library not found: {root}")
-    return root
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Permission denied")
+    except OSError:
+        raise HTTPException(status_code=400, detail="Unable to resolve assets path")
+
+    if not resolved_root.is_dir():
+        raise HTTPException(status_code=404, detail=f"Assets library not found: {resolved_root}")
+    return resolved_root
 
 
 def _ensure_within_root(root: Path, target: Path) -> Path:
