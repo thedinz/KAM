@@ -3,14 +3,23 @@ import { Link } from 'react-router-dom';
 import { useTheme } from '../theme/ThemeProvider.jsx';
 
 function SettingsPage() {
-  const { theme, savedTheme, loading, error, applyTheme, saveTheme, revertTheme } = useTheme();
-  const [selectedTheme, setSelectedTheme] = useState(theme);
+  const {
+    theme,
+    savedTheme,
+    plexUrl,
+    plexToken,
+    savedSettings,
+    loading,
+    saving,
+    error,
+    applyTheme,
+    updateSettings,
+    saveSettings,
+    revertSettings,
+  } = useTheme();
   const [status, setStatus] = useState(null);
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    setSelectedTheme(theme);
-  }, [theme]);
+  const savedPlexUrl = savedSettings?.plexUrl || '';
+  const savedPlexToken = savedSettings?.plexToken || '';
 
   useEffect(() => {
     if (error) {
@@ -19,32 +28,42 @@ function SettingsPage() {
   }, [error]);
 
   const busy = loading || saving;
-  const isDirty = useMemo(() => selectedTheme !== savedTheme, [selectedTheme, savedTheme]);
+  const isDirty = useMemo(() => {
+    return (
+      theme !== savedTheme || plexUrl !== savedPlexUrl || plexToken !== savedPlexToken
+    );
+  }, [theme, savedTheme, plexUrl, savedPlexUrl, plexToken, savedPlexToken]);
 
   const handleThemeChange = (event) => {
     const next = event.target.value;
-    setSelectedTheme(next);
     applyTheme(next);
+    setStatus(null);
+  };
+
+  const handlePlexUrlChange = (event) => {
+    updateSettings({ plexUrl: event.target.value });
+    setStatus(null);
+  };
+
+  const handlePlexTokenChange = (event) => {
+    updateSettings({ plexToken: event.target.value });
     setStatus(null);
   };
 
   const handleSubmit = async (event) => {
     event.preventDefault();
     if (!isDirty) {
-      setStatus({ type: 'success', message: 'Theme is already up to date.' });
+      setStatus({ type: 'success', message: 'Settings are already up to date.' });
       return;
     }
-    setSaving(true);
     setStatus(null);
     try {
-      await saveTheme(selectedTheme);
-      setStatus({ type: 'success', message: 'Theme preference saved.' });
+      await saveSettings();
+      setStatus({ type: 'success', message: 'Settings saved successfully.' });
     } catch (err) {
-      const message = err?.message || 'Failed to save theme preference.';
-      revertTheme();
+      const message = err?.message || 'Failed to save settings.';
+      revertSettings();
       setStatus({ type: 'error', message });
-    } finally {
-      setSaving(false);
     }
   };
 
@@ -70,7 +89,7 @@ function SettingsPage() {
                   type="radio"
                   name="theme"
                   value="dark"
-                  checked={selectedTheme === 'dark'}
+                  checked={theme === 'dark'}
                   onChange={handleThemeChange}
                 />
                 <span>Dark</span>
@@ -80,12 +99,42 @@ function SettingsPage() {
                   type="radio"
                   name="theme"
                   value="light"
-                  checked={selectedTheme === 'light'}
+                  checked={theme === 'light'}
                   onChange={handleThemeChange}
                 />
                 <span>Light</span>
               </label>
             </fieldset>
+            <div className="settings-section">
+              <h3>Plex</h3>
+              <p className="settings-description">
+                Provide your Plex URL and token to enable Plex integrations in KAM.
+              </p>
+              <label className="settings-input">
+                <span>Plex URL</span>
+                <input
+                  type="url"
+                  name="plexUrl"
+                  value={plexUrl}
+                  onChange={handlePlexUrlChange}
+                  placeholder="http://plex.local:32400"
+                  autoComplete="off"
+                  disabled={busy}
+                />
+              </label>
+              <label className="settings-input">
+                <span>Plex Token (sensitive)</span>
+                <input
+                  type="password"
+                  name="plexToken"
+                  value={plexToken}
+                  onChange={handlePlexTokenChange}
+                  placeholder="Enter your Plex token"
+                  autoComplete="new-password"
+                  disabled={busy}
+                />
+              </label>
+            </div>
             <div className="settings-actions">
               <button type="submit" className="btn" disabled={busy || !isDirty}>
                 Save Changes
