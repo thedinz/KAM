@@ -1,5 +1,12 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { responseErrorMessage, safeJson } from '../utils/api.js';
+import {
+  areLibraryMappingsEqual,
+  createLibraryMappingLookup,
+  normalizeLibraryName,
+  normalizePathValue,
+  sanitizeLibraryMappings,
+} from '../utils/libraryMappings.js';
 
 const ThemeContext = createContext({
   settings: { theme: 'dark', plexUrl: '', plexToken: '', libraryMappings: [] },
@@ -18,6 +25,9 @@ const ThemeContext = createContext({
   loading: false,
   saving: false,
   error: null,
+  settingsDirty: false,
+  libraryMappingsDirty: false,
+  hasUnsavedChanges: false,
   applyTheme: () => {},
   updateSettings: () => {},
   saveSettings: async () => ({ theme: 'dark', plexUrl: '', plexToken: '' }),
@@ -29,37 +39,12 @@ const ThemeContext = createContext({
   refreshLibraries: async () => [],
   setLibraryMapping: () => {},
   setLibraryMappings: () => {},
+  getLibraryMapping: () => null,
+  revertLibraryMapping: () => {},
+  revertLibraryMappings: () => {},
 });
 
 const normalizeTheme = (value) => (value === 'light' ? 'light' : 'dark');
-
-const normalizePath = (value) => {
-  if (value == null) return '';
-  const text = String(value).trim();
-  if (!text) return '';
-  return text.replace(/\\+/g, '/');
-};
-
-const sanitizeLibraryMappings = (raw = []) => {
-  if (!raw) return [];
-  const entries = Array.isArray(raw) ? raw : [];
-  const byLibrary = new Map();
-  entries.forEach((entry) => {
-    if (!entry || typeof entry !== 'object') return;
-    const libraryValue = entry.library ?? entry.name ?? '';
-    const library = typeof libraryValue === 'string' ? libraryValue.trim() : '';
-    if (!library) return;
-    const assetPathValue = normalizePath(entry.assetPath ?? entry.path ?? entry.assetFolder);
-    if (!assetPathValue) return;
-    const collectionsPathValue = normalizePath(entry.collectionsPath ?? entry.collectionPath);
-    byLibrary.set(library, {
-      library,
-      assetPath: assetPathValue,
-      collectionsPath: collectionsPathValue,
-    });
-  });
-  return Array.from(byLibrary.values()).sort((a, b) => a.library.localeCompare(b.library));
-};
 
 const sanitizeLibrariesList = (raw) => {
   if (!raw) return [];
@@ -72,8 +57,8 @@ const sanitizeLibrariesList = (raw) => {
       if (!name) return null;
       const typeValue = entry.type ?? entry.libraryType ?? null;
       const keyValue = entry.key ?? entry.id ?? null;
-      const assetPathValue = normalizePath(entry.assetPath);
-      const collectionsPathValue = normalizePath(entry.collectionsPath);
+      const assetPathValue = normalizePathValue(entry.assetPath);
+      const collectionsPathValue = normalizePathValue(entry.collectionsPath);
       return {
         name,
         type: typeValue ? String(typeValue) : null,
@@ -124,7 +109,7 @@ export function ThemeProvider({ children }) {
     const names = Array.isArray(libraryNames) ? libraryNames : [libraryNames];
     if (!names.length) return;
     const normalized = names
-      .map((name) => (typeof name === 'string' ? name.trim() : ''))
+      .map((name) => normalizeLibraryName(name))
       .filter(Boolean);
     if (!normalized.length) return;
     const payload = updates && typeof updates === 'object' ? updates : {};
@@ -137,11 +122,11 @@ export function ThemeProvider({ children }) {
         const assetUpdate =
           payload.assetPath === undefined
             ? existing?.assetPath ?? ''
-            : normalizePath(payload.assetPath);
+            : normalizePathValue(payload.assetPath);
         const collectionsUpdate =
           payload.collectionsPath === undefined
             ? existing?.collectionsPath ?? ''
-            : normalizePath(payload.collectionsPath);
+            : normalizePathValue(payload.collectionsPath);
         if (!assetUpdate) {
           if (index >= 0) {
             list.splice(index, 1);
@@ -297,6 +282,31 @@ export function ThemeProvider({ children }) {
     setSettings(sanitizeSettings(savedSettings));
   }, [savedSettings]);
 
+  const libraryMappingLookup = useMemo(
+    () => createLibraryMappingLookup(settings.libraryMappings),
+    [settings.libraryMappings]
+  );
+
+  const savedLibraryMappingLookup = useMemo(
+    () => createLibraryMappingLookup(savedSettings.libraryMappings),
+    [savedSettings.libraryMappings]
+  );
+
+  const libraryMappingsDirty = useMemo(
+    () => !areLibraryMappingsEqual(settings.libraryMappings, savedSettings.libraryMappings),
+    [settings.libraryMappings, savedSettings.libraryMappings]
+  );
+
+  const settingsDirty = useMemo(
+    () =>
+      settings.theme !== savedSettings.theme ||
+      settings.plexUrl !== savedSettings.plexUrl ||
+      settings.plexToken !== savedSettings.plexToken,
+    [settings, savedSettings]
+  );
+
+  const hasUnsavedChanges = settingsDirty || libraryMappingsDirty;
+
   const saveTheme = useCallback(
     async (value) => {
       const result = await saveSettings({ theme: value });
@@ -328,6 +338,64 @@ export function ThemeProvider({ children }) {
     [applyLibraryMappingUpdates]
   );
 
+  const getLibraryMapping = useCallback(
+    (libraryName) => {
+      const name = normalizeLibraryName(libraryName);
+      if (!name) return null;
+      const entry = libraryMappingLookup.get(name);
+      return entry ? { ...entry } : null;
+    },
+    [libraryMappingLookup]
+  );
+
+  const revertLibraryMappings = useCallback(
+    (libraryNames) => {
+      const names = Array.isArray(libraryNames) ? libraryNames : [libraryNames];
+      const normalized = names.map((name) => normalizeLibraryName(name)).filter(Boolean);
+      if (!normalized.length) return;
+      setSettings((prev) => {
+        const base = sanitizeSettings(prev);
+        let nextMappings = sanitizeLibraryMappings(base.libraryMappings);
+        let changed = false;
+        normalized.forEach((name) => {
+          const saved = savedLibraryMappingLookup.get(name);
+          const index = nextMappings.findIndex((entry) => entry.library === name);
+          if (saved) {
+            if (index >= 0) {
+              const existing = nextMappings[index];
+              if (
+                existing.assetPath !== saved.assetPath ||
+                existing.collectionsPath !== saved.collectionsPath
+              ) {
+                nextMappings[index] = { ...saved };
+                changed = true;
+              }
+            } else {
+              nextMappings.push({ ...saved });
+              changed = true;
+            }
+          } else if (index >= 0) {
+            nextMappings.splice(index, 1);
+            changed = true;
+          }
+        });
+        if (!changed) {
+          return base;
+        }
+        return sanitizeSettings({ ...base, libraryMappings: nextMappings });
+      });
+    },
+    [savedLibraryMappingLookup]
+  );
+
+  const revertLibraryMapping = useCallback(
+    (libraryName) => {
+      if (!libraryName) return;
+      revertLibraryMappings([libraryName]);
+    },
+    [revertLibraryMappings]
+  );
+
   const value = useMemo(
     () => ({
       settings,
@@ -346,6 +414,9 @@ export function ThemeProvider({ children }) {
       loading,
       saving,
       error,
+      settingsDirty,
+      libraryMappingsDirty,
+      hasUnsavedChanges,
       applyTheme,
       updateSettings,
       saveSettings,
@@ -357,6 +428,9 @@ export function ThemeProvider({ children }) {
       refreshLibraries,
       setLibraryMapping,
       setLibraryMappings,
+      getLibraryMapping,
+      revertLibraryMapping,
+      revertLibraryMappings,
     }),
     [
       settings,
@@ -367,6 +441,9 @@ export function ThemeProvider({ children }) {
       loading,
       saving,
       error,
+      settingsDirty,
+      libraryMappingsDirty,
+      hasUnsavedChanges,
       applyTheme,
       updateSettings,
       saveSettings,
@@ -378,6 +455,9 @@ export function ThemeProvider({ children }) {
       refreshLibraries,
       setLibraryMapping,
       setLibraryMappings,
+      getLibraryMapping,
+      revertLibraryMapping,
+      revertLibraryMappings,
     ]
   );
 

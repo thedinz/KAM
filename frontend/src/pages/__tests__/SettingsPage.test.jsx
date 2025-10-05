@@ -41,6 +41,8 @@ describe('SettingsPage', () => {
       loading: false,
       saving: false,
       error: null,
+      libraryMappingsDirty: false,
+      hasUnsavedChanges: false,
       applyTheme: vi.fn(),
       updateSettings: vi.fn(),
       saveSettings: mockSave,
@@ -86,6 +88,8 @@ describe('SettingsPage', () => {
       loading: false,
       saving: false,
       error: null,
+      libraryMappingsDirty: false,
+      hasUnsavedChanges: false,
       applyTheme: vi.fn(),
       updateSettings: vi.fn(),
       saveSettings: vi.fn(),
@@ -120,6 +124,8 @@ describe('SettingsPage', () => {
       loading: false,
       saving: false,
       error: null,
+      libraryMappingsDirty: false,
+      hasUnsavedChanges: false,
       applyTheme: vi.fn(),
       updateSettings: vi.fn(),
       saveSettings: vi.fn().mockResolvedValue({}),
@@ -140,5 +146,117 @@ describe('SettingsPage', () => {
 
     expect(mockRefresh).toHaveBeenCalled();
     expect(await screen.findByRole('status')).toHaveTextContent('Plex libraries refreshed.');
+  });
+
+  it('shows loading status when settings are loading', async () => {
+    useTheme.mockReturnValue({
+      theme: 'dark',
+      savedTheme: 'dark',
+      plexUrl: '',
+      plexToken: '',
+      savedSettings: { plexUrl: '', plexToken: '' },
+      libraryMappings: [],
+      savedLibraryMappings: [],
+      libraries: [],
+      librariesLoading: false,
+      librariesError: null,
+      loading: true,
+      saving: false,
+      error: null,
+      libraryMappingsDirty: false,
+      hasUnsavedChanges: false,
+      applyTheme: vi.fn(),
+      updateSettings: vi.fn(),
+      saveSettings: vi.fn(),
+      revertSettings: vi.fn(),
+      refreshLibraries: vi.fn(),
+      setLibraryMapping: vi.fn(),
+      setLibraryMappings: vi.fn(),
+    });
+
+    render(
+      <MemoryRouter>
+        <SettingsPage />
+      </MemoryRouter>
+    );
+
+    const status = await screen.findByRole('status');
+    expect(status).toHaveTextContent('Loading settings…');
+  });
+
+  it('shows saving status while persisting changes', async () => {
+    useTheme.mockReturnValue({
+      theme: 'dark',
+      savedTheme: 'dark',
+      plexUrl: '',
+      plexToken: '',
+      savedSettings: { plexUrl: '', plexToken: '' },
+      libraryMappings: [],
+      savedLibraryMappings: [],
+      libraries: [],
+      librariesLoading: false,
+      librariesError: null,
+      loading: false,
+      saving: true,
+      error: null,
+      libraryMappingsDirty: false,
+      hasUnsavedChanges: true,
+      applyTheme: vi.fn(),
+      updateSettings: vi.fn(),
+      saveSettings: vi.fn(),
+      revertSettings: vi.fn(),
+      refreshLibraries: vi.fn(),
+      setLibraryMapping: vi.fn(),
+      setLibraryMappings: vi.fn(),
+    });
+
+    render(
+      <MemoryRouter>
+        <SettingsPage />
+      </MemoryRouter>
+    );
+
+    const status = await screen.findByRole('status');
+    expect(status).toHaveTextContent('Saving settings…');
+  });
+
+  it('displays success status after saving changes', async () => {
+    const mockSave = vi.fn().mockResolvedValue({});
+    useTheme.mockReturnValue({
+      theme: 'light',
+      savedTheme: 'dark',
+      plexUrl: '',
+      plexToken: '',
+      savedSettings: { plexUrl: '', plexToken: '' },
+      libraryMappings: [],
+      savedLibraryMappings: [],
+      libraries: [],
+      librariesLoading: false,
+      librariesError: null,
+      loading: false,
+      saving: false,
+      error: null,
+      libraryMappingsDirty: true,
+      hasUnsavedChanges: true,
+      applyTheme: vi.fn(),
+      updateSettings: vi.fn(),
+      saveSettings: mockSave,
+      revertSettings: vi.fn(),
+      refreshLibraries: vi.fn(),
+      setLibraryMapping: vi.fn(),
+      setLibraryMappings: vi.fn(),
+    });
+
+    render(
+      <MemoryRouter>
+        <SettingsPage />
+      </MemoryRouter>
+    );
+
+    const saveButton = screen.getByRole('button', { name: /Save Changes/i });
+    fireEvent.click(saveButton);
+
+    expect(mockSave).toHaveBeenCalled();
+    expect(await screen.findByRole('status')).toHaveTextContent('Settings saved successfully.');
   });
 });
