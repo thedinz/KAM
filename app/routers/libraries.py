@@ -16,6 +16,18 @@ from ..services import library_mappings as library_mappings_service
 
 router = APIRouter()
 
+# Section types that should be ignored when listing available libraries. Plex
+# exposes music libraries with types like "artist"/"audio" which KAM cannot
+# currently map.
+IGNORED_SECTION_TYPES = {"artist", "audio"}
+
+
+def _is_supported_section(section_type: Optional[str]) -> bool:
+    if not section_type:
+        return True
+    return section_type.lower() not in IGNORED_SECTION_TYPES
+
+
 # --- Load mappings -----------------------------------------------------------
 
 def _asset_library_map() -> Dict[str, str]:
@@ -117,9 +129,14 @@ def list_available_libraries() -> List[LibrarySectionInfo]:
         name = str(getattr(section, "title", "") or "")
         key_value = getattr(section, "key", None)
         key_str = str(key_value) if key_value not in (None, "") else None
+        section_type = getattr(section, "type", None) or None
+
+        if not _is_supported_section(section_type):
+            continue
+
         entry = {
             "name": name,
-            "type": getattr(section, "type", None) or None,
+            "type": section_type,
             "key": key_str,
             "assetPath": None,
             "collectionsPath": None,
