@@ -29,10 +29,19 @@ def overrides_env(tmp_path, monkeypatch):
     monkeypatch.setenv("KAM_ASSETS_ROOT", str(assets_root))
     monkeypatch.setenv("KAM_FOLDER_OVERRIDES_PATH", str(overrides_path))
 
-    from app import config
-
-    monkeypatch.setattr(config, "LIBRARY_MAPPINGS", {"Movies": str(movies_dir)})
-    monkeypatch.setattr(config, "COLLECTIONS_ROOT", str(collections_dir))
+    settings_module = importlib.reload(importlib.import_module("app.services.settings"))
+    settings_module.set_settings_path(str(tmp_path / "settings.json"))
+    settings_module.save_settings(
+        {
+            "libraryMappings": [
+                {
+                    "library": "Movies",
+                    "assetPath": str(movies_dir),
+                    "collectionsPath": str(collections_dir),
+                }
+            ]
+        }
+    )
 
     resolve_module = importlib.reload(importlib.import_module("app.services.resolve"))
     resolve_module.ASSETS_ROOT = str(assets_root)

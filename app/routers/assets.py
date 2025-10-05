@@ -7,8 +7,8 @@ from typing import List
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
-from .. import config
 from ..services import folder_overrides
+from ..services import library_mappings as library_mappings_service
 from ..services.resolve import ASSETS_ROOT, resolve_existing_dir_or_422
 
 router = APIRouter()
@@ -24,14 +24,14 @@ def _library_root(library: str) -> Path:
     if not library:
         raise HTTPException(status_code=422, detail="Missing library")
     if library == "Collections":
-        base = config.COLLECTIONS_ROOT
+        base = library_mappings_service.get_collections_path()
         if not base:
             raise HTTPException(
                 status_code=404, detail="No assets mapping for library 'Collections'"
             )
         root = Path(base)
     else:
-        mapped = config.LIBRARY_MAPPINGS.get(library)
+        mapped = library_mappings_service.get_asset_path(library)
         if mapped:
             root = Path(mapped)
         else:

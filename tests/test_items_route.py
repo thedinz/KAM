@@ -1,4 +1,5 @@
 import importlib
+import importlib
 from types import SimpleNamespace
 
 import pytest
@@ -18,23 +19,24 @@ def items_env(tmp_path, monkeypatch):
     monkeypatch.setenv("KAM_ASSETS_ROOT", str(assets_root))
     monkeypatch.setenv("KAM_FOLDER_OVERRIDES_PATH", str(overrides_path))
 
-    settings_module = importlib.import_module("app.services.settings")
-    monkeypatch.setattr(
-        settings_module,
-        "load_settings",
-        lambda: {
+    settings_module = importlib.reload(importlib.import_module("app.services.settings"))
+    settings_module.set_settings_path(str(tmp_path / "settings.json"))
+    settings_module.save_settings(
+        {
             "theme": "dark",
             "plexUrl": "http://plex.test",
             "plexToken": "token",
-        },
+            "libraryMappings": [
+                {
+                    "library": library,
+                    "assetPath": str(library_path),
+                    "collectionsPath": None,
+                }
+            ],
+        }
     )
     plex_settings = importlib.reload(importlib.import_module("app.services.plex_settings"))
     plex_settings.clear_cache()
-
-    from app import config
-
-    monkeypatch.setattr(config, "LIBRARY_MAPPINGS", {library: str(library_path)})
-    monkeypatch.setattr(config, "COLLECTIONS_ROOT", "")
 
     resolve_module = importlib.reload(importlib.import_module("app.services.resolve"))
     resolve_module.ASSETS_ROOT = str(assets_root)
