@@ -95,6 +95,7 @@ KAM only cares about the **internal** path (e.g., `/assets`). You choose what ho
 
 * Docker (Unraid, Linux, macOS, or Windows)
 * Read/write access to your Kometa **assets** directories (bind-mounted)
+* Read access to your Kometa **config** directory if you want automatic Kometa mapping (bind-mounted)
 * Optional: Reverse proxy (Caddy/Traefik/Nginx) if you want TLS or auth
 
 ---
@@ -109,10 +110,16 @@ docker pull ghcr.io/thedinz/kam:latest
 
 ### 2) Run (simple)
 
-Expose KAM on **7171** (mapped to the container's port **8000**) and map your assets:
+Expose KAM on **7171** (mapped to the container's port **8000**) and map your assets and Kometa config:
 
 ```bash
-docker run -d   --name kam   -p 7171:8000   -v /mnt/user/kometa/assets:/assets   ghcr.io/thedinz/kam:latest
+docker run -d \
+  --name kam \
+  -p 7171:8000 \
+  -v /mnt/user/kometa/assets:/assets \
+  -v /mnt/user/kometa/config:/config:ro \
+  -e KOMETA_CONFIG_PATH=/config/config.yml \
+  ghcr.io/thedinz/kam:latest
 ```
 
 Open: `http://<your-host>:7171/`
@@ -128,8 +135,11 @@ services:
     container_name: kam
     ports:
       - "7171:8000"
+    environment:
+      KOMETA_CONFIG_PATH: /config/config.yml
     volumes:
       - /mnt/user/kometa/assets:/assets
+      - /mnt/user/kometa/config:/config:ro
     restart: unless-stopped
 ```
 
@@ -152,6 +162,9 @@ PLEX_TOKEN=CHANGE_ME
 # Map Plex libraries to asset folders inside container
 # e.g. Movies:/assets/Movies,Kids Movies:/assets/Kids Movies
 LIBRARIES=Movies:/assets/Movies,Kids Movies:/assets/Kids Movies
+
+# Optional: Path to your Kometa config inside the container
+KOMETA_CONFIG_PATH=/config/config.yml
 
 # Runtime
 PORT=8000

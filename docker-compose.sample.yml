@@ -8,5 +8,8 @@ services:
       - "7171:8000"
     env_file:
       - .env
+    environment:
+      KOMETA_CONFIG_PATH: /config/config.yml
     volumes:
-      - /mnt/user/appdata/kam/assets:/assets:rw
+      - /mnt/user/kometa/assets:/assets:rw
+      - /mnt/user/kometa/config:/config:ro

@@ -9,14 +9,28 @@ import {
 } from '../utils/libraryMappings.js';
 
 const ThemeContext = createContext({
-  settings: { theme: 'dark', plexUrl: '', plexToken: '', libraryMappings: [] },
-  savedSettings: { theme: 'dark', plexUrl: '', plexToken: '', libraryMappings: [] },
+  settings: {
+    theme: 'dark',
+    plexUrl: '',
+    plexToken: '',
+    kometaConfigPath: '',
+    libraryMappings: [],
+  },
+  savedSettings: {
+    theme: 'dark',
+    plexUrl: '',
+    plexToken: '',
+    kometaConfigPath: '',
+    libraryMappings: [],
+  },
   theme: 'dark',
   savedTheme: 'dark',
   plexUrl: '',
   plexToken: '',
   savedPlexUrl: '',
   savedPlexToken: '',
+  kometaConfigPath: '',
+  savedKometaConfigPath: '',
   libraryMappings: [],
   savedLibraryMappings: [],
   libraries: [],
@@ -59,12 +73,16 @@ const sanitizeLibrariesList = (raw) => {
       const keyValue = entry.key ?? entry.id ?? null;
       const assetPathValue = normalizePathValue(entry.assetPath);
       const collectionsPathValue = normalizePathValue(entry.collectionsPath);
+      const collectionAssetPathsValue = Array.isArray(entry.collectionAssetPaths)
+        ? entry.collectionAssetPaths.map((value) => normalizePathValue(value)).filter(Boolean)
+        : [];
       return {
         name,
         type: typeValue ? String(typeValue) : null,
         key: keyValue ? String(keyValue) : null,
         assetPath: assetPathValue,
         collectionsPath: collectionsPathValue,
+        collectionAssetPaths: collectionAssetPathsValue,
       };
     })
     .filter(Boolean)
@@ -75,6 +93,7 @@ const sanitizeSettings = (raw = {}) => {
   const themeValue = normalizeTheme(raw.theme);
   const plexUrlValue = raw.plexUrl;
   const plexTokenValue = raw.plexToken;
+  const kometaConfigValue = raw.kometaConfigPath;
 
   return {
     theme: themeValue,
@@ -90,6 +109,7 @@ const sanitizeSettings = (raw = {}) => {
         : plexTokenValue
         ? String(plexTokenValue)
         : '',
+    kometaConfigPath: normalizePathValue(kometaConfigValue),
     libraryMappings: sanitizeLibraryMappings(raw.libraryMappings),
   };
 };
@@ -301,7 +321,8 @@ export function ThemeProvider({ children }) {
     () =>
       settings.theme !== savedSettings.theme ||
       settings.plexUrl !== savedSettings.plexUrl ||
-      settings.plexToken !== savedSettings.plexToken,
+      settings.plexToken !== savedSettings.plexToken ||
+      settings.kometaConfigPath !== savedSettings.kometaConfigPath,
     [settings, savedSettings]
   );
 
@@ -406,6 +427,8 @@ export function ThemeProvider({ children }) {
       plexToken: settings.plexToken,
       savedPlexUrl: savedSettings.plexUrl,
       savedPlexToken: savedSettings.plexToken,
+      kometaConfigPath: settings.kometaConfigPath,
+      savedKometaConfigPath: savedSettings.kometaConfigPath,
       libraryMappings: settings.libraryMappings,
       savedLibraryMappings: savedSettings.libraryMappings,
       libraries,
