@@ -20,6 +20,10 @@ def overrides_env(tmp_path, monkeypatch):
     collections_dir.mkdir()
     (collections_dir / "Override Collection").mkdir()
 
+    loose_dir = assets_root / "LooseAssets"
+    loose_dir.mkdir()
+    (loose_dir / "Clips").mkdir()
+
     overrides_path = tmp_path / "overrides.json"
 
     monkeypatch.setenv("KAM_ASSETS_ROOT", str(assets_root))
@@ -45,6 +49,7 @@ def overrides_env(tmp_path, monkeypatch):
         movie_folder=movie_folder,
         movies_dir=movies_dir,
         collections_dir=collections_dir,
+        loose_dir=loose_dir,
     )
 
 
@@ -102,3 +107,22 @@ def test_list_asset_folders(overrides_env):
 
     with pytest.raises(HTTPException):
         router.list_asset_folders(library="Movies", parent="../..")
+
+
+def test_unmapped_library_navigation(overrides_env):
+    router = overrides_env.assets_router
+
+    listing = router.list_asset_folders(library="Documentaries")
+    assert listing["parent"] == ""
+    names = {item["name"] for item in listing["items"]}
+    assert overrides_env.loose_dir.name in names
+    assert overrides_env.movies_dir.name in names
+
+    nested = router.list_asset_folders(
+        library="Documentaries", parent=overrides_env.loose_dir.name
+    )
+    nested_names = {item["name"] for item in nested["items"]}
+    assert "Clips" in nested_names
+
+    with pytest.raises(HTTPException):
+        router.list_asset_folders(library="Documentaries", parent="../Collections")

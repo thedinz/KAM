@@ -99,3 +99,28 @@ def get_settings() -> SettingsPayload:
 def update_settings(payload: SettingsPayload) -> SettingsPayload:
     stored = settings_service.save_settings(payload.model_dump())
     return SettingsPayload(**stored)
+
+
+class LibraryMappingsUpdatePayload(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    libraryMappings: List[LibraryMappingPayload] = Field(default_factory=list)
+
+    @field_validator("libraryMappings", mode="after")
+    @classmethod
+    def _dedupe(cls, value: List[LibraryMappingPayload]) -> List[LibraryMappingPayload]:
+        if not value:
+            return []
+        sanitized = library_mappings_service.sanitize_library_mappings(
+            [item.model_dump() for item in value]
+        )
+        return [LibraryMappingPayload(**item) for item in sanitized]
+
+
+@router.put("/api/settings/library-mappings", response_model=List[LibraryMappingPayload])
+def update_library_mappings(payload: LibraryMappingsUpdatePayload) -> List[LibraryMappingPayload]:
+    stored = settings_service.save_library_mappings(
+        [item.model_dump() for item in payload.libraryMappings]
+    )
+    mappings = stored.get("libraryMappings", [])
+    return [LibraryMappingPayload(**item) for item in mappings]
