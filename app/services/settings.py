@@ -1,12 +1,15 @@
 """Helpers for persisting simple UI settings."""
 from __future__ import annotations
 
+import copy
 import json
 import logging
 import os
 import threading
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, List
+
+from . import library_mappings
 
 logger = logging.getLogger(__name__)
 
@@ -14,6 +17,7 @@ _DEFAULT_SETTINGS: Dict[str, Any] = {
     "theme": "dark",
     "plexUrl": os.environ.get("PLEX_URL") or "",
     "plexToken": os.environ.get("PLEX_TOKEN") or "",
+    "libraryMappings": library_mappings.seed_from_env(),
 }
 
 _DEF_BASE = (
@@ -48,18 +52,40 @@ def load_settings() -> Dict[str, Any]:
 def save_settings(data: Dict[str, Any]) -> Dict[str, Any]:
     """Persist settings and return the stored payload merged with defaults."""
     with _LOCK:
-        merged = _merge_with_defaults(data)
+        sanitized = _sanitize_payload(data)
+        merged = _merge_with_defaults(sanitized)
         _write_locked(merged)
         _clear_plex_cache()
+        _clear_library_mapping_cache()
         return merged
 
 
 def _merge_with_defaults(data: Dict[str, Any] | None) -> Dict[str, Any]:
-    merged = dict(_DEFAULT_SETTINGS)
+    merged = copy.deepcopy(_DEFAULT_SETTINGS)
     if data:
         for key, value in data.items():
-            merged[key] = value
+            if key == "libraryMappings" and isinstance(value, list):
+                merged[key] = _clone_mappings(value)
+            else:
+                merged[key] = value
     return merged
+
+
+def _sanitize_payload(data: Dict[str, Any] | None) -> Dict[str, Any]:
+    if not isinstance(data, dict):
+        return {}
+
+    sanitized: Dict[str, Any] = {}
+    for key in ("theme", "plexUrl", "plexToken"):
+        if key in data:
+            sanitized[key] = data[key]
+
+    if "libraryMappings" in data:
+        sanitized["libraryMappings"] = library_mappings.sanitize_library_mappings(
+            data.get("libraryMappings")
+        )
+
+    return sanitized
 
 
 def _load_locked() -> Dict[str, Any]:
@@ -67,10 +93,10 @@ def _load_locked() -> Dict[str, Any]:
     try:
         raw = path.read_text(encoding="utf-8")
     except FileNotFoundError:
-        return dict(_DEFAULT_SETTINGS)
+        return copy.deepcopy(_DEFAULT_SETTINGS)
     except Exception as exc:
         logger.warning("Unable to read settings file %s: %s", path, exc)
-        return dict(_DEFAULT_SETTINGS)
+        return copy.deepcopy(_DEFAULT_SETTINGS)
 
     try:
         data = json.loads(raw) or {}
@@ -78,7 +104,8 @@ def _load_locked() -> Dict[str, Any]:
         logger.warning("Invalid JSON in settings file %s: %s", path, exc)
         data = {}
 
-    return _merge_with_defaults(data if isinstance(data, dict) else {})
+    sanitized = _sanitize_payload(data if isinstance(data, dict) else {})
+    return _merge_with_defaults(sanitized)
 
 
 def _write_locked(data: Dict[str, Any]) -> None:
@@ -102,3 +129,14 @@ def _clear_plex_cache() -> None:
         plex_settings.clear_cache()
     except Exception:
         logger.debug("Unable to clear Plex settings cache", exc_info=True)
+
+
+def _clear_library_mapping_cache() -> None:
+    try:
+        library_mappings.clear_cache()
+    except Exception:
+        logger.debug("Unable to clear library mapping cache", exc_info=True)
+
+
+def _clone_mappings(mappings: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    return [dict(item) for item in mappings]
