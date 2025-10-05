@@ -1,7 +1,13 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import FolderFinderModal from '../components/FolderFinderModal.jsx';
 import { useTheme } from '../theme/ThemeProvider.jsx';
+import {
+  areLibraryMappingsEqual,
+  createLibraryMappingLookup,
+  normalizeLibraryName,
+  normalizePathValue,
+} from '../utils/libraryMappings.js';
 
 const initialModalState = {
   open: false,
@@ -19,30 +25,6 @@ const normalizeText = (value) => {
   return text;
 };
 
-const canonicalizeMappings = (raw) => {
-  if (!Array.isArray(raw)) return [];
-  return raw
-    .map((entry) => ({
-      library: normalizeText(entry?.library ?? entry?.name),
-      assetPath: normalizeText(entry?.assetPath),
-      collectionsPath: normalizeText(entry?.collectionsPath),
-    }))
-    .filter((entry) => entry.library && entry.assetPath)
-    .sort((a, b) => a.library.localeCompare(b.library));
-};
-
-const areMappingsEqual = (left, right) => {
-  const a = canonicalizeMappings(left);
-  const b = canonicalizeMappings(right);
-  if (a.length !== b.length) return false;
-  return a.every(
-    (entry, index) =>
-      entry.library === b[index].library &&
-      entry.assetPath === b[index].assetPath &&
-      normalizeText(entry.collectionsPath) === normalizeText(b[index].collectionsPath)
-  );
-};
-
 function SettingsPage() {
   const {
     theme,
@@ -58,6 +40,8 @@ function SettingsPage() {
     loading,
     saving,
     error,
+    libraryMappingsDirty,
+    hasUnsavedChanges,
     applyTheme,
     updateSettings,
     saveSettings,
@@ -87,47 +71,78 @@ function SettingsPage() {
     }
   }, [librariesError]);
 
+  const showInfoStatus = useCallback(
+    (message) => {
+      setStatus((prev) => {
+        if (prev?.type === 'error') {
+          return prev;
+        }
+        return { type: 'info', message };
+      });
+    },
+    []
+  );
+
+  useEffect(() => {
+    if (loading) {
+      showInfoStatus('Loading settings…');
+    }
+  }, [loading, showInfoStatus]);
+
+  useEffect(() => {
+    if (saving) {
+      showInfoStatus('Saving settings…');
+    }
+  }, [saving, showInfoStatus]);
+
+  useEffect(() => {
+    if (librariesLoading) {
+      showInfoStatus('Loading Plex libraries…');
+    }
+  }, [librariesLoading, showInfoStatus]);
+
   const busy = loading || saving;
   const combinedBusy = busy || librariesLoading;
 
   const libraryRows = useMemo(() => {
     const infoMap = new Map(
-      (Array.isArray(libraries) ? libraries : []).map((entry) => [
-        normalizeText(entry.name),
-        {
-          name: normalizeText(entry.name),
-          type: normalizeText(entry.type),
-          key: normalizeText(entry.key),
-          assetPath: normalizeText(entry.assetPath),
-          collectionsPath: normalizeText(entry.collectionsPath),
-        },
-      ])
+      (Array.isArray(libraries) ? libraries : []).map((entry) => {
+        const name = normalizeLibraryName(entry?.name ?? entry?.library);
+        return [
+          name,
+          {
+            name: normalizeText(entry?.name ?? entry?.library ?? name),
+            type: normalizeText(entry?.type ?? entry?.libraryType),
+            key: normalizeText(entry?.key ?? entry?.id),
+            assetPath: normalizePathValue(entry?.assetPath),
+            collectionsPath: normalizePathValue(entry?.collectionsPath),
+          },
+        ];
+      })
     );
-    const currentMap = new Map(
-      canonicalizeMappings(libraryMappings).map((entry) => [entry.library, entry])
-    );
-    const savedMap = new Map(
-      canonicalizeMappings(savedLibraryMappings).map((entry) => [entry.library, entry])
-    );
-    const names = new Set([
-      ...infoMap.keys(),
-      ...currentMap.keys(),
-      ...savedMap.keys(),
-    ]);
+    const currentMap = createLibraryMappingLookup(libraryMappings);
+    const savedMap = createLibraryMappingLookup(savedLibraryMappings);
+    const names = new Set([...infoMap.keys(), ...currentMap.keys(), ...savedMap.keys()]);
 
     return Array.from(names)
       .filter(Boolean)
       .sort((a, b) => a.localeCompare(b))
       .map((name) => {
-        const info = infoMap.get(name) || { name, type: '', key: '', assetPath: '', collectionsPath: '' };
+        const info =
+          infoMap.get(name) || {
+            name,
+            type: '',
+            key: '',
+            assetPath: '',
+            collectionsPath: '',
+          };
         const current = currentMap.get(name);
         const saved = savedMap.get(name);
-        const assetPath = normalizeText(current?.assetPath ?? info.assetPath);
-        const collectionsPath = normalizeText(current?.collectionsPath ?? info.collectionsPath);
-        const savedAssetPath = normalizeText(saved?.assetPath ?? info.assetPath);
-        const savedCollectionsPath = normalizeText(saved?.collectionsPath ?? info.collectionsPath);
-        const isDirty =
-          assetPath !== savedAssetPath || normalizeText(collectionsPath) !== normalizeText(savedCollectionsPath);
+        const assetPath = normalizePathValue(current?.assetPath ?? info.assetPath);
+        const collectionsPath = normalizePathValue(current?.collectionsPath ?? info.collectionsPath);
+        const savedAssetPath = normalizePathValue(saved?.assetPath ?? info.assetPath);
+        const savedCollectionsPath = normalizePathValue(saved?.collectionsPath ?? info.collectionsPath);
+        const isDirty = assetPath !== savedAssetPath || collectionsPath !== savedCollectionsPath;
         return {
           name,
           type: info.type,
@@ -164,19 +179,30 @@ function SettingsPage() {
     });
   }, [libraryRows]);
 
-  const mappingsDirty = useMemo(
-    () => !areMappingsEqual(libraryMappings, savedLibraryMappings),
-    [libraryMappings, savedLibraryMappings]
-  );
+  const mappingsDirty = useMemo(() => {
+    if (libraryMappingsDirty != null) {
+      return Boolean(libraryMappingsDirty);
+    }
+    return !areLibraryMappingsEqual(libraryMappings, savedLibraryMappings);
+  }, [libraryMappingsDirty, libraryMappings, savedLibraryMappings]);
 
   const isDirty = useMemo(() => {
-    return (
-      theme !== savedTheme ||
-      plexUrl !== savedPlexUrl ||
-      plexToken !== savedPlexToken ||
-      mappingsDirty
-    );
-  }, [theme, savedTheme, plexUrl, savedPlexUrl, plexToken, savedPlexToken, mappingsDirty]);
+    if (typeof hasUnsavedChanges === 'boolean') {
+      return hasUnsavedChanges;
+    }
+    const settingsChanged =
+      theme !== savedTheme || plexUrl !== savedPlexUrl || plexToken !== savedPlexToken;
+    return settingsChanged || mappingsDirty;
+  }, [
+    hasUnsavedChanges,
+    theme,
+    savedTheme,
+    plexUrl,
+    savedPlexUrl,
+    plexToken,
+    savedPlexToken,
+    mappingsDirty,
+  ]);
 
   const selectedRows = selectedLibraries
     .map((name) => libraryRowMap.get(name))
