@@ -32,8 +32,19 @@ def tv_env(tmp_path, monkeypatch):
 
     monkeypatch.setenv("KAM_ASSETS_ROOT", str(assets_root))
     monkeypatch.setenv("KAM_FOLDER_OVERRIDES_PATH", str(overrides_path))
-    monkeypatch.setenv("PLEX_URL", "http://plex.test")
-    monkeypatch.setenv("PLEX_TOKEN", "token")
+
+    settings_module = importlib.import_module("app.services.settings")
+    monkeypatch.setattr(
+        settings_module,
+        "load_settings",
+        lambda: {
+            "theme": "dark",
+            "plexUrl": "http://plex.test",
+            "plexToken": "token",
+        },
+    )
+    plex_settings = importlib.reload(importlib.import_module("app.services.plex_settings"))
+    plex_settings.clear_cache()
 
     from app import config
 
@@ -100,3 +111,5 @@ def test_tv_route_prefers_override(tv_env):
     assert data["posterUrl"].startswith("/fileproxy")
     assert data["backgroundUrl"].startswith("/fileproxy")
     assert data["seasons"][0]["posterUrl"].startswith("/fileproxy")
+    assert data["plexPosterUrl"].startswith("http://plex.test")
+    assert data["plexBackgroundUrl"].startswith("http://plex.test")

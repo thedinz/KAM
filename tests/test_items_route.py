@@ -17,8 +17,19 @@ def items_env(tmp_path, monkeypatch):
 
     monkeypatch.setenv("KAM_ASSETS_ROOT", str(assets_root))
     monkeypatch.setenv("KAM_FOLDER_OVERRIDES_PATH", str(overrides_path))
-    monkeypatch.setenv("PLEX_URL", "http://plex.test")
-    monkeypatch.setenv("PLEX_TOKEN", "token")
+
+    settings_module = importlib.import_module("app.services.settings")
+    monkeypatch.setattr(
+        settings_module,
+        "load_settings",
+        lambda: {
+            "theme": "dark",
+            "plexUrl": "http://plex.test",
+            "plexToken": "token",
+        },
+    )
+    plex_settings = importlib.reload(importlib.import_module("app.services.plex_settings"))
+    plex_settings.clear_cache()
 
     from app import config
 
@@ -94,6 +105,7 @@ def test_items_route_reports_not_ready_count_and_filters(items_env):
 
     by_key = {it["ratingKey"]: it for it in data["items"]}
     assert by_key["22"]["assetReady"] is False
+    assert by_key["22"]["posterUrl"].startswith("http://plex.test")
 
     filtered = items_env.call(not_ready_only=True)
 
