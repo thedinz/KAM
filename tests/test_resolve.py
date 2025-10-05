@@ -29,12 +29,16 @@ def test_resolve_prefers_config_mapping(tmp_path, monkeypatch):
 
     monkeypatch.setenv("KAM_ASSETS_ROOT", str(assets_root))
 
-    config_module = importlib.import_module("app.config")
-    monkeypatch.setattr(
-        config_module,
-        "LIBRARY_MAPPINGS",
-        {library: str(mapped_library_path)},
-        raising=False,
+    settings_module = importlib.reload(importlib.import_module("app.services.settings"))
+    settings_module.set_settings_path(str(tmp_path / "settings.json"))
+    settings_module.save_library_mappings(
+        [
+            {
+                "library": library,
+                "assetPath": str(mapped_library_path),
+                "collectionsPath": None,
+            }
+        ]
     )
 
     resolve_module = _reload_with_assets_root(str(assets_root))
@@ -55,6 +59,10 @@ def test_resolve_accepts_high_similarity_variant(tmp_path, monkeypatch):
 
     monkeypatch.setenv("KAM_ASSETS_ROOT", str(assets_root))
 
+    settings_module = importlib.reload(importlib.import_module("app.services.settings"))
+    settings_module.set_settings_path(str(tmp_path / "settings.json"))
+    settings_module.save_library_mappings([])
+
     resolve_module = _reload_with_assets_root(str(assets_root))
 
     resolved = resolve_module.resolve_existing_dir_or_422(library, target)
@@ -73,6 +81,10 @@ def test_resolve_matches_stopword_and_year_variants(tmp_path, monkeypatch):
 
     monkeypatch.setenv("KAM_ASSETS_ROOT", str(assets_root))
 
+    settings_module = importlib.reload(importlib.import_module("app.services.settings"))
+    settings_module.set_settings_path(str(tmp_path / "settings.json"))
+    settings_module.save_library_mappings([])
+
     resolve_module = _reload_with_assets_root(str(assets_root))
 
     resolved = resolve_module.resolve_existing_dir_or_422(library, target)
@@ -90,6 +102,10 @@ def test_resolve_rejects_low_similarity_titles(tmp_path, monkeypatch):
     (library_path / existing).mkdir()
 
     monkeypatch.setenv("KAM_ASSETS_ROOT", str(assets_root))
+
+    settings_module = importlib.reload(importlib.import_module("app.services.settings"))
+    settings_module.set_settings_path(str(tmp_path / "settings.json"))
+    settings_module.save_library_mappings([])
 
     resolve_module = _reload_with_assets_root(str(assets_root))
 

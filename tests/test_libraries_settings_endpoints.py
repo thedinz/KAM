@@ -205,20 +205,32 @@ def test_settings_libraries_endpoint_handles_empty_mappings(monkeypatch):
 def test_asset_folders_unmapped_library(tmp_path, monkeypatch):
     assets_root = tmp_path / "assets"
     assets_root.mkdir()
-    (assets_root / "Movies").mkdir()
+    movies_dir = assets_root / "Movies"
+    movies_dir.mkdir()
     loose = assets_root / "LooseAssets"
     loose.mkdir()
     (loose / "Clips").mkdir()
+    collections_dir = assets_root / "Collections"
+    collections_dir.mkdir()
 
     monkeypatch.setenv("KAM_ASSETS_ROOT", str(assets_root))
 
     resolve_module = importlib.reload(importlib.import_module("app.services.resolve"))
     resolve_module.ASSETS_ROOT = str(assets_root)
 
-    from app import config
-
-    monkeypatch.setattr(config, "LIBRARY_MAPPINGS", {"Movies": str(assets_root / "Movies")})
-    monkeypatch.setattr(config, "COLLECTIONS_ROOT", str(assets_root / "Collections"))
+    settings_module = importlib.reload(importlib.import_module("app.services.settings"))
+    settings_module.set_settings_path(str(tmp_path / "settings.json"))
+    settings_module.save_settings(
+        {
+            "libraryMappings": [
+                {
+                    "library": "Movies",
+                    "assetPath": str(movies_dir),
+                    "collectionsPath": str(collections_dir),
+                }
+            ]
+        }
+    )
 
     assets_router = importlib.reload(importlib.import_module("app.routers.assets"))
 

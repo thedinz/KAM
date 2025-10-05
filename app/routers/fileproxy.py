@@ -2,16 +2,22 @@
 import os, mimetypes
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import FileResponse
-from .. import config
+from ..services import library_mappings as library_mappings_service
 
 router = APIRouter()
 
 def _allowed_roots():
     roots = set()
-    roots.update(getattr(config, "LIBRARY_MAPPINGS", {}).values())
-    coll = getattr(config, "COLLECTIONS_ROOT", None)
-    if coll:
-        roots.add(coll)
+    for entry in library_mappings_service.load_library_mappings():
+        asset = entry.get("assetPath")
+        if asset:
+            roots.add(asset)
+        coll = entry.get("collectionsPath")
+        if coll:
+            roots.add(coll)
+    fallback_coll = library_mappings_service.get_collections_path()
+    if fallback_coll:
+        roots.add(fallback_coll)
     return [os.path.realpath(p) for p in roots if p]
 
 def _is_allowed(path: str) -> bool:
