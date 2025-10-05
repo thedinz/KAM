@@ -131,7 +131,9 @@ function FolderFinderModal({
       const text = normalizeText(collectionsSelection?.path ?? normalizedInitialCollections);
       setCurrentFolder(text || '');
     } else {
-      const text = normalizeText(assetSelection?.path ?? normalizedInitialAsset);
+      const fallbackCurrent = normalizeText(currentPath);
+      const selectedOrInitial = assetSelection?.path ?? normalizedInitialAsset;
+      const text = normalizeText(selectedOrInitial || fallbackCurrent);
       setCurrentFolder(text || '');
     }
   }, [
@@ -142,6 +144,7 @@ function FolderFinderModal({
     collectionsSelection,
     normalizedInitialAsset,
     normalizedInitialCollections,
+    currentPath,
   ]);
 
   const loadFolders = useCallback(
@@ -230,7 +233,12 @@ function FolderFinderModal({
 
   useEffect(() => {
     if (!isOpen) return;
-    loadFolders({ path: currentPath, query: searchTerm, preserveSelection: false });
+    const isSearchActive = Boolean(searchTerm);
+    loadFolders({
+      path: currentPath,
+      query: searchTerm,
+      preserveSelection: !isSearchActive,
+    });
   }, [searchTerm, isOpen, currentPath, loadFolders]);
 
   const breadcrumbs = useMemo(
@@ -275,7 +283,10 @@ function FolderFinderModal({
     setSearchTerm('');
   };
 
-  const resolvedAssetPath = assetSelection?.path || normalizedInitialAsset;
+  const resolvedAssetPath =
+    assetSelection?.path ||
+    normalizedInitialAsset ||
+    (isSettingsMode ? normalizeText(currentPath) : '');
   const resolvedCollectionsPath = collectionsSelection?.path || normalizedInitialCollections;
   const requireAsset = settingsIntent !== 'collections';
   const requireCollections = settingsIntent === 'collections';

@@ -51,6 +51,71 @@ describe('FolderFinderModal - settings mode', () => {
     });
   });
 
+  it('allows confirming using the currently open folder when nothing is selected', async () => {
+    const onSettingsConfirm = vi.fn();
+
+    const payloads = {
+      '': {
+        parent: '',
+        items: [{ name: 'Kids TV', path: 'Kids TV', isDir: true }],
+      },
+      'Kids TV': {
+        parent: 'Kids TV',
+        items: [],
+      },
+    };
+
+    global.fetch = vi.fn((url) => {
+      const parsed = new URL(url, 'http://localhost');
+      const parent = parsed.searchParams.get('parent') || '';
+      const payload = payloads[parent];
+      if (!payload) {
+        throw new Error(`Unexpected parent ${parent}`);
+      }
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve(payload),
+      });
+    });
+
+    render(
+      <FolderFinderModal
+        isOpen
+        context="settings"
+        library="Kids"
+        settingsLibraries={['Kids']}
+        defaultTarget="asset"
+        settingsIntent="asset"
+        onClose={vi.fn()}
+        onSettingsConfirm={onSettingsConfirm}
+      />
+    );
+
+    const openButton = await screen.findByRole('button', { name: 'Open' });
+    fireEvent.click(openButton);
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('parent=Kids%20TV')
+      );
+    });
+
+    const confirmButton = await screen.findByRole('button', { name: /Apply selection/i });
+
+    await waitFor(() => {
+      expect(confirmButton).not.toBeDisabled();
+    });
+
+    fireEvent.click(confirmButton);
+
+    await waitFor(() => {
+      expect(onSettingsConfirm).toHaveBeenCalledWith(
+        { assetPath: 'Kids TV' },
+        expect.objectContaining({ assetSelection: null, collectionsSelection: null })
+      );
+    });
+  });
+
   it('returns both asset and collections selections when provided', async () => {
     const onSettingsConfirm = vi.fn();
 
