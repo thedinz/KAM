@@ -10,7 +10,11 @@ from typing import Any, Dict
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_SETTINGS: Dict[str, Any] = {"theme": "dark"}
+_DEFAULT_SETTINGS: Dict[str, Any] = {
+    "theme": "dark",
+    "plexUrl": os.environ.get("PLEX_URL") or "",
+    "plexToken": os.environ.get("PLEX_TOKEN") or "",
+}
 
 _DEF_BASE = (
     os.environ.get("KAM_STATE_ROOT")

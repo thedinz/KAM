@@ -762,6 +762,34 @@ main {
   gap: 16px;
 }
 
+.settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.settings-section h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.settings-input {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.settings-input span {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.settings-input input {
+  width: 100%;
+}
+
 .settings-radio {
   display: inline-flex;
   align-items: center;
