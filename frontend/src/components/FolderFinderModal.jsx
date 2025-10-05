@@ -259,10 +259,9 @@ function FolderFinderModal({
   const resolvedCollectionsPath = collectionsSelection?.path || normalizedInitialCollections;
   const requireAsset = settingsIntent !== 'collections';
   const requireCollections = settingsIntent === 'collections';
-  const canConfirmSettings = (
+  const canConfirmSettings =
     (!requireAsset || Boolean(resolvedAssetPath)) &&
-    (!requireCollections || Boolean(resolvedCollectionsPath))
-  );
+    (!requireCollections || Boolean(resolvedCollectionsPath));
 
   const activeSelection = isSettingsMode
     ? target === 'collections'
@@ -286,17 +285,15 @@ function FolderFinderModal({
         return;
       }
       const payload = {};
-      if (requireAsset && resolvedAssetPath) {
+      if (requireAsset) {
         payload.assetPath = resolvedAssetPath;
-      } else if (!requireAsset && assetSelection?.path) {
+      } else if (assetSelection?.path) {
         payload.assetPath = assetSelection.path;
       }
-      if (settingsIntent !== 'asset') {
-        if (requireCollections && resolvedCollectionsPath) {
-          payload.collectionsPath = resolvedCollectionsPath;
-        } else if (!requireCollections && collectionsSelection?.path) {
-          payload.collectionsPath = collectionsSelection.path;
-        }
+      if (collectionsSelection?.path) {
+        payload.collectionsPath = collectionsSelection.path;
+      } else if (requireCollections && resolvedCollectionsPath) {
+        payload.collectionsPath = resolvedCollectionsPath;
       }
       onSettingsConfirm(payload, { assetSelection, collectionsSelection });
       return;
