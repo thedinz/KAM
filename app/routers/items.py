@@ -1,31 +1,37 @@
 # app/routers/items.py
 from fastapi import APIRouter, HTTPException, Query
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 import os
 import requests
 import xml.etree.ElementTree as ET
 from urllib.parse import quote
 
 from ..services import folder_overrides
+from ..services import plex_settings
 from ..services.resolve import resolve_existing_dir_or_422
 
 router = APIRouter()
 
-PLEX_URL    = os.environ.get("PLEX_URL", "").rstrip("/")
-PLEX_TOKEN  = os.environ.get("PLEX_TOKEN", "")
 ASSETS_ROOT = os.environ.get("KAM_ASSETS_ROOT", "/assets")
 
 # ---------- Plex helpers ----------
 
-def _require_plex():
-    if not PLEX_URL or not PLEX_TOKEN:
+def _require_plex() -> Tuple[str, str]:
+    cfg = plex_settings.get_plex_config()
+    if not cfg.url or not cfg.token:
         raise HTTPException(status_code=500, detail="PLEX_URL or PLEX_TOKEN not set")
+    return cfg.url, cfg.token
 
 def _plex_sections_raw():
-    _require_plex()
-    url = f"{PLEX_URL}/library/sections"
-    headers = {"Accept": "application/json", "X-Plex-Token": PLEX_TOKEN}
-    r = requests.get(url, headers=headers, params={"X-Plex-Token": PLEX_TOKEN}, timeout=20)
+    plex_url, plex_token = _require_plex()
+    url = f"{plex_url}/library/sections"
+    headers = {"Accept": "application/json", "X-Plex-Token": plex_token}
+    r = requests.get(
+        url,
+        headers=headers,
+        params={"X-Plex-Token": plex_token},
+        timeout=20,
+    )
     r.raise_for_status()
     return r
 
@@ -50,11 +56,11 @@ def _section_key_by_name(lib_name: str) -> str:
     raise HTTPException(status_code=404, detail=f"Plex library not found: {lib_name}")
 
 def _plex_list(path: str, params: Optional[dict] = None) -> List[Dict[str, Any]]:
-    _require_plex()
-    url = f"{PLEX_URL}{path}"
+    plex_url, plex_token = _require_plex()
+    url = f"{plex_url}{path}"
     params = dict(params or {})
-    params["X-Plex-Token"] = PLEX_TOKEN
-    headers = {"Accept": "application/json", "X-Plex-Token": PLEX_TOKEN}
+    params["X-Plex-Token"] = plex_token
+    headers = {"Accept": "application/json", "X-Plex-Token": plex_token}
     r = requests.get(url, params=params, headers=headers, timeout=25)
     r.raise_for_status()
     if (r.headers.get("Content-Type") or "").lower().startswith("application/json"):
@@ -115,10 +121,11 @@ def _fileproxy_poster_url(library: str, folder: str) -> str:
     return f"/fileproxy?path=/assets/{lib_enc}/{fol_enc}/poster.jpg&t=0"
 
 def _plex_poster_url(rating_key: Optional[str], thumb: Optional[str]) -> str:
+    plex_url, plex_token = _require_plex()
     path = thumb or (f"/library/metadata/{rating_key}/thumb" if rating_key else None)
     if not path:
         return "/fallback.png"
-    return f"{PLEX_URL}{path}?X-Plex-Token={PLEX_TOKEN}"
+    return f"{plex_url}{path}?X-Plex-Token={plex_token}"
 
 # ---------- API ----------
 

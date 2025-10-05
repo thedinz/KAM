@@ -49,9 +49,18 @@ def collections_env(tmp_path, monkeypatch):
 
     from app import config
 
-    monkeypatch.setattr(config, "PLEX_URL", "http://plex.test")
-    monkeypatch.setattr(config, "PLEX_TOKEN", "token")
-    monkeypatch.setattr(config, "CONFIG_ERRORS", [])
+    settings_module = importlib.import_module("app.services.settings")
+    monkeypatch.setattr(
+        settings_module,
+        "load_settings",
+        lambda: {
+            "theme": "dark",
+            "plexUrl": "http://plex.test",
+            "plexToken": "token",
+        },
+    )
+    plex_settings = importlib.reload(importlib.import_module("app.services.plex_settings"))
+    plex_settings.clear_cache()
 
     monkeypatch.setenv("KAM_ASSETS_ROOT", str(assets_root))
     monkeypatch.setenv("COLLECTIONS_ROOT", str(collections_root))
@@ -102,6 +111,7 @@ def test_collections_route_marks_asset_readiness(collections_env):
     missing = items["Missing Assets"]
     assert missing["assetReady"] is False
     assert missing["folderName"] == "Missing Assets"
+    assert missing["posterUrlPlex"].startswith("http://plex.test")
 
 
 INDEX_HTML = ROOT / "app" / "web" / "index.html"

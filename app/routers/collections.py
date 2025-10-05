@@ -3,6 +3,7 @@ from math import ceil
 from typing import Optional, List, Dict, Any, Tuple
 from ..services.plex import get_plex
 from ..services import folder_overrides
+from ..services import plex_settings
 from ..services.assets import sanitize_name
 from .. import config
 
@@ -128,6 +129,9 @@ def collections(
     not_ready_only: bool = Query(False, alias="not_ready_only"),
 ):
     plex = get_plex()
+    cfg = plex_settings.get_plex_config()
+    plex_url = cfg.url
+    plex_token = cfg.token
     rows: List[Dict[str, Any]] = []
 
     # Gather collections from all libraries
@@ -138,7 +142,9 @@ def collections(
                 title = (getattr(coll, "title", None) or "").strip()
 
                 # Plex art
-                poster_plex = f"{config.PLEX_URL}/library/metadata/{rk}/thumb?X-Plex-Token={config.PLEX_TOKEN}"
+                poster_plex = None
+                if plex_url and plex_token:
+                    poster_plex = f"{plex_url}/library/metadata/{rk}/thumb?X-Plex-Token={plex_token}"
 
                 override_folder = folder_overrides.get_override("Collections", str(rk)) if rk else None
 

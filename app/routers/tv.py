@@ -1,30 +1,36 @@
 # app/routers/tv.py
 from fastapi import APIRouter, HTTPException, Query
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 import os
 import requests
 import xml.etree.ElementTree as ET
 from urllib.parse import quote
 
 from ..services import folder_overrides
+from ..services import plex_settings
 from ..services.resolve import resolve_existing_dir_or_422
 from ..services.sanitize import kometa_sanitize_folder
 
 router = APIRouter()
 
-PLEX_URL    = os.environ.get("PLEX_URL", "").rstrip("/")
-PLEX_TOKEN  = os.environ.get("PLEX_TOKEN", "")
 ASSETS_ROOT = os.environ.get("KAM_ASSETS_ROOT", "/assets")
 
-def _require_plex():
-    if not PLEX_URL or not PLEX_TOKEN:
+def _require_plex() -> Tuple[str, str]:
+    cfg = plex_settings.get_plex_config()
+    if not cfg.url or not cfg.token:
         raise HTTPException(status_code=500, detail="PLEX_URL or PLEX_TOKEN not set")
+    return cfg.url, cfg.token
 
 def _plex_json_or_xml(path: str):
-    _require_plex()
-    url = f"{PLEX_URL}{path}"
-    headers = {"Accept": "application/json", "X-Plex-Token": PLEX_TOKEN}
-    r = requests.get(url, headers=headers, params={"X-Plex-Token": PLEX_TOKEN}, timeout=25)
+    plex_url, plex_token = _require_plex()
+    url = f"{plex_url}{path}"
+    headers = {"Accept": "application/json", "X-Plex-Token": plex_token}
+    r = requests.get(
+        url,
+        headers=headers,
+        params={"X-Plex-Token": plex_token},
+        timeout=25,
+    )
     r.raise_for_status()
     return r
 
@@ -120,12 +126,14 @@ def _fileproxy_abs_path(library: str, folder: str, filename: str, bust: int = 0)
 def _plex_thumb_url(thumb: Optional[str], rk: Optional[str]) -> Optional[str]:
     path = thumb or (f"/library/metadata/{rk}/thumb" if rk else None)
     if not path: return None
-    return f"{PLEX_URL}{path}?X-Plex-Token={PLEX_TOKEN}"
+    plex_url, plex_token = _require_plex()
+    return f"{plex_url}{path}?X-Plex-Token={plex_token}"
 
 def _plex_art_url(art: Optional[str], rk: Optional[str]) -> Optional[str]:
     path = art or (f"/library/metadata/{rk}/art" if rk else None)
     if not path: return None
-    return f"{PLEX_URL}{path}?X-Plex-Token={PLEX_TOKEN}"
+    plex_url, plex_token = _require_plex()
+    return f"{plex_url}{path}?X-Plex-Token={plex_token}"
 
 @router.get("/api/show")
 def get_show(library: str = Query(...), ratingKey: str = Query(...)):
