@@ -48,7 +48,6 @@ describe('SettingsPage', () => {
       saveSettings: mockSave,
       revertSettings: vi.fn(),
       refreshLibraries: mockRefresh,
-      setLibraryMapping: vi.fn(),
       setLibraryMappings: vi.fn(),
     });
 
@@ -95,7 +94,6 @@ describe('SettingsPage', () => {
       saveSettings: vi.fn(),
       revertSettings: vi.fn(),
       refreshLibraries: vi.fn(),
-      setLibraryMapping: vi.fn(),
       setLibraryMappings: vi.fn(),
     });
 
@@ -131,7 +129,6 @@ describe('SettingsPage', () => {
       saveSettings: vi.fn().mockResolvedValue({}),
       revertSettings: vi.fn(),
       refreshLibraries: mockRefresh,
-      setLibraryMapping: vi.fn(),
       setLibraryMappings: vi.fn(),
     });
 
@@ -170,7 +167,6 @@ describe('SettingsPage', () => {
       saveSettings: vi.fn(),
       revertSettings: vi.fn(),
       refreshLibraries: vi.fn(),
-      setLibraryMapping: vi.fn(),
       setLibraryMappings: vi.fn(),
     });
 
@@ -206,7 +202,6 @@ describe('SettingsPage', () => {
       saveSettings: vi.fn(),
       revertSettings: vi.fn(),
       refreshLibraries: vi.fn(),
-      setLibraryMapping: vi.fn(),
       setLibraryMappings: vi.fn(),
     });
 
@@ -218,6 +213,76 @@ describe('SettingsPage', () => {
 
     const status = await screen.findByRole('status');
     expect(status).toHaveTextContent('Saving settings…');
+  });
+
+  it('allows clearing asset folders through the modal', async () => {
+    const mockSetLibraryMappings = vi.fn();
+    const mockRefresh = vi.fn().mockResolvedValue([]);
+    global.fetch.mockImplementation(() =>
+      Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({ folders: [] }),
+      })
+    );
+
+    useTheme.mockReturnValue({
+      theme: 'dark',
+      savedTheme: 'dark',
+      plexUrl: 'http://plex.local',
+      plexToken: 'token',
+      savedSettings: { plexUrl: 'http://plex.local', plexToken: 'token' },
+      libraryMappings: [
+        { library: 'Movies', assetPath: '/assets/Movies', collectionsPath: '/collections/Movies' },
+      ],
+      savedLibraryMappings: [
+        { library: 'Movies', assetPath: '/assets/Movies', collectionsPath: '/collections/Movies' },
+      ],
+      libraries: [
+        {
+          name: 'Movies',
+          type: 'movie',
+          key: '1',
+          assetPath: '/assets/Movies',
+          collectionsPath: '/collections/Movies',
+        },
+      ],
+      librariesLoading: false,
+      librariesError: null,
+      loading: false,
+      saving: false,
+      error: null,
+      libraryMappingsDirty: false,
+      hasUnsavedChanges: false,
+      applyTheme: vi.fn(),
+      updateSettings: vi.fn(),
+      saveSettings: vi.fn(),
+      revertSettings: vi.fn(),
+      refreshLibraries: mockRefresh,
+      setLibraryMappings: mockSetLibraryMappings,
+    });
+
+    render(
+      <MemoryRouter>
+        <SettingsPage />
+      </MemoryRouter>
+    );
+
+    const openModalButton = screen.getAllByRole('button', { name: 'Set asset folder' })[0];
+    fireEvent.click(openModalButton);
+
+    const clearButton = await screen.findByRole('button', { name: 'Clear asset folder' });
+    expect(clearButton).not.toBeDisabled();
+
+    fireEvent.click(clearButton);
+
+    await waitFor(() => {
+      expect(mockSetLibraryMappings).toHaveBeenCalledWith(['Movies'], {
+        assetPath: '',
+        collectionsPath: '',
+      });
+    });
+
+    expect(await screen.findByRole('status')).toHaveTextContent('Cleared mapping for Movies.');
   });
 
   it('clears transient info statuses after loading completes', async () => {
@@ -242,7 +307,6 @@ describe('SettingsPage', () => {
       saveSettings: vi.fn(),
       revertSettings: vi.fn(),
       refreshLibraries: vi.fn(),
-      setLibraryMapping: vi.fn(),
       setLibraryMappings: vi.fn(),
     };
 
@@ -292,7 +356,6 @@ describe('SettingsPage', () => {
       saveSettings: mockSave,
       revertSettings: vi.fn(),
       refreshLibraries: vi.fn(),
-      setLibraryMapping: vi.fn(),
       setLibraryMappings: vi.fn(),
     });
 
