@@ -1,7 +1,7 @@
 """Settings API endpoints."""
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from typing import List, Literal
 from urllib.parse import urlparse
@@ -131,3 +131,39 @@ def update_library_mappings(payload: LibraryMappingsUpdatePayload) -> List[Libra
     )
     mappings = stored.get("libraryMappings", [])
     return [LibraryMappingPayload(**item) for item in mappings]
+
+
+class KometaConfigEntry(BaseModel):
+    name: str
+    path: str
+    isDir: bool
+    isFile: bool
+
+
+class KometaConfigBrowseResponse(BaseModel):
+    root: str
+    parent: str
+    items: List[KometaConfigEntry]
+    selection: str | None = None
+
+
+@router.get(
+    "/api/settings/kometa-config/browse",
+    response_model=KometaConfigBrowseResponse,
+)
+def browse_kometa_config(
+    parent: str | None = Query(None),
+    search: str | None = Query(None),
+    current: str | None = Query(None),
+) -> KometaConfigBrowseResponse:
+    try:
+        data = kometa_config_service.browse_config_locations(
+            parent=parent, search=search, current=current
+        )
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return KometaConfigBrowseResponse(**data)
