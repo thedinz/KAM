@@ -167,6 +167,7 @@ function FolderFinderModal({
       params.set('library', effectiveLibrary);
       if (path) params.set('parent', path);
       if (query) params.set('search', query);
+      if (isSettingsMode) params.set('settings', 'true');
 
       try {
         const response = await fetch(`/api/asset-folders?${params.toString()}`);
@@ -196,8 +197,25 @@ function FolderFinderModal({
 
   useEffect(() => {
     if (!isOpen) return;
-    loadFolders({ path: '', query: '' });
-  }, [isOpen, loadFolders]);
+    let initialPath = '';
+    if (isSettingsMode) {
+      if (target === 'collections') {
+        initialPath = normalizeText(collectionsSelection?.path || normalizedInitialCollections);
+      } else {
+        initialPath = normalizeText(assetSelection?.path || normalizedInitialAsset);
+      }
+    }
+    loadFolders({ path: initialPath, query: '', preserveSelection: true });
+  }, [
+    isOpen,
+    isSettingsMode,
+    target,
+    normalizedInitialAsset,
+    normalizedInitialCollections,
+    assetSelection,
+    collectionsSelection,
+    loadFolders,
+  ]);
 
   useEffect(() => {
     if (!isOpen) return undefined;
