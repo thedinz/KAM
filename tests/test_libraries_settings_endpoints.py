@@ -34,9 +34,17 @@ def _create_libraries_client(
     monkeypatch: pytest.MonkeyPatch,
     load_settings_payload: dict,
     sections: List[_DummySection] | None = None,
+    config_summaries: dict | None = None,
 ) -> TestClient:
     settings_module = importlib.reload(importlib.import_module("app.services.settings"))
     monkeypatch.setattr(settings_module, "load_settings", lambda: load_settings_payload)
+
+    kometa_module = importlib.reload(importlib.import_module("app.services.kometa_config"))
+    monkeypatch.setattr(
+        kometa_module,
+        "load_library_summaries",
+        lambda path: config_summaries or {},
+    )
 
     plex_settings_module = importlib.reload(importlib.import_module("app.services.plex_settings"))
     plex_settings_module.clear_cache()
@@ -71,6 +79,7 @@ def test_settings_libraries_endpoint_lists_sections(monkeypatch):
                     "collectionsPath": "/collections/movies",
                 }
             ],
+            "kometaConfigPath": "/config/config.yml",
         },
         sections=[
             _DummySection("TV Shows", "show", "2"),
@@ -78,6 +87,19 @@ def test_settings_libraries_endpoint_lists_sections(monkeypatch):
             _DummySection("Movies", "movie", "1"),
             _DummySection("Music", "artist", "4"),
         ],
+        config_summaries={
+            "Movies": {
+                "collectionsPaths": ["config/assets/Collections"],
+            },
+            "Documentaries": {
+                "assetPath": "/assets/Documentaries",
+                "collectionsPaths": [
+                    "config/assets/Docs",
+                    "config/assets/Docs",
+                    "config/assets/Docs Extras",
+                ],
+            },
+        },
     )
 
     resp = client.get("/api/settings/libraries")
@@ -88,8 +110,12 @@ def test_settings_libraries_endpoint_lists_sections(monkeypatch):
             "name": "Documentaries",
             "type": "show",
             "key": "3",
-            "assetPath": None,
-            "collectionsPath": None,
+            "assetPath": "/assets/Documentaries",
+            "collectionsPath": "config/assets/Docs",
+            "collectionAssetPaths": [
+                "config/assets/Docs",
+                "config/assets/Docs Extras",
+            ],
         },
         {
             "name": "Movies",
@@ -97,6 +123,10 @@ def test_settings_libraries_endpoint_lists_sections(monkeypatch):
             "key": "1",
             "assetPath": "/assets/Movies",
             "collectionsPath": "/collections/movies",
+            "collectionAssetPaths": [
+                "/collections/movies",
+                "config/assets/Collections",
+            ],
         },
         {
             "name": "TV Shows",
@@ -104,6 +134,7 @@ def test_settings_libraries_endpoint_lists_sections(monkeypatch):
             "key": "2",
             "assetPath": None,
             "collectionsPath": None,
+            "collectionAssetPaths": [],
         },
     ]
 
@@ -116,6 +147,7 @@ def test_settings_libraries_endpoint_omits_music_sections(monkeypatch):
             "plexUrl": "http://plex.example:32400",
             "plexToken": "token",
             "libraryMappings": [],
+            "kometaConfigPath": "/config/config.yml",
         },
         sections=[
             _DummySection("Music", "artist", "4"),
@@ -135,6 +167,7 @@ def test_settings_libraries_endpoint_omits_music_sections(monkeypatch):
             "key": "1",
             "assetPath": None,
             "collectionsPath": None,
+            "collectionAssetPaths": [],
         }
     ]
 
