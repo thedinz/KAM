@@ -104,6 +104,25 @@ a.btn:focus,
   cursor: pointer;
 }
 
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  padding: 8px 10px;
+  cursor: pointer;
+}
+
+.btn-secondary:hover,
+.btn-secondary:focus {
+  color: var(--accent);
+  border-color: var(--accent);
+  outline: none;
+}
+
 .page-header-tools {
   display: flex;
   gap: 8px;
@@ -819,6 +838,8 @@ main {
 .settings-actions {
   display: flex;
   justify-content: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .settings-status {
@@ -835,6 +856,169 @@ main {
 .settings-status.error {
   background: rgba(248, 113, 113, 0.1);
   color: #fca5a5;
+}
+
+.settings-status.info {
+  background: rgba(94, 161, 255, 0.12);
+  color: #93c5fd;
+}
+
+.settings-libraries-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.settings-libraries-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.settings-libraries-toolbar button,
+.library-actions button {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--fg);
+  border-radius: 10px;
+  padding: 6px 10px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.settings-libraries-toolbar button:hover,
+.settings-libraries-toolbar button:focus,
+.library-actions button:hover,
+.library-actions button:focus {
+  border-color: var(--accent);
+  color: var(--accent);
+  outline: none;
+}
+
+.settings-libraries-table-wrapper {
+  overflow-x: auto;
+}
+
+.settings-libraries-status {
+  margin: 0 0 12px;
+  color: var(--muted);
+}
+
+.settings-libraries-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 640px;
+}
+
+.settings-libraries-table th,
+.settings-libraries-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.settings-libraries-table tbody tr:last-child th,
+.settings-libraries-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.settings-libraries-table code {
+  font-size: 13px;
+  word-break: break-all;
+}
+
+.settings-libraries-table tr.is-dirty {
+  background: rgba(94, 161, 255, 0.08);
+}
+
+.library-select {
+  width: 48px;
+  text-align: center;
+}
+
+.library-name {
+  font-weight: 600;
+}
+
+.library-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.library-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.placeholder {
+  color: var(--muted);
+  font-style: italic;
+}
+
+.status-unsaved {
+  color: #fca5a5;
+  font-weight: 600;
+}
+
+.library-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+@media (min-width: 640px) {
+  .settings-libraries-toolbar {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+  }
+}
+
+@media (min-width: 768px) {
+  .library-actions {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+}
+
+.folder-targets {
+  display: inline-flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.folder-targets button {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--fg);
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+}
+
+.folder-targets button.is-active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #0b0b0f;
+}
+
+[data-theme='light'] .folder-targets button.is-active {
+  color: #ffffff;
+}
+
+.folder-targets button:hover,
+.folder-targets button:focus {
+  border-color: var(--accent);
+  color: var(--accent);
+  outline: none;
 }
 
 .asset-actions input[type='file'] {
