@@ -20,7 +20,7 @@ class AssignFolderPayload(BaseModel):
     folderName: str
 
 
-def _library_root(library: str) -> Path:
+def _library_root(library: str, *, settings_mode: bool = False) -> Path:
     if not library:
         raise HTTPException(status_code=422, detail="Missing library")
     if library == "Collections":
@@ -32,22 +32,31 @@ def _library_root(library: str) -> Path:
         root = Path(base)
     else:
         mapped = library_mappings_service.get_asset_path(library)
-        if mapped:
+        if mapped and not settings_mode:
             root = Path(mapped)
         else:
             if not ASSETS_ROOT:
-                raise HTTPException(
-                    status_code=404,
-                    detail=f"No assets mapping for library '{library}'",
-                )
-            assets_root = Path(ASSETS_ROOT)
-            if not assets_root.is_dir():
-                raise HTTPException(
-                    status_code=404,
-                    detail=f"Assets library not found: {assets_root}",
-                )
-            candidate = assets_root / library
-            root = candidate if candidate.is_dir() else assets_root
+                if mapped:
+                    root = Path(mapped)
+                else:
+                    raise HTTPException(
+                        status_code=404,
+                        detail=f"No assets mapping for library '{library}'",
+                    )
+            else:
+                assets_root = Path(ASSETS_ROOT)
+                if not assets_root.is_dir():
+                    raise HTTPException(
+                        status_code=404,
+                        detail=f"Assets library not found: {assets_root}",
+                    )
+                if settings_mode:
+                    root = assets_root
+                elif mapped:
+                    root = Path(mapped)
+                else:
+                    candidate = assets_root / library
+                    root = candidate if candidate.is_dir() else assets_root
 
     try:
         resolved_root = root.resolve()
@@ -76,17 +85,21 @@ def list_asset_folders(
     library: str = Query(...),
     parent: str | None = Query(None),
     search: str | None = Query(None),
+    settings: bool = Query(False),
 ):
     parent_value = parent if isinstance(parent, str) else None
     search_value = search if isinstance(search, str) else None
 
-    root = _library_root(library)
+    root = _library_root(library, settings_mode=settings)
     current = root
     if parent_value:
         rel = Path(parent_value)
-        if rel.is_absolute():
-            raise HTTPException(status_code=400, detail="Invalid parent path")
-        current = _ensure_within_root(root, (root / rel).resolve())
+        if settings and rel.is_absolute():
+            current = _ensure_within_root(root, rel.resolve())
+        else:
+            if rel.is_absolute():
+                raise HTTPException(status_code=400, detail="Invalid parent path")
+            current = _ensure_within_root(root, (root / rel).resolve())
         if not current.exists() or not current.is_dir():
             raise HTTPException(status_code=404, detail="Parent directory not found")
 
