@@ -1,5 +1,6 @@
 import importlib
 from dataclasses import dataclass
+from pathlib import Path
 from typing import List
 
 import pytest
@@ -423,3 +424,103 @@ def test_asset_folders_settings_mode_allows_assets_root(tmp_path, monkeypatch):
         },
     )
     assert outside.status_code == 400
+
+
+def _create_settings_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
+    settings_module = importlib.reload(importlib.import_module("app.services.settings"))
+    kometa_module = importlib.reload(importlib.import_module("app.services.kometa_config"))
+    router_module = importlib.reload(importlib.import_module("app.routers.settings"))
+
+    app = FastAPI()
+    app.include_router(router_module.router)
+    client = TestClient(app)
+
+    # Ensure patched modules remain referenced for the duration of the test
+    monkeypatch.setattr("app.routers.settings.settings_service", settings_module)
+    monkeypatch.setattr("app.routers.settings.kometa_config_service", kometa_module)
+    return client
+
+
+def test_browse_kometa_config_lists_files(tmp_path, monkeypatch):
+    config_root = tmp_path / "config"
+    config_root.mkdir()
+    primary_config = config_root / "config.yml"
+    primary_config.write_text("libraries: {}", encoding="utf-8")
+    extra_file = config_root / "extra.yaml"
+    extra_file.write_text("", encoding="utf-8")
+
+    monkeypatch.setenv("KOMETA_CONFIG_PATH", str(primary_config))
+
+    settings_module = importlib.reload(importlib.import_module("app.services.settings"))
+    settings_module.set_settings_path(str(tmp_path / "settings.json"))
+    settings_module.save_settings({"kometaConfigPath": str(primary_config)})
+
+    client = _create_settings_client(monkeypatch)
+
+    resp = client.get("/api/settings/kometa-config/browse")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["root"] == config_root.resolve().as_posix()
+    assert data["parent"] == ""
+
+    names = {item["name"]: item for item in data["items"]}
+    assert "config.yml" in names
+    assert names["config.yml"]["isFile"] is True
+    assert names["config.yml"]["path"] == "config.yml"
+    assert names["extra.yaml"]["isFile"] is True
+
+
+def test_browse_kometa_config_supports_navigation_and_search(tmp_path, monkeypatch):
+    config_root = tmp_path / "config"
+    config_root.mkdir()
+    primary_config = config_root / "config.yml"
+    primary_config.write_text("libraries: {}", encoding="utf-8")
+    nested_dir = config_root / "profiles"
+    nested_dir.mkdir()
+    nested_file = nested_dir / "alt.yml"
+    nested_file.write_text("", encoding="utf-8")
+
+    monkeypatch.setenv("KOMETA_CONFIG_PATH", str(primary_config))
+
+    settings_module = importlib.reload(importlib.import_module("app.services.settings"))
+    settings_module.set_settings_path(str(tmp_path / "settings.json"))
+    settings_module.save_settings({"kometaConfigPath": str(primary_config)})
+
+    client = _create_settings_client(monkeypatch)
+
+    # Navigate into a subdirectory
+    nested = client.get(
+        "/api/settings/kometa-config/browse",
+        params={"parent": "profiles"},
+    )
+    assert nested.status_code == 200
+    nested_payload = nested.json()
+    assert nested_payload["parent"] == "profiles"
+    nested_names = {item["name"] for item in nested_payload["items"]}
+    assert "alt.yml" in nested_names
+
+    # Search within the current directory
+    search = client.get(
+        "/api/settings/kometa-config/browse",
+        params={"search": "alt"},
+    )
+    assert search.status_code == 200
+    search_payload = search.json()
+    search_names = {item["name"] for item in search_payload["items"]}
+    assert "alt.yml" in search_names
+
+    # Ensure the current path highlights the configured file
+    current = client.get(
+        "/api/settings/kometa-config/browse",
+        params={"current": str(nested_file)},
+    )
+    assert current.status_code == 200
+    current_payload = current.json()
+    assert current_payload["selection"] == "profiles/alt.yml"
+    assert current_payload["parent"] == "profiles"
+
+    invalid = client.get(
+        "/api/settings/kometa-config/browse",
+        params={"parent": "../"},
+    )
+    assert invalid.status_code == 400
