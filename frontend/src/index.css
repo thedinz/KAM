@@ -842,6 +842,18 @@ main {
   flex-wrap: wrap;
 }
 
+.settings-global-actions {
+  margin: 16px 0;
+}
+
+.settings-global-actions-top {
+  margin-top: 0;
+}
+
+.settings-global-actions-bottom {
+  margin-bottom: 0;
+}
+
 .settings-status {
   font-size: 14px;
   border-radius: 12px;

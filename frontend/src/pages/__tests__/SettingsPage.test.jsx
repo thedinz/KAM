@@ -68,8 +68,11 @@ describe('SettingsPage', () => {
     expect(moviesCheckbox).toBeChecked();
     expect(bulkButton).not.toBeDisabled();
 
-    const revertButton = screen.getByRole('button', { name: /Revert/i });
-    expect(revertButton).toBeDisabled();
+    const revertButtons = screen.getAllByRole('button', { name: /Revert/i });
+    expect(revertButtons).toHaveLength(2);
+    revertButtons.forEach((button) => {
+      expect(button).toBeDisabled();
+    });
   });
 
   it('surfaces library errors in the status message', () => {
@@ -213,6 +216,55 @@ describe('SettingsPage', () => {
 
     const status = await screen.findByRole('status');
     expect(status).toHaveTextContent('Saving settings…');
+  });
+
+  it('saves changes via the global save buttons', async () => {
+    const mockSave = vi.fn().mockResolvedValue({});
+    const mockRevert = vi.fn();
+    useTheme.mockReturnValue({
+      theme: 'dark',
+      savedTheme: 'light',
+      plexUrl: 'http://plex.local',
+      plexToken: 'token',
+      savedSettings: { plexUrl: 'http://plex.local', plexToken: 'token' },
+      libraryMappings: [],
+      savedLibraryMappings: [],
+      libraries: [],
+      librariesLoading: false,
+      librariesError: null,
+      loading: false,
+      saving: false,
+      error: null,
+      libraryMappingsDirty: false,
+      hasUnsavedChanges: true,
+      applyTheme: vi.fn(),
+      updateSettings: vi.fn(),
+      saveSettings: mockSave,
+      revertSettings: mockRevert,
+      refreshLibraries: vi.fn(),
+      setLibraryMappings: vi.fn(),
+    });
+
+    render(
+      <MemoryRouter>
+        <SettingsPage />
+      </MemoryRouter>
+    );
+
+    const saveButtons = screen.getAllByRole('button', { name: /Save Changes/i });
+    expect(saveButtons).toHaveLength(2);
+
+    fireEvent.click(saveButtons[0]);
+
+    await waitFor(() => {
+      expect(mockSave).toHaveBeenCalledTimes(1);
+    });
+
+    fireEvent.click(saveButtons[1]);
+
+    await waitFor(() => {
+      expect(mockSave).toHaveBeenCalledTimes(2);
+    });
   });
 
   it('allows clearing asset folders through the modal', async () => {

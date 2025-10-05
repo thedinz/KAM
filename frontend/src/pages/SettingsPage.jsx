@@ -439,8 +439,7 @@ function SettingsPage() {
     }
   };
 
-  const handleSubmit = async (event) => {
-    event.preventDefault();
+  const performSave = useCallback(async () => {
     if (!isDirty) {
       setStatus({ type: 'success', message: 'Settings are already up to date.' });
       return;
@@ -454,7 +453,16 @@ function SettingsPage() {
       revertSettings();
       setStatus({ type: 'error', message });
     }
+  }, [isDirty, saveSettings, revertSettings, setStatus]);
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    await performSave();
   };
+
+  const handleGlobalSave = useCallback(() => {
+    void performSave();
+  }, [performSave]);
 
   const handleRevert = () => {
     revertSettings();
@@ -471,6 +479,24 @@ function SettingsPage() {
         <h1>Settings</h1>
       </header>
       <main className="settings-page">
+        <div className="settings-actions settings-global-actions settings-global-actions-top">
+          <button
+            type="button"
+            className="btn"
+            onClick={handleGlobalSave}
+            disabled={busy || !isDirty}
+          >
+            Save Changes
+          </button>
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={handleRevert}
+            disabled={busy || !isDirty}
+          >
+            Revert
+          </button>
+        </div>
         <section className="settings-card">
           <h2>Theme</h2>
           <p className="settings-description">
@@ -529,19 +555,6 @@ function SettingsPage() {
                   disabled={busy}
                 />
               </label>
-            </div>
-            <div className="settings-actions">
-              <button type="submit" className="btn" disabled={busy || !isDirty}>
-                Save Changes
-              </button>
-              <button
-                type="button"
-                className="btn-secondary"
-                onClick={handleRevert}
-                disabled={busy || !isDirty}
-              >
-                Revert
-              </button>
             </div>
           </form>
         </section>
@@ -669,6 +682,24 @@ function SettingsPage() {
             {status.message}
           </div>
         ) : null}
+        <div className="settings-actions settings-global-actions settings-global-actions-bottom">
+          <button
+            type="button"
+            className="btn"
+            onClick={handleGlobalSave}
+            disabled={busy || !isDirty}
+          >
+            Save Changes
+          </button>
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={handleRevert}
+            disabled={busy || !isDirty}
+          >
+            Revert
+          </button>
+        </div>
       </main>
       <FolderFinderModal
         isOpen={modalState.open}
