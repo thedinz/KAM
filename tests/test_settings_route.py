@@ -33,6 +33,29 @@ def settings_modules(tmp_path, monkeypatch):
     return settings_router, settings_service, settings_path, library_module
 
 
+def test_defaults_without_library_env(tmp_path, monkeypatch):
+    settings_path = tmp_path / "state" / "settings.json"
+    monkeypatch.setenv("KAM_SETTINGS_PATH", str(settings_path))
+    monkeypatch.delenv("LIBRARIES", raising=False)
+    monkeypatch.delenv("COLLECTIONS_ROOT", raising=False)
+
+    library_module = importlib.reload(
+        importlib.import_module("app.services.library_mappings")
+    )
+    settings_service = importlib.reload(importlib.import_module("app.services.settings"))
+    settings_router = importlib.reload(importlib.import_module("app.routers.settings"))
+
+    assert library_module.seed_from_env() == []
+
+    resp = settings_router.get_settings()
+    assert resp.model_dump() == {
+        "theme": "dark",
+        "plexUrl": "",
+        "plexToken": "",
+        "libraryMappings": [],
+    }
+
+
 def test_get_settings_returns_defaults(settings_modules):
     router, _, _, _ = settings_modules
 
