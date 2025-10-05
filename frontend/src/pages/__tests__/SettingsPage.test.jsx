@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import SettingsPage from '../SettingsPage.jsx';
 import { useTheme } from '../../theme/ThemeProvider.jsx';
@@ -218,6 +218,55 @@ describe('SettingsPage', () => {
 
     const status = await screen.findByRole('status');
     expect(status).toHaveTextContent('Saving settings…');
+  });
+
+  it('clears transient info statuses after loading completes', async () => {
+    const state = {
+      theme: 'dark',
+      savedTheme: 'dark',
+      plexUrl: '',
+      plexToken: '',
+      savedSettings: { plexUrl: '', plexToken: '' },
+      libraryMappings: [],
+      savedLibraryMappings: [],
+      libraries: [],
+      librariesLoading: true,
+      librariesError: null,
+      loading: false,
+      saving: false,
+      error: null,
+      libraryMappingsDirty: false,
+      hasUnsavedChanges: false,
+      applyTheme: vi.fn(),
+      updateSettings: vi.fn(),
+      saveSettings: vi.fn(),
+      revertSettings: vi.fn(),
+      refreshLibraries: vi.fn(),
+      setLibraryMapping: vi.fn(),
+      setLibraryMappings: vi.fn(),
+    };
+
+    useTheme.mockImplementation(() => state);
+
+    const { rerender } = render(
+      <MemoryRouter>
+        <SettingsPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByRole('status')).toHaveTextContent('Loading Plex libraries…');
+
+    state.librariesLoading = false;
+
+    rerender(
+      <MemoryRouter>
+        <SettingsPage />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByRole('status')).toBeNull();
+    });
   });
 
   it('displays success status after saving changes', async () => {

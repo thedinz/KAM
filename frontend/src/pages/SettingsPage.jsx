@@ -55,6 +55,11 @@ function SettingsPage() {
   const [selectedLibraries, setSelectedLibraries] = useState([]);
   const [modalState, setModalState] = useState(initialModalState);
   const selectAllRef = useRef(null);
+  const previousLoadingFlagsRef = useRef({
+    loading,
+    saving,
+    librariesLoading,
+  });
 
   const savedPlexUrl = savedSettings?.plexUrl || '';
   const savedPlexToken = savedSettings?.plexToken || '';
@@ -100,6 +105,32 @@ function SettingsPage() {
       showInfoStatus('Loading Plex libraries…');
     }
   }, [librariesLoading, showInfoStatus]);
+
+  useEffect(() => {
+    const previous = previousLoadingFlagsRef.current;
+    const infoMessages = [
+      ['loading', loading, 'Loading settings…'],
+      ['saving', saving, 'Saving settings…'],
+      ['librariesLoading', librariesLoading, 'Loading Plex libraries…'],
+    ];
+
+    const shouldClearInfo =
+      status?.type === 'info' &&
+      infoMessages.some(([key, isActive, message]) => {
+        const wasActive = previous[key];
+        return wasActive && !isActive && status?.message === message;
+      });
+
+    if (shouldClearInfo) {
+      setStatus(null);
+    }
+
+    previousLoadingFlagsRef.current = {
+      loading,
+      saving,
+      librariesLoading,
+    };
+  }, [loading, saving, librariesLoading, status]);
 
   const busy = loading || saving;
   const combinedBusy = busy || librariesLoading;
