@@ -155,4 +155,6 @@ def list_available_libraries() -> List[LibrarySectionInfo]:
             entry["collectionsPath"] = mapping.get("collectionsPath") or None
         results.append(LibrarySectionInfo(**entry))
 
+    results.sort(key=lambda item: (item.name.lower(), item.key or ""))
+
     return results
