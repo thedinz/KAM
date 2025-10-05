@@ -95,6 +95,7 @@ KAM only cares about the **internal** path (e.g., `/assets`). You choose what ho
 
 * Docker (Unraid, Linux, macOS, or Windows)
 * Read/write access to your Kometa **assets** directories (bind-mounted)
+* Read access to your Kometa **config** directory if you want automatic Kometa mapping (bind-mounted)
 * Optional: Reverse proxy (Caddy/Traefik/Nginx) if you want TLS or auth
 
 ---
@@ -109,15 +110,22 @@ docker pull ghcr.io/thedinz/kam:latest
 
 ### 2) Run (simple)
 
-Expose KAM on **7171** (mapped to the container's port **8000**) and map your assets:
+Expose KAM on **7171** (mapped to the container's port **8000**) and map your assets and Kometa config directory:
 
 ```bash
-docker run -d   --name kam   -p 7171:8000   -v /mnt/user/kometa/assets:/assets   ghcr.io/thedinz/kam:latest
+docker run -d \
+  --name kam \
+  -p 7171:8000 \
+  -v /mnt/user/kometa/assets:/assets \
+  -v /mnt/user/kometa/config:/config:ro \
+  ghcr.io/thedinz/kam:latest
 ```
 
 Open: `http://<your-host>:7171/`
 
 > If your assets live elsewhere, just change the host side of `-v` (e.g., `-v /mystuff:/assets`).
+
+Once running, open the **Settings** page in KAM and set the Kometa config path (for example `/config/config.yml`). If you prefer to seed it automatically, you can still set the optional `KOMETA_CONFIG_PATH` environment variable when starting the container.
 
 ### 3) Docker Compose
 
@@ -130,6 +138,7 @@ services:
       - "7171:8000"
     volumes:
       - /mnt/user/kometa/assets:/assets
+      - /mnt/user/kometa/config:/config:ro
     restart: unless-stopped
 ```
 
@@ -138,6 +147,9 @@ Bring it up:
 ```bash
 docker compose up -d
 ```
+
+After the container starts, open the **Settings** page and point KAM at your Kometa config file (for example `/config/config.yml`). If you want that value pre-filled, add the optional `KOMETA_CONFIG_PATH=/config/config.yml` entry to your environment (e.g., `.env`).
+
 Edit the .env file to configure
 
 Sample .env
@@ -152,6 +164,9 @@ PLEX_TOKEN=CHANGE_ME
 # Map Plex libraries to asset folders inside container
 # e.g. Movies:/assets/Movies,Kids Movies:/assets/Kids Movies
 LIBRARIES=Movies:/assets/Movies,Kids Movies:/assets/Kids Movies
+
+# Optional: seed the Kometa config path (otherwise set it in Settings)
+# KOMETA_CONFIG_PATH=/config/config.yml
 
 # Runtime
 PORT=8000
