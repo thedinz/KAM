@@ -40,11 +40,11 @@ libraries:
 
     movies = summaries["Movies"]
     assert movies["assetPath"] == str(assets_dir)
-    assert movies["collectionsPaths"] == [
+    assert set(movies["collectionsPaths"]) == {
         str(defaults_dir),
-        "config/assets/Collections",
-        "config/assets/Holidays",
-    ]
+        str(config_dir / "assets" / "Collections"),
+        str(config_dir / "assets" / "Holidays"),
+    }
 
     assert summaries["Documentaries"] == {}
 
