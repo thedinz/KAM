@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
+import ConfigFinderModal from '../components/ConfigFinderModal.jsx';
 import FolderFinderModal from '../components/FolderFinderModal.jsx';
 import { useTheme } from '../theme/ThemeProvider.jsx';
 import {
@@ -57,6 +58,8 @@ function SettingsPage() {
   const [status, setStatus] = useState(null);
   const [selectedLibraries, setSelectedLibraries] = useState([]);
   const [modalState, setModalState] = useState(initialModalState);
+  const [configModalOpen, setConfigModalOpen] = useState(false);
+  const [configScanInProgress, setConfigScanInProgress] = useState(false);
   const selectAllRef = useRef(null);
   const previousLoadingFlagsRef = useRef({
     loading,
@@ -67,6 +70,7 @@ function SettingsPage() {
   const savedPlexUrl = savedSettings?.plexUrl || '';
   const savedPlexToken = savedSettings?.plexToken || '';
   const savedKometaPath = savedKometaConfigPath || savedSettings?.kometaConfigPath || '';
+  const configModalInitialPath = kometaConfigPath || savedKometaPath;
 
   useEffect(() => {
     if (error) {
@@ -285,9 +289,29 @@ function SettingsPage() {
     setStatus(null);
   };
 
-  const handleKometaConfigPathChange = (event) => {
-    updateSettings({ kometaConfigPath: event.target.value });
+  const handleOpenKometaConfigModal = () => {
     setStatus(null);
+    setConfigModalOpen(true);
+  };
+
+  const handleCloseKometaConfigModal = () => {
+    setConfigModalOpen(false);
+  };
+
+  const handleKometaConfigSelected = (nextPath) => {
+    updateSettings({ kometaConfigPath: nextPath });
+    setConfigModalOpen(false);
+    setStatus({ type: 'success', message: 'Kometa config path updated.' });
+  };
+
+  const handleClearKometaConfig = () => {
+    updateSettings({ kometaConfigPath: '' });
+    setStatus({ type: 'success', message: 'Kometa config path cleared.' });
+  };
+
+  const handleModalClearKometaConfig = () => {
+    handleClearKometaConfig();
+    setConfigModalOpen(false);
   };
 
   const handleToggleLibrary = (libraryName) => {
@@ -463,6 +487,19 @@ function SettingsPage() {
     openModal(selectedLibraries, 'collections', 'collections');
   };
 
+  const handleScanKometaConfig = async () => {
+    setStatus(null);
+    setConfigScanInProgress(true);
+    try {
+      await refreshLibraries();
+      setStatus({ type: 'success', message: 'Kometa config scanned.' });
+    } catch (err) {
+      setStatus({ type: 'error', message: err?.message || 'Failed to scan Kometa config.' });
+    } finally {
+      setConfigScanInProgress(false);
+    }
+  };
+
   const handleRefreshLibraries = async () => {
     setStatus(null);
     try {
@@ -596,18 +633,34 @@ function SettingsPage() {
                 Provide the path to your Kometa configuration file so KAM can scan it for asset
                 folders.
               </p>
-              <label className="settings-input">
+              <div className="settings-input">
                 <span>Kometa config path</span>
-                <input
-                  type="text"
-                  name="kometaConfigPath"
-                  value={kometaConfigPath}
-                  onChange={handleKometaConfigPathChange}
-                  placeholder="/config/config.yml"
-                  autoComplete="off"
-                  disabled={busy}
-                />
-              </label>
+                <div className="settings-config-picker">
+                  {kometaConfigPath ? (
+                    <code>{kometaConfigPath}</code>
+                  ) : (
+                    <span className="placeholder">Not set</span>
+                  )}
+                  <div className="settings-config-buttons">
+                    <button type="button" onClick={handleOpenKometaConfigModal} disabled={busy}>
+                      {kometaConfigPath ? 'Change file' : 'Choose file'}
+                    </button>
+                    {kometaConfigPath ? (
+                      <button type="button" onClick={handleClearKometaConfig} disabled={busy}>
+                        Clear
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="settings-config-scan"
+                onClick={handleScanKometaConfig}
+                disabled={combinedBusy}
+              >
+                {configScanInProgress ? 'Scanning…' : 'Scan Kometa config'}
+              </button>
             </div>
           </form>
         </section>
@@ -765,6 +818,13 @@ function SettingsPage() {
           </button>
         </div>
       </main>
+      <ConfigFinderModal
+        isOpen={configModalOpen}
+        initialPath={configModalInitialPath}
+        onClose={handleCloseKometaConfigModal}
+        onConfirm={handleKometaConfigSelected}
+        onClear={kometaConfigPath ? handleModalClearKometaConfig : undefined}
+      />
       <FolderFinderModal
         isOpen={modalState.open}
         context="settings"
