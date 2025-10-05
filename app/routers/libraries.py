@@ -9,6 +9,7 @@ Env format (in your .env):
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel
 from typing import Dict, List, Optional
 import os
 
@@ -103,3 +104,55 @@ def get_library_path(name: str = Query(..., description="Mapped library name")) 
     if not path:
         raise HTTPException(status_code=404, detail=f"Library '{name}' is not mapped.")
     return {"name": name, "path": path}
+
+
+class LibrarySectionInfo(BaseModel):
+    name: str
+    type: Optional[str] = None
+    key: Optional[str] = None
+    assetPath: Optional[str] = None
+    collectionsPath: Optional[str] = None
+
+
+@router.get("/api/settings/libraries", response_model=List[LibrarySectionInfo])
+def list_available_libraries() -> List[LibrarySectionInfo]:
+    """Return Plex libraries alongside any stored mapping metadata."""
+    from ..services import (
+        library_mappings as library_mappings_service,
+        plex_settings,
+        settings as settings_service,
+    )
+    from ..services.plex import get_plex
+
+    # Ensure Plex credentials are available (raises HTTPException when invalid)
+    plex_settings.get_plex_config()
+
+    plex = get_plex()
+    try:
+        sections = plex.library.sections()
+    except Exception as exc:  # pragma: no cover - defensive
+        raise HTTPException(status_code=500, detail=f"Unable to list Plex libraries: {exc}")
+
+    stored = settings_service.load_settings().get("libraryMappings", [])
+    mappings = library_mappings_service.sanitize_library_mappings(stored)
+    mapping_lookup = {item["library"]: item for item in mappings}
+
+    results: List[LibrarySectionInfo] = []
+    for section in sections:
+        name = str(getattr(section, "title", "") or "")
+        key_value = getattr(section, "key", None)
+        key_str = str(key_value) if key_value not in (None, "") else None
+        entry = {
+            "name": name,
+            "type": getattr(section, "type", None) or None,
+            "key": key_str,
+            "assetPath": None,
+            "collectionsPath": None,
+        }
+        mapping = mapping_lookup.get(name)
+        if mapping:
+            entry["assetPath"] = mapping.get("assetPath") or None
+            entry["collectionsPath"] = mapping.get("collectionsPath") or None
+        results.append(LibrarySectionInfo(**entry))
+
+    return results

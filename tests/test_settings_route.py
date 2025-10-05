@@ -208,3 +208,71 @@ def test_save_settings_clears_library_mapping_cache(settings_modules):
     service.save_settings({})
 
     assert library_module.get_cached_mappings() is None
+
+
+def test_save_library_mappings_updates_only_mapping_data(settings_modules):
+    _, service, path, library_module = settings_modules
+
+    service.save_settings(
+        {
+            "theme": "light",
+            "plexUrl": "http://plex.custom", 
+            "libraryMappings": [
+                {
+                    "library": "Movies",
+                    "assetPath": "/assets/Movies",
+                    "collectionsPath": None,
+                }
+            ],
+        }
+    )
+
+    library_module.set_cached_mappings(
+        [{"library": "Movies", "assetPath": "/assets/Movies", "collectionsPath": None}]
+    )
+
+    updated = service.save_library_mappings(
+        [
+            {
+                "library": "Movies",
+                "assetPath": "/assets/New Movies",
+                "collectionsPath": "",
+            },
+            {
+                "library": "TV Shows",
+                "assetPath": "/assets/TV Shows",
+                "collectionsPath": "/collections/tv",
+            },
+        ]
+    )
+
+    assert updated["theme"] == "light"
+    assert updated["plexUrl"] == "http://plex.custom"
+    assert updated["libraryMappings"] == [
+        {
+            "library": "Movies",
+            "assetPath": "/assets/New Movies",
+            "collectionsPath": None,
+        },
+        {
+            "library": "TV Shows",
+            "assetPath": "/assets/TV Shows",
+            "collectionsPath": "/collections/tv",
+        },
+    ]
+
+    persisted = json.loads(path.read_text(encoding="utf-8"))
+    assert persisted["libraryMappings"] == [
+        {
+            "library": "Movies",
+            "assetPath": "/assets/New Movies",
+            "collectionsPath": None,
+        },
+        {
+            "library": "TV Shows",
+            "assetPath": "/assets/TV Shows",
+            "collectionsPath": "/collections/tv",
+        },
+    ]
+
+    assert library_module.get_cached_mappings() is None

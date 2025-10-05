@@ -25,15 +25,31 @@ def _library_root(library: str) -> Path:
         raise HTTPException(status_code=422, detail="Missing library")
     if library == "Collections":
         base = config.COLLECTIONS_ROOT
+        if not base:
+            raise HTTPException(
+                status_code=404, detail="No assets mapping for library 'Collections'"
+            )
+        root = Path(base)
     else:
-        base = config.LIBRARY_MAPPINGS.get(library)
-        if not base and ASSETS_ROOT:
-            base = os.path.join(ASSETS_ROOT, library)
-    if not base:
-        raise HTTPException(status_code=404, detail=f"No assets mapping for library '{library}'")
-    root = Path(base)
+        mapped = config.LIBRARY_MAPPINGS.get(library)
+        if mapped:
+            root = Path(mapped)
+        else:
+            if not ASSETS_ROOT:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"No assets mapping for library '{library}'",
+                )
+            assets_root = Path(ASSETS_ROOT)
+            if not assets_root.is_dir():
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Assets library not found: {assets_root}",
+                )
+            candidate = assets_root / library
+            root = candidate if candidate.is_dir() else assets_root
     if not root.is_dir():
-        raise HTTPException(status_code=404, detail=f"Assets library not found: {base}")
+        raise HTTPException(status_code=404, detail=f"Assets library not found: {root}")
     return root
 
 
