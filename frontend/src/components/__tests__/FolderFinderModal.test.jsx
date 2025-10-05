@@ -90,4 +90,84 @@ describe('FolderFinderModal - settings mode', () => {
       );
     });
   });
+
+  it('navigates between mapping and assets root in settings mode', async () => {
+    const makeResponse = (payload) =>
+      Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve(payload),
+      });
+
+    const payloads = {
+      '': { parent: '', items: [
+        { name: 'Movies', path: 'Movies', isDir: true },
+        { name: 'LooseAssets', path: 'LooseAssets', isDir: true },
+      ] },
+      '/assets/Movies/Featured': {
+        parent: 'Movies/Featured',
+        items: [
+          { name: 'Posters', path: 'Movies/Featured/Posters', isDir: true },
+        ],
+      },
+      'Movies/Featured': {
+        parent: 'Movies/Featured',
+        items: [
+          { name: 'Posters', path: 'Movies/Featured/Posters', isDir: true },
+        ],
+      },
+      Movies: {
+        parent: 'Movies',
+        items: [
+          { name: 'Featured', path: 'Movies/Featured', isDir: true },
+        ],
+      },
+    };
+
+    global.fetch = vi.fn((url) => {
+      const parsed = new URL(url, 'http://localhost');
+      expect(parsed.searchParams.get('settings')).toBe('true');
+      const key = parsed.searchParams.get('parent') || '';
+      const payload = payloads[key];
+      if (!payload) {
+        throw new Error(`Unexpected parent ${key}`);
+      }
+      return makeResponse(payload);
+    });
+
+    render(
+      <FolderFinderModal
+        isOpen
+        context="settings"
+        library="Movies"
+        settingsLibraries={['Movies']}
+        defaultTarget="asset"
+        settingsIntent="asset"
+        onClose={vi.fn()}
+        onSettingsConfirm={vi.fn()}
+        initialAssetPath="/assets/Movies/Featured"
+      />
+    );
+
+    await screen.findByRole('button', { name: 'Posters' });
+
+    const breadcrumbNav = screen.getByLabelText('Folder breadcrumbs');
+    const moviesCrumb = within(breadcrumbNav).getByRole('button', { name: 'Movies' });
+    fireEvent.click(moviesCrumb);
+
+    await screen.findByRole('button', { name: 'Featured' });
+
+    const featuredFolder = screen.getByRole('button', { name: 'Featured' });
+    fireEvent.click(featuredFolder);
+
+    await screen.findByRole('button', { name: 'Posters' });
+
+    const rootCrumb = within(screen.getByLabelText('Folder breadcrumbs')).getByRole('button', {
+      name: 'Root',
+    });
+    fireEvent.click(rootCrumb);
+
+    await screen.findByRole('button', { name: 'LooseAssets' });
+
+    expect(global.fetch).toHaveBeenCalled();
+  });
 });
