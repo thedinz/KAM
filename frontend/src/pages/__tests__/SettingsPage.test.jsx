@@ -154,6 +154,47 @@ describe('SettingsPage', () => {
     expect(await screen.findByRole('status')).toHaveTextContent('Plex libraries refreshed.');
   });
 
+  it('invokes refreshLibraries when scanning the Kometa config', async () => {
+    const mockRefresh = vi.fn().mockResolvedValue([]);
+    useTheme.mockReturnValue({
+      theme: 'dark',
+      savedTheme: 'dark',
+      plexUrl: '',
+      plexToken: '',
+      kometaConfigPath: '/config/config.yml',
+      savedKometaConfigPath: '/config/config.yml',
+      savedSettings: { plexUrl: '', plexToken: '', kometaConfigPath: '/config/config.yml' },
+      libraryMappings: [],
+      savedLibraryMappings: [],
+      libraries: [],
+      librariesLoading: false,
+      librariesError: null,
+      loading: false,
+      saving: false,
+      error: null,
+      libraryMappingsDirty: false,
+      hasUnsavedChanges: false,
+      applyTheme: vi.fn(),
+      updateSettings: vi.fn(),
+      saveSettings: vi.fn(),
+      revertSettings: vi.fn(),
+      refreshLibraries: mockRefresh,
+      setLibraryMappings: vi.fn(),
+    });
+
+    render(
+      <MemoryRouter>
+        <SettingsPage />
+      </MemoryRouter>
+    );
+
+    const scanButton = screen.getByRole('button', { name: /Scan Kometa config/i });
+    fireEvent.click(scanButton);
+
+    expect(mockRefresh).toHaveBeenCalled();
+    expect(await screen.findByRole('status')).toHaveTextContent('Kometa config scanned.');
+  });
+
   it('shows loading status when settings are loading', async () => {
     useTheme.mockReturnValue({
       theme: 'dark',
