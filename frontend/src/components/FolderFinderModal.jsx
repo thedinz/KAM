@@ -52,6 +52,7 @@ function FolderFinderModal({
   onFolderAssigned,
   context = 'library',
   settingsLibraries = [],
+  settingsContextNote = '',
   defaultTarget = 'asset',
   settingsIntent = 'asset',
   initialAssetPath = '',
@@ -248,12 +249,16 @@ function FolderFinderModal({
 
   const contextLabel = useMemo(() => {
     if (isSettingsMode) {
-      return `Libraries: ${formatLibraryList(settingsLibraries)}`;
+      const base = `Libraries: ${formatLibraryList(settingsLibraries)}`;
+      if (settingsContextNote) {
+        return `${base} • ${settingsContextNote}`;
+      }
+      return base;
     }
     const title = item?.title || item?.name || '(Untitled)';
     if (!effectiveLibrary) return title;
     return `Library: ${effectiveLibrary} • Item: ${title}`;
-  }, [isSettingsMode, settingsLibraries, item, effectiveLibrary]);
+  }, [isSettingsMode, settingsLibraries, settingsContextNote, item, effectiveLibrary]);
 
   const displayCurrentFolder = currentFolder ? currentFolder : '';
 

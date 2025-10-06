@@ -5,6 +5,7 @@ import {
   createLibraryMappingLookup,
   normalizeLibraryName,
   normalizePathValue,
+  sanitizeCollectionSections,
   sanitizeLibraryMappings,
 } from '../utils/libraryMappings.js';
 
@@ -76,6 +77,27 @@ const sanitizeLibrariesList = (raw) => {
       const collectionAssetPathsValue = Array.isArray(entry.collectionAssetPaths)
         ? entry.collectionAssetPaths.map((value) => normalizePathValue(value)).filter(Boolean)
         : [];
+      const rawOverrides = Array.isArray(entry.collectionOverrides)
+        ? entry.collectionOverrides
+        : [];
+      const collectionOverridesValue = rawOverrides
+        .map((override) => {
+          if (!override || typeof override !== 'object') return null;
+          const nameValue = override.name ?? override.section ?? override.default;
+          const name = typeof nameValue === 'string' ? nameValue.trim() : '';
+          if (!name) return null;
+          const collectionsOverridePath = normalizePathValue(override.collectionsPath);
+          const suggestions = Array.isArray(override.suggestionPaths)
+            ? override.suggestionPaths.map((value) => normalizePathValue(value)).filter(Boolean)
+            : [];
+          return {
+            name,
+            collectionsPath: collectionsOverridePath,
+            suggestionPaths: Array.from(new Set(suggestions)),
+          };
+        })
+        .filter(Boolean)
+        .sort((a, b) => a.name.localeCompare(b.name));
       return {
         name,
         type: typeValue ? String(typeValue) : null,
@@ -83,6 +105,7 @@ const sanitizeLibrariesList = (raw) => {
         assetPath: assetPathValue,
         collectionsPath: collectionsPathValue,
         collectionAssetPaths: collectionAssetPathsValue,
+        collectionOverrides: collectionOverridesValue,
       };
     })
     .filter(Boolean)
@@ -147,6 +170,10 @@ export function ThemeProvider({ children }) {
           payload.collectionsPath === undefined
             ? existing?.collectionsPath ?? ''
             : normalizePathValue(payload.collectionsPath);
+        const sectionsUpdate =
+          payload.collectionSections === undefined
+            ? existing?.collectionSections ?? []
+            : sanitizeCollectionSections(payload.collectionSections);
         if (!assetUpdate) {
           if (index >= 0) {
             list.splice(index, 1);
@@ -158,6 +185,9 @@ export function ThemeProvider({ children }) {
           assetPath: assetUpdate,
           collectionsPath: collectionsUpdate,
         };
+        if (sectionsUpdate.length) {
+          nextEntry.collectionSections = sectionsUpdate;
+        }
         if (index >= 0) {
           list[index] = nextEntry;
         } else {

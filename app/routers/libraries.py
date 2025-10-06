@@ -10,13 +10,9 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
-from ..services import (
-    kometa_config as kometa_config_service,
-    library_mappings as library_mappings_service,
-    settings as settings_service,
-)
+from ..services import library_mappings as library_mappings_service
 
 router = APIRouter()
 
@@ -98,6 +94,12 @@ def get_library_path(name: str = Query(..., description="Mapped library name")) 
     return {"name": name, "path": path}
 
 
+class CollectionOverrideInfo(BaseModel):
+    name: str
+    collectionsPath: Optional[str] = None
+    suggestionPaths: List[str] = Field(default_factory=list)
+
+
 class LibrarySectionInfo(BaseModel):
     name: str
     type: Optional[str] = None
@@ -105,6 +107,7 @@ class LibrarySectionInfo(BaseModel):
     assetPath: Optional[str] = None
     collectionsPath: Optional[str] = None
     collectionAssetPaths: List[str] = Field(default_factory=list)
+    collectionOverrides: List[CollectionOverrideInfo] = Field(default_factory=list)
 
 
 @router.get("/api/settings/libraries", response_model=List[LibrarySectionInfo])
@@ -124,14 +127,6 @@ def list_available_libraries() -> List[LibrarySectionInfo]:
     stored = library_mappings_service.load_library_mappings()
     mappings = library_mappings_service.sanitize_library_mappings(stored)
     mapping_lookup = {item["library"]: item for item in mappings}
-
-    settings_payload = settings_service.load_settings()
-    config_path = (
-        settings_payload.get("kometaConfigPath")
-        if isinstance(settings_payload, dict)
-        else ""
-    )
-    config_summaries = kometa_config_service.load_library_summaries(config_path)
 
     results: List[LibrarySectionInfo] = []
     for section in sections:
@@ -156,41 +151,53 @@ def list_available_libraries() -> List[LibrarySectionInfo]:
             entry["assetPath"] = mapping.get("assetPath") or None
             entry["collectionsPath"] = mapping.get("collectionsPath") or None
 
-        config_info = config_summaries.get(name)
-        if config_info:
-            config_asset = config_info.get("assetPath")
-            if config_asset and not entry["assetPath"]:
-                entry["assetPath"] = config_asset
+        overrides: Dict[str, Dict[str, Any]] = {}
+        stored_sections = mapping.get("collectionSections") if mapping else []
+        if isinstance(stored_sections, list):
+            for section in stored_sections:
+                if not isinstance(section, dict):
+                    continue
+                raw_name = section.get("name")
+                if not raw_name:
+                    continue
+                name_key = str(raw_name).strip()
+                if not name_key:
+                    continue
+                key_norm = name_key.casefold()
+                current = overrides.setdefault(
+                    key_norm,
+                    {
+                        "name": name_key,
+                        "collectionsPath": None,
+                        "suggestionPaths": [],
+                    },
+                )
+                path = library_mappings_service.normalize_path(
+                    section.get("collectionsPath")
+                )
+                if path:
+                    current["collectionsPath"] = path
+                if not current.get("name"):
+                    current["name"] = name_key
 
-            suggestions: List[str] = []
-            if entry["collectionsPath"]:
-                suggestions.append(entry["collectionsPath"])
-            suggestions.extend(config_info.get("collectionsPaths") or [])
+        if overrides:
+            entry["collectionOverrides"] = [
+                CollectionOverrideInfo(
+                    name=value.get("name") or key,
+                    collectionsPath=value.get("collectionsPath"),
+                    suggestionPaths=sorted(
+                        [
+                            path
+                            for path in value.get("suggestionPaths", [])
+                            if path
+                        ]
+                    ),
+                )
+                for key, value in sorted(
+                    overrides.items(), key=lambda item: item[0]
+                )
+            ]
 
-            deduped: List[str] = []
-            for path in suggestions:
-                if path and path not in deduped:
-                    deduped.append(path)
-
-            entry["collectionAssetPaths"] = deduped
-            if not entry["collectionsPath"] and deduped:
-                entry["collectionsPath"] = deduped[0]
-
-        results.append(LibrarySectionInfo(**entry))
-
-    seen_names = {item.name for item in results}
-    for name, info in config_summaries.items():
-        if name in seen_names:
-            continue
-        suggestions = [path for path in info.get("collectionsPaths", []) if path]
-        entry = {
-            "name": name,
-            "type": "config",
-            "key": None,
-            "assetPath": info.get("assetPath"),
-            "collectionsPath": suggestions[0] if suggestions else None,
-            "collectionAssetPaths": suggestions,
-        }
         results.append(LibrarySectionInfo(**entry))
 
     results.sort(key=lambda item: (item.name.lower(), item.key or ""))
