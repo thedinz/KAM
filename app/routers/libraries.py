@@ -116,7 +116,9 @@ def list_available_libraries() -> List[LibrarySectionInfo]:
     from ..services import plex_settings
     from ..services.plex import get_plex
 
-    plex_settings.get_plex_config()
+    cfg = plex_settings.get_plex_config()
+    if not cfg.url or not cfg.token:
+        return []
 
     plex = get_plex()
     try:

@@ -1,7 +1,6 @@
 """Helpers for resolving Plex connection details from persisted settings."""
 from __future__ import annotations
 
-import os
 import threading
 from dataclasses import dataclass
 from typing import Optional
@@ -41,8 +40,8 @@ def _normalize_url(url: str) -> str:
 
 def _resolve_uncached() -> PlexConfig:
     data = settings_service.load_settings()
-    url = _coalesce_setting(data, _URL_KEYS) or os.environ.get("PLEX_URL", "")
-    token = _coalesce_setting(data, _TOKEN_KEYS) or os.environ.get("PLEX_TOKEN", "")
+    url = _coalesce_setting(data, _URL_KEYS)
+    token = _coalesce_setting(data, _TOKEN_KEYS)
     return PlexConfig(url=_normalize_url(url), token=token.strip())
 
 

@@ -136,9 +136,11 @@ def _write_locked(data: Dict[str, Any]) -> None:
 
 def _clear_plex_cache() -> None:
     try:
+        from . import plex as plex_service  # Local import to avoid circular dependency
         from . import plex_settings  # Local import to avoid circular dependency
 
         plex_settings.clear_cache()
+        plex_service.clear_cache()
     except Exception:
         logger.debug("Unable to clear Plex settings cache", exc_info=True)
 
