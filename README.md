@@ -157,6 +157,10 @@ PLEX_TOKEN=CHANGE_ME
 # Set to false only if your Plex server has a self-signed cert
 PLEX_VERIFY_SSL=true
 
+# Map Plex libraries to asset folders inside the container
+# e.g. Movies:/assets/Movies,Kids Movies:/assets/Kids Movies
+LIBRARIES=Movies:/assets/Movies,Kids Movies:/assets/Kids Movies
+
 # Runtime
 PORT=8000
 ```
