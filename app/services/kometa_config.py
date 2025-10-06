@@ -1,4 +1,4 @@
-"""Utilities for parsing Kometa configuration files."""
+"""Utilities for working with Kometa configuration paths."""
 from __future__ import annotations
 
 import logging
@@ -14,8 +14,6 @@ __all__ = [
     "KometaLibraryInfo",
     "KometaCollectionOverride",
     "normalize_config_path",
-    "extract_library_info",
-    "load_library_summaries",
     "candidate_config_roots",
     "browse_config_locations",
 ]

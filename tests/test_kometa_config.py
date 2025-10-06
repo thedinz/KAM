@@ -1,5 +1,5 @@
-import importlib
 from pathlib import Path
+import importlib
 
 
 def test_normalize_config_path_handles_relative_base(tmp_path):
