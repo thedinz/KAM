@@ -1,6 +1,5 @@
 import importlib
 from dataclasses import dataclass
-from pathlib import Path
 from typing import List
 
 import pytest
@@ -36,15 +35,19 @@ def _create_libraries_client(
     load_settings_payload: dict,
     sections: List[_DummySection] | None = None,
     config_summaries: dict | None = None,
+    capture_paths: List[str] | None = None,
 ) -> TestClient:
     settings_module = importlib.reload(importlib.import_module("app.services.settings"))
     monkeypatch.setattr(settings_module, "load_settings", lambda: load_settings_payload)
 
     kometa_module = importlib.reload(importlib.import_module("app.services.kometa_config"))
+    def _load_library_summaries(path):
+        if capture_paths is not None:
+            capture_paths.append(path)
+        return config_summaries or {}
+
     monkeypatch.setattr(
-        kometa_module,
-        "load_library_summaries",
-        lambda path: config_summaries or {},
+        kometa_module, "load_library_summaries", _load_library_summaries
     )
 
     plex_settings_module = importlib.reload(importlib.import_module("app.services.plex_settings"))
@@ -67,6 +70,7 @@ def _create_libraries_client(
 
 
 def test_settings_libraries_endpoint_lists_sections(monkeypatch):
+    captured_paths: List[str] = []
     client = _create_libraries_client(
         monkeypatch,
         {
@@ -101,6 +105,7 @@ def test_settings_libraries_endpoint_lists_sections(monkeypatch):
                 ],
             },
         },
+        capture_paths=captured_paths,
     )
 
     resp = client.get("/api/settings/libraries")
@@ -139,8 +144,11 @@ def test_settings_libraries_endpoint_lists_sections(monkeypatch):
         },
     ]
 
+    assert captured_paths == ["/config/config.yml"]
+
 
 def test_settings_libraries_endpoint_omits_music_sections(monkeypatch):
+    captured_paths: List[str] = []
     client = _create_libraries_client(
         monkeypatch,
         {
@@ -155,6 +163,7 @@ def test_settings_libraries_endpoint_omits_music_sections(monkeypatch):
             _DummySection("Concerts", "audio", "5"),
             _DummySection("Movies", "movie", "1"),
         ],
+        capture_paths=captured_paths,
     )
 
     resp = client.get("/api/settings/libraries")
@@ -171,6 +180,31 @@ def test_settings_libraries_endpoint_omits_music_sections(monkeypatch):
             "collectionAssetPaths": [],
         }
     ]
+
+    assert captured_paths == ["/config/config.yml"]
+
+
+def test_settings_libraries_endpoint_accepts_override_path(monkeypatch):
+    captured_paths: List[str] = []
+    client = _create_libraries_client(
+        monkeypatch,
+        {
+            "theme": "dark",
+            "plexUrl": "http://plex.example:32400",
+            "plexToken": "token",
+            "libraryMappings": [],
+            "kometaConfigPath": "/config/config.yml",
+        },
+        config_summaries={},
+        capture_paths=captured_paths,
+    )
+
+    resp = client.get(
+        "/api/settings/libraries",
+        params={"kometaConfigPath": "/override/config.yml"},
+    )
+    assert resp.status_code == 200
+    assert captured_paths[-1] == "/override/config.yml"
 
 
 def test_update_library_mappings_endpoint(monkeypatch):
