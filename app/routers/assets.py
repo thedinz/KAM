@@ -138,7 +138,7 @@ def list_asset_folders(
     allow_beyond_mapping: bool = Query(False, alias="allowBeyondMapping"),
 ):
     parent_value = parent if isinstance(parent, str) else None
-    parent_provided = parent is not None
+    parent_provided = parent_value is not None
     search_value = search if isinstance(search, str) else None
     if isinstance(settings, bool):
         settings_flag = settings
@@ -146,10 +146,16 @@ def list_asset_folders(
         default_value = getattr(settings, "default", settings)
         settings_flag = bool(default_value)
 
+    if isinstance(allow_beyond_mapping, bool):
+        allow_flag = allow_beyond_mapping
+    else:
+        default_allow = getattr(allow_beyond_mapping, "default", allow_beyond_mapping)
+        allow_flag = bool(default_allow)
+
     root, default_relative = _library_root(
         library,
         settings_mode=settings_flag,
-        allow_beyond_mapping=allow_beyond_mapping,
+        allow_beyond_mapping=allow_flag,
     )
     current = root
     if parent_provided:
