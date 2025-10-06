@@ -683,6 +683,21 @@ function SettingsPage() {
     openModal(selectedLibraries, 'collections', 'collections');
   };
 
+  const handleScanKometaConfig = async () => {
+    setStatus(null);
+    setConfigScanInProgress(true);
+    try {
+      const hasUnsavedOverride = kometaConfigPath !== savedKometaPath;
+      const options = hasUnsavedOverride ? { kometaConfigPath } : undefined;
+      await refreshLibraries(options);
+      setStatus({ type: 'success', message: 'Kometa config scanned.' });
+    } catch (err) {
+      setStatus({ type: 'error', message: err?.message || 'Failed to scan Kometa config.' });
+    } finally {
+      setConfigScanInProgress(false);
+    }
+  };
+
   const handleRefreshLibraries = async () => {
     setStatus(null);
     try {

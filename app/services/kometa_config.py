@@ -4,17 +4,36 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Set
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple, TypedDict
+
+import yaml
 
 from .library_mappings import normalize_path
 
 __all__ = [
+    "KometaLibraryInfo",
+    "KometaCollectionOverride",
     "normalize_config_path",
     "candidate_config_roots",
     "browse_config_locations",
 ]
 
 logger = logging.getLogger(__name__)
+
+
+class KometaCollectionOverride(TypedDict, total=False):
+    """Named collection override discovered in the Kometa config."""
+
+    name: str
+    assetPath: str
+
+
+class KometaLibraryInfo(TypedDict, total=False):
+    """Summary of asset configuration for a single Kometa library."""
+
+    assetPath: Optional[str]
+    collectionsPaths: List[str]
+    collectionOverrides: List[KometaCollectionOverride]
 
 
 def normalize_config_path(value: Any, base_dir: Optional[Path] = None) -> str:
@@ -76,6 +95,202 @@ def normalize_config_path(value: Any, base_dir: Optional[Path] = None) -> str:
                 return candidates[0]
 
     return normalized
+
+
+def _collect_asset_directories(value: Any, base_dir: Optional[Path]) -> Set[str]:
+    """Return all asset_directory values found in *value*."""
+
+    collected: Set[str] = set()
+
+    def _walk(node: Any) -> None:
+        if isinstance(node, dict):
+            if "asset_directory" in node:
+                path = normalize_config_path(node.get("asset_directory"), base_dir)
+                if path:
+                    collected.add(path)
+            for child in node.values():
+                _walk(child)
+        elif isinstance(node, list):
+            for child in node:
+                _walk(child)
+
+    _walk(value)
+    return collected
+
+
+def _normalize_override_name(value: Any) -> str:
+    if value in (None, ""):
+        return ""
+    text = str(value).strip()
+    if not text:
+        return ""
+
+    cleaned = text.replace("_", " ").replace("-", " ").strip()
+    if cleaned and cleaned.lower() == cleaned:
+        cleaned = " ".join(part for part in cleaned.split())
+        cleaned = cleaned.title()
+    return cleaned or text
+
+
+def _extract_override_entry(
+    entry: Any, base_dir: Optional[Path], fallback_name: Optional[str] = None
+) -> Optional[Tuple[str, str]]:
+    if not isinstance(entry, dict):
+        return None
+
+    path = normalize_config_path(
+        entry.get("asset_directory") or entry.get("asset_path"), base_dir
+    )
+    if not path:
+        return None
+
+    name_value = (
+        entry.get("name")
+        or entry.get("default")
+        or entry.get("collection")
+        or entry.get("template")
+        or fallback_name
+    )
+    name = _normalize_override_name(name_value)
+    if not name:
+        return None
+
+    return name, path
+
+
+def _collect_overrides_from_collection_files(
+    value: Any, base_dir: Optional[Path]
+) -> Dict[str, str]:
+    overrides: Dict[str, str] = {}
+    if isinstance(value, list):
+        for entry in value:
+            result = _extract_override_entry(entry, base_dir)
+            if result:
+                name, path = result
+                overrides.setdefault(name, path)
+    elif isinstance(value, dict):
+        for key, entry in value.items():
+            result = _extract_override_entry(entry, base_dir, str(key))
+            if result:
+                name, path = result
+                overrides.setdefault(name, path)
+    return overrides
+
+
+def _collect_overrides_from_mapping(
+    value: Any, base_dir: Optional[Path]
+) -> Dict[str, str]:
+    overrides: Dict[str, str] = {}
+    if isinstance(value, dict):
+        for key, entry in value.items():
+            result = _extract_override_entry(entry, base_dir, str(key))
+            if result:
+                name, path = result
+                overrides.setdefault(name, path)
+    return overrides
+
+
+def extract_library_info(library_config: Any, base_dir: Optional[Path]) -> KometaLibraryInfo:
+    """Return library asset information from a Kometa *library_config*."""
+
+    info: KometaLibraryInfo = {}
+    if not isinstance(library_config, dict):
+        return info
+
+    asset_path = normalize_config_path(library_config.get("asset_directory"), base_dir)
+    if not asset_path:
+        # Some configs may use "asset_path"; be generous.
+        asset_path = normalize_config_path(library_config.get("asset_path"), base_dir)
+    if asset_path:
+        info["assetPath"] = asset_path
+
+    collections_paths: Set[str] = set()
+
+    for key in (
+        "collection_files",
+        "collection_defaults",
+        "collections",
+        "dynamic_collections",
+    ):
+        if key in library_config:
+            paths = _collect_asset_directories(library_config.get(key), base_dir)
+            collections_paths.update(paths)
+
+    if collections_paths:
+        info["collectionsPaths"] = sorted(collections_paths)
+
+    overrides: Dict[str, str] = {}
+    overrides.update(
+        _collect_overrides_from_collection_files(
+            library_config.get("collection_files"), base_dir
+        )
+    )
+    overrides.update(
+        _collect_overrides_from_mapping(
+            library_config.get("collections"), base_dir
+        )
+    )
+    overrides.update(
+        _collect_overrides_from_mapping(
+            library_config.get("dynamic_collections"), base_dir
+        )
+    )
+
+    if overrides:
+        info["collectionOverrides"] = [
+            {"name": name, "assetPath": path}
+            for name, path in sorted(overrides.items(), key=lambda item: item[0].lower())
+        ]
+
+    return info
+
+
+def load_library_summaries(path: str | os.PathLike[str] | None) -> Dict[str, KometaLibraryInfo]:
+    """Parse the Kometa config at *path* and return library summaries."""
+
+    if not path:
+        return {}
+
+    normalized_path = normalize_config_path(path)
+    if not normalized_path:
+        return {}
+
+    config_path = Path(normalized_path)
+    try:
+        raw = config_path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        logger.debug("Kometa config file not found: %s", config_path)
+        return {}
+    except Exception as exc:  # pragma: no cover - defensive logging
+        logger.warning("Unable to read Kometa config %s: %s", config_path, exc)
+        return {}
+
+    try:
+        data = yaml.safe_load(raw) or {}
+    except Exception as exc:
+        logger.warning("Invalid YAML in Kometa config %s: %s", config_path, exc)
+        return {}
+
+    if not isinstance(data, dict):
+        return {}
+
+    libraries_section = data.get("libraries")
+    if not isinstance(libraries_section, dict):
+        return {}
+
+    base_dir = config_path.parent
+    results: Dict[str, KometaLibraryInfo] = {}
+    for name, config in libraries_section.items():
+        if not isinstance(name, str) or not name.strip():
+            continue
+        info = extract_library_info(config, base_dir)
+        if info:
+            results[name.strip()] = info
+        else:
+            # Ensure libraries are represented even if no directories were found.
+            results[name.strip()] = {}
+
+    return results
 
 
 def _nearest_existing_dir(path: Path) -> Optional[Path]:
