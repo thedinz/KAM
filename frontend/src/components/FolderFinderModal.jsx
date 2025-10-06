@@ -89,6 +89,7 @@ function FolderFinderModal({
   const [assigning, setAssigning] = useState(false);
   const [currentFolder, setCurrentFolder] = useState('');
   const debounceRef = useRef();
+  const isAtRootRef = useRef(false);
 
   useEffect(() => {
     if (!isOpen) {
@@ -149,7 +150,7 @@ function FolderFinderModal({
   ]);
 
   const loadFolders = useCallback(
-    async ({ path = '', query = '', preserveSelection = false } = {}) => {
+    async ({ path = '', query = '', preserveSelection = false, explicitParent = false } = {}) => {
       if (!effectiveLibrary) {
         setResults([]);
         setError(isSettingsMode ? 'Select a library before browsing folders.' : 'No library mapping available for this item.');
@@ -171,9 +172,11 @@ function FolderFinderModal({
       setIsSearching(Boolean(query));
       const params = new URLSearchParams();
       params.set('library', effectiveLibrary);
-      if (path) params.set('parent', path);
+      const shouldUseExplicitParent = explicitParent || (path === '' && isAtRootRef.current);
+      if (shouldUseExplicitParent || path) params.set('parent', path);
       if (query) params.set('search', query);
       if (isSettingsMode) params.set('settings', 'true');
+      if (!isSettingsMode) params.set('allowBeyondMapping', 'true');
 
       try {
         const response = await fetch(`/api/asset-folders?${params.toString()}`);
@@ -189,7 +192,8 @@ function FolderFinderModal({
           : [];
         const normalized = list.map(normalizeFolderEntry).filter(Boolean);
         setResults(normalized);
-        const parentPath = data?.parent ?? path ?? '';
+        const parentPath = typeof data?.parent === 'string' ? data.parent : path ?? '';
+        isAtRootRef.current = !parentPath;
         setCurrentPath(parentPath || '');
       } catch (err) {
         setResults([]);
@@ -283,7 +287,9 @@ function FolderFinderModal({
   };
 
   const handleBreadcrumbClick = (crumb) => {
-    loadFolders({ path: crumb.path || '', query: '', preserveSelection: false });
+    const crumbPath = crumb.path ?? '';
+    const isRoot = !crumb.path && !crumb.isSearch;
+    loadFolders({ path: crumbPath, query: '', preserveSelection: false, explicitParent: isRoot });
     setSearchInput('');
     setSearchTerm('');
   };
