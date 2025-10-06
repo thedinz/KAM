@@ -195,6 +195,207 @@ describe('SettingsPage', () => {
     expect(await screen.findByRole('status')).toHaveTextContent('Kometa config scanned.');
   });
 
+  it('auto-saves the Kometa config path when selecting a file', async () => {
+    const mockSave = vi.fn().mockResolvedValue({});
+    const mockUpdate = vi.fn();
+    const mockRevert = vi.fn();
+    useTheme.mockReturnValue({
+      theme: 'dark',
+      savedTheme: 'dark',
+      plexUrl: '',
+      plexToken: '',
+      kometaConfigPath: '',
+      savedKometaConfigPath: '',
+      savedSettings: { plexUrl: '', plexToken: '', kometaConfigPath: '' },
+      libraryMappings: [],
+      savedLibraryMappings: [],
+      libraries: [],
+      librariesLoading: false,
+      librariesError: null,
+      loading: false,
+      saving: false,
+      error: null,
+      libraryMappingsDirty: false,
+      hasUnsavedChanges: false,
+      applyTheme: vi.fn(),
+      updateSettings: mockUpdate,
+      saveSettings: mockSave,
+      revertSettings: mockRevert,
+      refreshLibraries: vi.fn(),
+      setLibraryMappings: vi.fn(),
+    });
+
+    global.fetch.mockImplementation(() =>
+      Promise.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            root: '/config',
+            parent: '',
+            selection: null,
+            items: [
+              { name: 'config.yml', path: 'config.yml', isDir: false, isFile: true },
+            ],
+          }),
+      })
+    );
+
+    render(
+      <MemoryRouter>
+        <SettingsPage />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Choose file' }));
+
+    const fileButton = await screen.findByRole('button', { name: 'config.yml' });
+    fireEvent.click(fileButton);
+
+    const confirmButton = await screen.findByRole('button', { name: 'Use this file' });
+    await waitFor(() => {
+      expect(confirmButton).not.toBeDisabled();
+    });
+    fireEvent.click(confirmButton);
+
+    await waitFor(() => {
+      expect(mockUpdate).toHaveBeenCalledWith({ kometaConfigPath: '/config/config.yml' });
+    });
+
+    await waitFor(() => {
+      expect(mockSave).toHaveBeenCalledWith({ kometaConfigPath: '/config/config.yml' });
+    });
+
+    expect(mockRevert).not.toHaveBeenCalled();
+    expect(await screen.findByRole('status')).toHaveTextContent('Kometa config path saved.');
+  });
+
+  it('auto-saves when clearing the Kometa config path', async () => {
+    const mockSave = vi.fn().mockResolvedValue({});
+    const mockUpdate = vi.fn();
+    const mockRevert = vi.fn();
+    useTheme.mockReturnValue({
+      theme: 'dark',
+      savedTheme: 'dark',
+      plexUrl: '',
+      plexToken: '',
+      kometaConfigPath: '/config/config.yml',
+      savedKometaConfigPath: '/config/config.yml',
+      savedSettings: { plexUrl: '', plexToken: '', kometaConfigPath: '/config/config.yml' },
+      libraryMappings: [],
+      savedLibraryMappings: [],
+      libraries: [],
+      librariesLoading: false,
+      librariesError: null,
+      loading: false,
+      saving: false,
+      error: null,
+      libraryMappingsDirty: false,
+      hasUnsavedChanges: false,
+      applyTheme: vi.fn(),
+      updateSettings: mockUpdate,
+      saveSettings: mockSave,
+      revertSettings: mockRevert,
+      refreshLibraries: vi.fn(),
+      setLibraryMappings: vi.fn(),
+    });
+
+    render(
+      <MemoryRouter>
+        <SettingsPage />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
+
+    await waitFor(() => {
+      expect(mockUpdate).toHaveBeenCalledWith({ kometaConfigPath: '' });
+    });
+
+    await waitFor(() => {
+      expect(mockSave).toHaveBeenCalledWith({ kometaConfigPath: '' });
+    });
+
+    expect(mockRevert).not.toHaveBeenCalled();
+    expect(await screen.findByRole('status')).toHaveTextContent('Kometa config path cleared.');
+  });
+
+  it('restores the previous Kometa config path if auto-saving fails', async () => {
+    const mockSave = vi.fn().mockRejectedValue(new Error('Save failed'));
+    const mockUpdate = vi.fn();
+    const mockRevert = vi.fn();
+    useTheme.mockReturnValue({
+      theme: 'dark',
+      savedTheme: 'dark',
+      plexUrl: '',
+      plexToken: '',
+      kometaConfigPath: '',
+      savedKometaConfigPath: '',
+      savedSettings: { plexUrl: '', plexToken: '', kometaConfigPath: '' },
+      libraryMappings: [],
+      savedLibraryMappings: [],
+      libraries: [],
+      librariesLoading: false,
+      librariesError: null,
+      loading: false,
+      saving: false,
+      error: null,
+      libraryMappingsDirty: false,
+      hasUnsavedChanges: false,
+      applyTheme: vi.fn(),
+      updateSettings: mockUpdate,
+      saveSettings: mockSave,
+      revertSettings: mockRevert,
+      refreshLibraries: vi.fn(),
+      setLibraryMappings: vi.fn(),
+    });
+
+    global.fetch.mockImplementation(() =>
+      Promise.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            root: '/config',
+            parent: '',
+            selection: null,
+            items: [
+              { name: 'config.yml', path: 'config.yml', isDir: false, isFile: true },
+            ],
+          }),
+      })
+    );
+
+    render(
+      <MemoryRouter>
+        <SettingsPage />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Choose file' }));
+
+    const fileButton = await screen.findByRole('button', { name: 'config.yml' });
+    fireEvent.click(fileButton);
+
+    const confirmButton = await screen.findByRole('button', { name: 'Use this file' });
+    await waitFor(() => {
+      expect(confirmButton).not.toBeDisabled();
+    });
+    fireEvent.click(confirmButton);
+
+    await waitFor(() => {
+      expect(mockUpdate).toHaveBeenCalledWith({ kometaConfigPath: '/config/config.yml' });
+    });
+
+    await waitFor(() => {
+      expect(mockSave).toHaveBeenCalledWith({ kometaConfigPath: '/config/config.yml' });
+    });
+
+    await waitFor(() => {
+      expect(mockRevert).toHaveBeenCalled();
+    });
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Save failed');
+  });
+
   it('shows loading status when settings are loading', async () => {
     useTheme.mockReturnValue({
       theme: 'dark',
