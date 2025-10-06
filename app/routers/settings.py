@@ -15,12 +15,38 @@ from ..services import (
 router = APIRouter()
 
 
+class CollectionSectionPayload(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    name: str
+    collectionsPath: str
+
+    @field_validator("name", mode="before")
+    @classmethod
+    def _validate_name(cls, value: str | None) -> str:
+        if value in (None, ""):
+            raise ValueError("Collection name is required")
+        text = str(value).strip()
+        if not text:
+            raise ValueError("Collection name is required")
+        return text
+
+    @field_validator("collectionsPath", mode="before")
+    @classmethod
+    def _validate_path(cls, value: str | None) -> str:
+        normalized = library_mappings_service.normalize_path(value)
+        if not normalized:
+            raise ValueError("Collections path is required")
+        return normalized
+
+
 class LibraryMappingPayload(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     library: str
     assetPath: str
     collectionsPath: str | None = None
+    collectionSections: List[CollectionSectionPayload] = Field(default_factory=list)
 
     @field_validator("library", mode="before")
     @classmethod
@@ -45,6 +71,16 @@ class LibraryMappingPayload(BaseModel):
     def _validate_collections_path(cls, value: str | None) -> str | None:
         normalized = library_mappings_service.normalize_path(value)
         return normalized or None
+
+    @field_validator("collectionSections", mode="after")
+    @classmethod
+    def _sanitize_sections(
+        cls, value: List[CollectionSectionPayload]
+    ) -> List[CollectionSectionPayload]:
+        normalized = library_mappings_service.normalize_collection_sections(
+            [item.model_dump() for item in value]
+        )
+        return [CollectionSectionPayload(**item) for item in normalized]
 
 
 class SettingsPayload(BaseModel):
