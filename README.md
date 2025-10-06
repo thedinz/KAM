@@ -163,10 +163,9 @@ LIBRARIES=Movies:/assets/Movies,Kids Movies:/assets/Kids Movies
 
 # Runtime
 PORT=8000
-
-# Root path for collection posters
-COLLECTIONS_ROOT=/assets/Collections
 ```
+
+Library folder mappings and the collections root are now configured directly in the **Settings** page of the web UI—no more `LIBRARIES` or `COLLECTIONS_ROOT` variables are needed in the environment file.
 
 ---
 
