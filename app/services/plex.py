@@ -23,3 +23,11 @@ def get_plex():
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Plex connect failed: {e}")
     return _plex
+
+
+def clear_cache() -> None:
+    """Reset the cached Plex client."""
+
+    global _plex, _last_creds
+    _plex = None
+    _last_creds = (None, None)

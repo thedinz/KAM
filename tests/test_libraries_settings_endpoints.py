@@ -34,6 +34,7 @@ def _create_libraries_client(
     monkeypatch: pytest.MonkeyPatch,
     load_settings_payload: dict,
     sections: List[_DummySection] | None = None,
+    plex_factory=None,
 ) -> TestClient:
     settings_module = importlib.reload(importlib.import_module("app.services.settings"))
     monkeypatch.setattr(settings_module, "load_settings", lambda: load_settings_payload)
@@ -47,7 +48,9 @@ def _create_libraries_client(
     ]
 
     plex_module = importlib.reload(importlib.import_module("app.services.plex"))
-    monkeypatch.setattr(plex_module, "get_plex", lambda: _DummyPlex(default_sections))
+    if plex_factory is None:
+        plex_factory = lambda: _DummyPlex(default_sections)
+    monkeypatch.setattr(plex_module, "get_plex", plex_factory)
 
     router_module = importlib.reload(importlib.import_module("app.routers.libraries"))
 
@@ -237,6 +240,31 @@ def test_settings_libraries_endpoint_handles_empty_mappings(monkeypatch):
             "collectionsPath": None,
         },
     ]
+
+
+def test_settings_libraries_endpoint_returns_empty_without_credentials(monkeypatch):
+    calls = {"count": 0}
+
+    def _should_not_run():
+        calls["count"] += 1
+        raise AssertionError("get_plex should not be called when credentials are missing")
+
+    client = _create_libraries_client(
+        monkeypatch,
+        {
+            "theme": "dark",
+            "plexUrl": "",
+            "plexToken": "",
+            "libraryMappings": [],
+        },
+        sections=[],
+        plex_factory=_should_not_run,
+    )
+
+    resp = client.get("/api/settings/libraries")
+    assert resp.status_code == 200
+    assert resp.json() == []
+    assert calls["count"] == 0
 
 
 def test_asset_folders_unmapped_library(tmp_path, monkeypatch):
