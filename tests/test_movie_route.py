@@ -53,12 +53,24 @@ def movie_env(tmp_path, monkeypatch):
     # Another unrelated folder to ensure false positives are avoided
     (library_path / "Completely Different (2020)").mkdir()
 
-    from app import config
-
-    monkeypatch.setattr(config, "LIBRARY_MAPPINGS", {library: str(library_path)})
-    monkeypatch.setattr(config, "PLEX_URL", "http://plex.test")
-    monkeypatch.setattr(config, "PLEX_TOKEN", "token")
-    monkeypatch.setattr(config, "CONFIG_ERRORS", [])
+    settings_module = importlib.reload(importlib.import_module("app.services.settings"))
+    settings_module.set_settings_path(str(tmp_path / "settings.json"))
+    settings_module.save_settings(
+        {
+            "theme": "dark",
+            "plexUrl": "http://plex.test",
+            "plexToken": "token",
+            "libraryMappings": [
+                {
+                    "library": library,
+                    "assetPath": str(library_path),
+                    "collectionsPath": None,
+                }
+            ],
+        }
+    )
+    plex_settings = importlib.reload(importlib.import_module("app.services.plex_settings"))
+    plex_settings.clear_cache()
 
     monkeypatch.setenv("KAM_ASSETS_ROOT", str(assets_root))
     overrides_path = tmp_path / "overrides.json"
@@ -115,3 +127,5 @@ def test_movie_route_prefers_override(movie_env):
     assert data["folderExists"] is True
     assert data["posterExists"] is True
     assert data["backgroundExists"] is True
+    assert data["posterUrlPlex"].startswith("http://plex.test")
+    assert data["backgroundUrlPlex"].startswith("http://plex.test")

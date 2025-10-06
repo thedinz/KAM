@@ -1,12 +1,13 @@
 from fastapi import APIRouter, HTTPException, Query
 import os
-from typing import Optional
+from typing import Optional, Tuple
 
 from ..services import folder_overrides
+from ..services import plex_settings
+from ..services import library_mappings as library_mappings_service
 from ..services.plex import get_plex
 from ..services.assets import folder_name_for
 from ..services.resolve import resolve_existing_dir_or_422
-from .. import config
 
 router = APIRouter()
 
@@ -44,6 +45,13 @@ def _resolve_existing_folder_basename(library: str, title: Optional[str], year: 
             return os.path.basename(resolved.rstrip(os.sep))
     return None
 
+def _plex_url_parts() -> Tuple[str, str]:
+    cfg = plex_settings.get_plex_config()
+    if not cfg.url or not cfg.token:
+        raise HTTPException(status_code=500, detail="PLEX_URL or PLEX_TOKEN not set")
+    return cfg.url, cfg.token
+
+
 @router.get("/movie", summary="Single movie details")
 def movie(library: str = Query(...), ratingKey: int = Query(...)):
     # Find the library section and the item
@@ -66,7 +74,7 @@ def movie(library: str = Query(...), ratingKey: int = Query(...)):
         folder = resolved_folder
 
     # Map to asset root for this library
-    base = config.LIBRARY_MAPPINGS.get(library)
+    base = library_mappings_service.get_asset_path(library)
     poster_exists = False
     background_exists = False
     poster_url_local = None
@@ -96,6 +104,8 @@ def movie(library: str = Query(...), ratingKey: int = Query(...)):
                 ts2 = None
             background_url_local = "/fileproxy?path=" + b + (("&t=" + str(ts2)) if ts2 else "")
 
+    plex_url, plex_token = _plex_url_parts()
+
     return {
         "library": library,
         "title": title,
@@ -106,9 +116,9 @@ def movie(library: str = Query(...), ratingKey: int = Query(...)):
         "posterExists": poster_exists,
         "backgroundExists": background_exists,
         "posterUrl": poster_url_local,
-        "posterUrlPlex": f"{config.PLEX_URL}/library/metadata/{int(ratingKey)}/thumb?X-Plex-Token={config.PLEX_TOKEN}",
+        "posterUrlPlex": f"{plex_url}/library/metadata/{int(ratingKey)}/thumb?X-Plex-Token={plex_token}",
         "backgroundUrl": background_url_local,
-        "backgroundUrlPlex": f"{config.PLEX_URL}/library/metadata/{int(ratingKey)}/art?X-Plex-Token={config.PLEX_TOKEN}",
+        "backgroundUrlPlex": f"{plex_url}/library/metadata/{int(ratingKey)}/art?X-Plex-Token={plex_token}",
     }
 
 @router.get("/api/movie", summary="Single movie details (alias)")

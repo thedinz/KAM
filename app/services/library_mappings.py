@@ -1,0 +1,249 @@
+"""Helpers for working with library mapping settings and caching."""
+from __future__ import annotations
+
+import copy
+import os
+import threading
+from typing import Any, Dict, Iterable, List, Optional
+
+__all__ = [
+    "normalize_path",
+    "normalize_collection_sections",
+    "sanitize_library_mappings",
+    "seed_from_env",
+    "set_cached_mappings",
+    "get_cached_mappings",
+    "clear_cache",
+    "load_library_mappings",
+    "get_library_map",
+    "get_library_entry",
+    "get_asset_path",
+    "get_collections_path",
+]
+
+_CACHE: Optional[List[Dict[str, Any]]] = None
+_LOCK = threading.Lock()
+
+
+def normalize_path(value: Any) -> str:
+    """Return a trimmed, normalized path or an empty string."""
+    if value in (None, ""):
+        return ""
+    text = str(value).strip()
+    if not text:
+        return ""
+    normalized = os.path.normpath(text)
+    if normalized in (".", ""):
+        return ""
+    return normalized.replace("\\", "/")
+
+
+def normalize_collection_sections(value: Any) -> List[Dict[str, str]]:
+    """Normalize collection override mappings into a sorted list."""
+
+    if not value:
+        return []
+
+    items: List[Dict[str, Any]] = []
+    if isinstance(value, dict):
+        for key, entry in value.items():
+            if isinstance(entry, dict):
+                candidate = dict(entry)
+            else:
+                candidate = {"collectionsPath": entry}
+            candidate.setdefault("name", key)
+            items.append(candidate)
+    elif isinstance(value, list):
+        items = [dict(entry) for entry in value if isinstance(entry, dict)]
+    else:
+        return []
+
+    ordered: Dict[str, Dict[str, str]] = {}
+    for item in items:
+        raw_name = item.get("name") or item.get("section") or item.get("default") or item.get("key")
+        if raw_name in (None, ""):
+            continue
+        name = str(raw_name).strip()
+        if not name:
+            continue
+        path = normalize_path(
+            item.get("collectionsPath")
+            or item.get("path")
+            or item.get("assetPath")
+            or item.get("asset_directory")
+        )
+        if not path:
+            continue
+        ordered[name] = {"name": name, "collectionsPath": path}
+
+    return [ordered[key] for key in sorted(ordered.keys(), key=lambda s: s.lower())]
+
+
+def sanitize_library_mappings(raw: Any) -> List[Dict[str, Any]]:
+    """Normalize arbitrary input into a deterministic list of mappings."""
+    if not raw:
+        return []
+
+    items: Iterable[Dict[str, Any]]
+    if isinstance(raw, dict):
+        items = (
+            {
+                "library": key,
+                "assetPath": value,
+                "collectionsPath": None,
+            }
+            for key, value in raw.items()
+        )
+    elif isinstance(raw, list):
+        items = (item for item in raw if isinstance(item, dict))
+    else:
+        return []
+
+    ordered: Dict[str, Dict[str, Any]] = {}
+    for item in items:
+        library = str(item.get("library", "")) if item.get("library") is not None else ""
+        library = library.strip()
+        asset_path = normalize_path(item.get("assetPath"))
+        collections_path = normalize_path(item.get("collectionsPath"))
+        sections = normalize_collection_sections(
+            item.get("collectionSections") or item.get("collectionOverrides")
+        )
+
+        if not library or not asset_path:
+            continue
+
+        ordered[library] = {
+            "library": library,
+            "assetPath": asset_path,
+            "collectionsPath": collections_path or None,
+        }
+        if sections:
+            ordered[library]["collectionSections"] = sections
+
+    return [copy.deepcopy(value) for value in ordered.values()]
+
+
+def seed_from_env() -> List[Dict[str, Any]]:
+    """Return library mappings derived from the LIBRARIES/COLLECTIONS_ROOT envs."""
+    env_raw = os.environ.get("LIBRARIES", "")
+    collection_root = normalize_path(os.environ.get("COLLECTIONS_ROOT"))
+
+    candidates = []
+    for part in env_raw.split(","):
+        part = part.strip()
+        if not part or ":" not in part:
+            continue
+        name, path = part.split(":", 1)
+        candidates.append(
+            {
+                "library": name,
+                "assetPath": path,
+                "collectionsPath": collection_root or None,
+            }
+        )
+
+    return sanitize_library_mappings(candidates)
+
+
+def set_cached_mappings(mappings: List[Dict[str, Any]] | None) -> None:
+    """Persist a copy of the mappings in memory for fast reuse."""
+    global _CACHE
+    with _LOCK:
+        _CACHE = copy.deepcopy(mappings) if mappings is not None else None
+
+
+def get_cached_mappings() -> Optional[List[Dict[str, Any]]]:
+    """Return the cached mappings (if any)."""
+    with _LOCK:
+        return copy.deepcopy(_CACHE) if _CACHE is not None else None
+
+
+def clear_cache() -> None:
+    """Clear the cached mappings."""
+    set_cached_mappings(None)
+
+
+def _load_from_settings() -> List[Dict[str, Any]]:
+    """Return sanitized mappings from persisted settings with env fallback."""
+    try:
+        from . import settings as settings_service  # Local import to avoid cycle
+
+        payload = settings_service.load_settings()
+        raw = payload.get("libraryMappings") if isinstance(payload, dict) else None
+    except Exception:
+        raw = None
+
+    mappings = sanitize_library_mappings(raw)
+    if mappings:
+        return mappings
+    return seed_from_env()
+
+
+def load_library_mappings() -> List[Dict[str, Any]]:
+    """Return sanitized library mappings from settings (cached)."""
+    cached = get_cached_mappings()
+    if cached is not None:
+        return cached
+
+    mappings = _load_from_settings()
+    set_cached_mappings(mappings)
+    return copy.deepcopy(mappings)
+
+
+def get_library_map() -> Dict[str, Dict[str, Any]]:
+    """Return a library -> mapping lookup."""
+    mappings = load_library_mappings()
+    lookup: Dict[str, Dict[str, Any]] = {}
+    for item in mappings:
+        library = str(item.get("library") or "")
+        if not library:
+            continue
+        lookup[library] = dict(item)
+    return lookup
+
+
+def get_library_entry(library: str) -> Optional[Dict[str, Any]]:
+    """Return the mapping entry for *library* (if any)."""
+    if not library:
+        return None
+    mapping = get_library_map().get(str(library))
+    return dict(mapping) if mapping else None
+
+
+def get_asset_path(library: str) -> Optional[str]:
+    """Return the configured asset path for *library* (if any)."""
+    entry = get_library_entry(library)
+    if not entry:
+        return None
+    path = normalize_path(entry.get("assetPath"))
+    return path or None
+
+
+def _default_collections_root() -> Optional[str]:
+    return normalize_path(os.environ.get("COLLECTIONS_ROOT"))
+
+
+def get_collections_path(library: Optional[str] = None) -> Optional[str]:
+    """Return the collections path for *library* or the global default."""
+    if library:
+        entry = get_library_entry(library)
+        if entry:
+            path = normalize_path(entry.get("collectionsPath"))
+            if path:
+                return path
+
+    explicit = get_library_entry("Collections")
+    if explicit:
+        explicit_coll = normalize_path(explicit.get("collectionsPath") or explicit.get("assetPath"))
+        if explicit_coll:
+            return explicit_coll
+
+    fallback = _default_collections_root()
+    if fallback:
+        return fallback
+
+    for entry in load_library_mappings():
+        candidate = normalize_path(entry.get("collectionsPath"))
+        if candidate:
+            return candidate
+    return None

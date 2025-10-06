@@ -3,9 +3,9 @@ import os
 import re
 import unicodedata
 from difflib import SequenceMatcher
-from typing import Optional
+from typing import Iterable, Optional
 
-from app import config
+from . import library_mappings as library_mappings_service
 
 ASSETS_ROOT = os.environ.get("KAM_ASSETS_ROOT", "/assets")
 
@@ -93,6 +93,35 @@ def _best_match(candidates, want: str) -> Optional[str]:
         return best_candidate
     return None
 
+def _candidate_bases(library: str) -> Iterable[str]:
+    """Yield possible asset roots for *library* in priority order."""
+    if not library:
+        return []
+
+    candidates: list[str] = []
+    if library == "Collections":
+        coll_base = library_mappings_service.get_collections_path()
+        if coll_base:
+            candidates.append(coll_base)
+    else:
+        asset_base = library_mappings_service.get_asset_path(library)
+        if asset_base:
+            candidates.append(asset_base)
+
+        coll_base = library_mappings_service.get_collections_path(library)
+        if coll_base and coll_base not in candidates:
+            candidates.append(coll_base)
+
+    if ASSETS_ROOT:
+        fallback = os.path.join(ASSETS_ROOT, library)
+        if fallback not in candidates:
+            candidates.append(fallback)
+        if ASSETS_ROOT not in candidates:
+            candidates.append(ASSETS_ROOT)
+
+    return candidates
+
+
 def resolve_existing_dir_or_422(library: str, folder_name: str) -> str:
     """
     Resolve the asset directory for (library, folder_name) to an EXISTING folder.
@@ -105,15 +134,24 @@ def resolve_existing_dir_or_422(library: str, folder_name: str) -> str:
     if not library:
         raise FileNotFoundError("Missing library")
 
-    mapped_base: Optional[str]
-    if library == "Collections":
-        mapped_base = config.COLLECTIONS_ROOT
-    else:
-        mapped_base = config.LIBRARY_MAPPINGS.get(library)
+    bases = list(dict.fromkeys(_candidate_bases(library)))
+    for base in bases:
+        if not os.path.isdir(base):
+            continue
+        try:
+            resolved = _resolve_within_base(base, library, folder_name)
+        except FileNotFoundError:
+            continue
+        if resolved:
+            return resolved
 
-    base = os.fspath(mapped_base) if mapped_base else os.path.join(ASSETS_ROOT, library)
+    last_base = bases[0] if bases else os.path.join(ASSETS_ROOT, library)
+    raise FileNotFoundError(f"Assets library not found: {last_base}")
+
+
+def _resolve_within_base(base: str, library: str, folder_name: str) -> Optional[str]:
     if not os.path.isdir(base):
-        raise FileNotFoundError(f"Assets library not found: {base}")
+        return None
 
     raw = (folder_name or "").strip()
     if not raw:
@@ -134,4 +172,6 @@ def resolve_existing_dir_or_422(library: str, folder_name: str) -> str:
         return os.path.join(base, match)
 
     # Not found => caller should 422 (do not create)
-    raise FileNotFoundError(f"No existing asset folder matches '{folder_name}' in '{library}'")
+    raise FileNotFoundError(
+        f"No existing asset folder matches '{folder_name}' in '{library}'"
+    )

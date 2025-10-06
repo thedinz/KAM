@@ -7,8 +7,8 @@ from typing import List
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
-from .. import config
 from ..services import folder_overrides
+from ..services import library_mappings as library_mappings_service
 from ..services.resolve import ASSETS_ROOT, resolve_existing_dir_or_422
 
 router = APIRouter()
@@ -20,21 +20,105 @@ class AssignFolderPayload(BaseModel):
     folderName: str
 
 
-def _library_root(library: str) -> Path:
+def _library_root(
+    library: str,
+    *,
+    settings_mode: bool = False,
+    allow_beyond_mapping: bool = False,
+) -> tuple[Path, str | None]:
     if not library:
         raise HTTPException(status_code=422, detail="Missing library")
     if library == "Collections":
-        base = config.COLLECTIONS_ROOT
+        base = library_mappings_service.get_collections_path()
+        if not base:
+            raise HTTPException(
+                status_code=404, detail="No assets mapping for library 'Collections'"
+            )
+        root = Path(base)
+        default_relative = None
     else:
-        base = config.LIBRARY_MAPPINGS.get(library)
-        if not base and ASSETS_ROOT:
-            base = os.path.join(ASSETS_ROOT, library)
-    if not base:
-        raise HTTPException(status_code=404, detail=f"No assets mapping for library '{library}'")
-    root = Path(base)
-    if not root.is_dir():
-        raise HTTPException(status_code=404, detail=f"Assets library not found: {base}")
-    return root
+        mapped = library_mappings_service.get_asset_path(library)
+        default_relative = None
+        mapped_path = Path(mapped) if mapped else None
+        assets_root = Path(ASSETS_ROOT) if ASSETS_ROOT else None
+
+        assets_root_resolved: Path | None = None
+        if assets_root:
+            try:
+                assets_root_resolved = assets_root.resolve()
+            except FileNotFoundError:
+                raise HTTPException(
+                    status_code=404, detail=f"Assets library not found: {assets_root}"
+                )
+            except PermissionError:
+                raise HTTPException(status_code=403, detail="Permission denied")
+            except OSError:
+                raise HTTPException(
+                    status_code=400, detail="Unable to resolve assets path"
+                )
+            if not assets_root_resolved.is_dir():
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Assets library not found: {assets_root_resolved}",
+                )
+
+        mapped_resolved: Path | None = None
+        if mapped_path:
+            try:
+                mapped_resolved = mapped_path.resolve()
+            except FileNotFoundError:
+                raise HTTPException(
+                    status_code=404, detail=f"Assets library not found: {mapped_path}"
+                )
+            except PermissionError:
+                raise HTTPException(status_code=403, detail="Permission denied")
+            except OSError:
+                raise HTTPException(
+                    status_code=400, detail="Unable to resolve assets path"
+                )
+
+        if mapped_resolved and not settings_mode:
+            can_expand = (
+                allow_beyond_mapping
+                and assets_root_resolved is not None
+                and mapped_resolved.is_relative_to(assets_root_resolved)
+            )
+            if can_expand:
+                root = assets_root_resolved
+                relative = mapped_resolved.relative_to(assets_root_resolved)
+                default_relative = str(relative) if str(relative) != "." else ""
+            else:
+                root = mapped_resolved
+        else:
+            if not assets_root_resolved:
+                if mapped_resolved:
+                    root = mapped_resolved
+                else:
+                    raise HTTPException(
+                        status_code=404,
+                        detail=f"No assets mapping for library '{library}'",
+                    )
+            else:
+                if settings_mode:
+                    root = assets_root_resolved
+                elif mapped_resolved:
+                    root = mapped_resolved
+                else:
+                    candidate = assets_root_resolved / library
+                    root = candidate if candidate.is_dir() else assets_root_resolved
+
+    try:
+        resolved_root = root.resolve()
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail=f"Assets library not found: {root}")
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Permission denied")
+    except OSError:
+        raise HTTPException(status_code=400, detail="Unable to resolve assets path")
+
+    if not resolved_root.is_dir():
+        raise HTTPException(status_code=404, detail=f"Assets library not found: {resolved_root}")
+    return resolved_root, default_relative
 
 
 def _ensure_within_root(root: Path, target: Path) -> Path:
@@ -50,19 +134,38 @@ def list_asset_folders(
     library: str = Query(...),
     parent: str | None = Query(None),
     search: str | None = Query(None),
+    settings: bool = Query(False),
+    allow_beyond_mapping: bool = Query(False, alias="allowBeyondMapping"),
 ):
     parent_value = parent if isinstance(parent, str) else None
+    parent_provided = parent is not None
     search_value = search if isinstance(search, str) else None
+    if isinstance(settings, bool):
+        settings_flag = settings
+    else:
+        default_value = getattr(settings, "default", settings)
+        settings_flag = bool(default_value)
 
-    root = _library_root(library)
+    root, default_relative = _library_root(
+        library,
+        settings_mode=settings_flag,
+        allow_beyond_mapping=allow_beyond_mapping,
+    )
     current = root
-    if parent_value:
-        rel = Path(parent_value)
-        if rel.is_absolute():
-            raise HTTPException(status_code=400, detail="Invalid parent path")
-        current = _ensure_within_root(root, (root / rel).resolve())
+    if parent_provided:
+        rel = Path(parent_value or ".")
+        if settings and rel.is_absolute():
+            current = _ensure_within_root(root, rel.resolve())
+        else:
+            if rel.is_absolute():
+                raise HTTPException(status_code=400, detail="Invalid parent path")
+            current = _ensure_within_root(root, (root / rel).resolve())
         if not current.exists() or not current.is_dir():
             raise HTTPException(status_code=404, detail="Parent directory not found")
+    elif default_relative:
+        current = _ensure_within_root(root, (root / default_relative).resolve())
+        if not current.exists() or not current.is_dir():
+            current = root
 
     term = (search_value or "").strip().lower()
     items: List[dict] = []

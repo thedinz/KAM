@@ -18,7 +18,8 @@ class _DummyCollection:
 
 
 class _DummySection:
-    def __init__(self, collections):
+    def __init__(self, title, collections):
+        self.title = title
         self._collections = collections
 
     def collections(self):
@@ -42,20 +43,33 @@ class _DummyPlex:
 def collections_env(tmp_path, monkeypatch):
     assets_root = tmp_path / "assets"
     collections_root = assets_root / "Collections"
+    movies_root = assets_root / "Movies"
+    movies_root.mkdir(parents=True)
     ready_folder = collections_root / "my cool collection"
     ready_folder.mkdir(parents=True)
     override_folder = collections_root / "override folder"
     override_folder.mkdir()
 
-    from app import config
-
-    monkeypatch.setattr(config, "PLEX_URL", "http://plex.test")
-    monkeypatch.setattr(config, "PLEX_TOKEN", "token")
-    monkeypatch.setattr(config, "CONFIG_ERRORS", [])
+    settings_module = importlib.reload(importlib.import_module("app.services.settings"))
+    settings_module.set_settings_path(str(tmp_path / "settings.json"))
+    settings_module.save_settings(
+        {
+            "theme": "dark",
+            "plexUrl": "http://plex.test",
+            "plexToken": "token",
+            "libraryMappings": [
+                {
+                    "library": "Movies",
+                    "assetPath": str(movies_root),
+                    "collectionsPath": str(collections_root),
+                }
+            ],
+        }
+    )
+    plex_settings = importlib.reload(importlib.import_module("app.services.plex_settings"))
+    plex_settings.clear_cache()
 
     monkeypatch.setenv("KAM_ASSETS_ROOT", str(assets_root))
-    monkeypatch.setenv("COLLECTIONS_ROOT", str(collections_root))
-    monkeypatch.setattr(config, "COLLECTIONS_ROOT", str(collections_root))
     overrides_path = tmp_path / "overrides.json"
     monkeypatch.setenv("KAM_FOLDER_OVERRIDES_PATH", str(overrides_path))
 
@@ -67,13 +81,13 @@ def collections_env(tmp_path, monkeypatch):
 
     collections_router = importlib.reload(importlib.import_module("app.routers.collections"))
 
-    collections_router.ASSETS_ROOT = str(assets_root)
-    collections_router.COLLECTIONS_ROOT = str(collections_root)
-
-    sections = [_DummySection([
-        _DummyCollection("My Cool Collection", 1),
-        _DummyCollection("Missing Assets", 2),
-    ])]
+    sections = [_DummySection(
+        "Movies",
+        [
+            _DummyCollection("My Cool Collection", 1),
+            _DummyCollection("Missing Assets", 2),
+        ],
+    )]
 
     monkeypatch.setattr(collections_router, "get_plex", lambda: _DummyPlex(sections))
 
@@ -98,10 +112,13 @@ def test_collections_route_marks_asset_readiness(collections_env):
     # Folder detected despite casing difference and missing poster
     assert ready["folderName"] == "my cool collection"
     assert ready["assetReady"] is True
+    assert ready["library"] == "Movies"
 
     missing = items["Missing Assets"]
     assert missing["assetReady"] is False
     assert missing["folderName"] == "Missing Assets"
+    assert missing["library"] == "Movies"
+    assert missing["posterUrlPlex"].startswith("http://plex.test")
 
 
 INDEX_HTML = ROOT / "app" / "web" / "index.html"
@@ -118,7 +135,7 @@ def test_collections_route_uses_overrides(collections_env):
     folder = collections_env.override_folder
     (folder / "poster.jpg").write_bytes(b"poster")
 
-    collections_env.folder_overrides.set_override("Collections", "2", folder.name)
+    collections_env.folder_overrides.set_override("Movies", "2", folder.name)
 
     data = collections_env.call()
     items = {it["title"]: it for it in data["items"]}
@@ -127,7 +144,7 @@ def test_collections_route_uses_overrides(collections_env):
     assert overridden["folderName"] == folder.name
     assert overridden["assetReady"] is True
     assert overridden["posterUrlLocal"] is not None
-    assert folder.name.replace(" ", "%20") in overridden["posterUrlLocal"]
+    assert overridden["posterUrlLocal"].startswith("/fileproxy?")
 
 
 def test_collections_route_reports_not_ready_count_and_filters(collections_env):

@@ -1,4 +1,5 @@
 import importlib
+import importlib
 from types import SimpleNamespace
 
 import pytest
@@ -17,13 +18,25 @@ def items_env(tmp_path, monkeypatch):
 
     monkeypatch.setenv("KAM_ASSETS_ROOT", str(assets_root))
     monkeypatch.setenv("KAM_FOLDER_OVERRIDES_PATH", str(overrides_path))
-    monkeypatch.setenv("PLEX_URL", "http://plex.test")
-    monkeypatch.setenv("PLEX_TOKEN", "token")
 
-    from app import config
-
-    monkeypatch.setattr(config, "LIBRARY_MAPPINGS", {library: str(library_path)})
-    monkeypatch.setattr(config, "COLLECTIONS_ROOT", "")
+    settings_module = importlib.reload(importlib.import_module("app.services.settings"))
+    settings_module.set_settings_path(str(tmp_path / "settings.json"))
+    settings_module.save_settings(
+        {
+            "theme": "dark",
+            "plexUrl": "http://plex.test",
+            "plexToken": "token",
+            "libraryMappings": [
+                {
+                    "library": library,
+                    "assetPath": str(library_path),
+                    "collectionsPath": None,
+                }
+            ],
+        }
+    )
+    plex_settings = importlib.reload(importlib.import_module("app.services.plex_settings"))
+    plex_settings.clear_cache()
 
     resolve_module = importlib.reload(importlib.import_module("app.services.resolve"))
     resolve_module.ASSETS_ROOT = str(assets_root)
@@ -94,6 +107,7 @@ def test_items_route_reports_not_ready_count_and_filters(items_env):
 
     by_key = {it["ratingKey"]: it for it in data["items"]}
     assert by_key["22"]["assetReady"] is False
+    assert by_key["22"]["posterUrl"].startswith("http://plex.test")
 
     filtered = items_env.call(not_ready_only=True)
 

@@ -56,14 +56,14 @@ Examples:
 
 * Unraid/host → container
 
-  * `/mnt/user/kometa/assets` → `/assets`
+  * `/mnt/user/media/assets` → `/assets`
 * Custom mapping
 
   * `/mystuff` → `/assets`
 
 KAM only cares about the **internal** path (e.g., `/assets`). You choose what host path it points to.
 
-**Typical Kometa-style structure under the mapped root:**
+**Typical structure under the mapped root:**
 
 ```
 /assets
@@ -94,7 +94,7 @@ KAM only cares about the **internal** path (e.g., `/assets`). You choose what ho
 ## Requirements
 
 * Docker (Unraid, Linux, macOS, or Windows)
-* Read/write access to your Kometa **assets** directories (bind-mounted)
+* Read/write access to your media **assets** directories (bind-mounted)
 * Optional: Reverse proxy (Caddy/Traefik/Nginx) if you want TLS or auth
 
 ---
@@ -112,7 +112,11 @@ docker pull ghcr.io/thedinz/kam:latest
 Expose KAM on **7171** (mapped to the container's port **8000**) and map your assets:
 
 ```bash
-docker run -d   --name kam   -p 7171:8000   -v /mnt/user/kometa/assets:/assets   ghcr.io/thedinz/kam:latest
+docker run -d \
+  --name kam \
+  -p 7171:8000 \
+  -v /mnt/user/media/assets:/assets \
+  ghcr.io/thedinz/kam:latest
 ```
 
 Open: `http://<your-host>:7171/`
@@ -129,7 +133,7 @@ services:
     ports:
       - "7171:8000"
     volumes:
-      - /mnt/user/kometa/assets:/assets
+      - /mnt/user/media/assets:/assets
     restart: unless-stopped
 ```
 

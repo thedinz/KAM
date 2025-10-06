@@ -20,15 +20,28 @@ def overrides_env(tmp_path, monkeypatch):
     collections_dir.mkdir()
     (collections_dir / "Override Collection").mkdir()
 
+    loose_dir = assets_root / "LooseAssets"
+    loose_dir.mkdir()
+    (loose_dir / "Clips").mkdir()
+
     overrides_path = tmp_path / "overrides.json"
 
     monkeypatch.setenv("KAM_ASSETS_ROOT", str(assets_root))
     monkeypatch.setenv("KAM_FOLDER_OVERRIDES_PATH", str(overrides_path))
 
-    from app import config
-
-    monkeypatch.setattr(config, "LIBRARY_MAPPINGS", {"Movies": str(movies_dir)})
-    monkeypatch.setattr(config, "COLLECTIONS_ROOT", str(collections_dir))
+    settings_module = importlib.reload(importlib.import_module("app.services.settings"))
+    settings_module.set_settings_path(str(tmp_path / "settings.json"))
+    settings_module.save_settings(
+        {
+            "libraryMappings": [
+                {
+                    "library": "Movies",
+                    "assetPath": str(movies_dir),
+                    "collectionsPath": str(collections_dir),
+                }
+            ]
+        }
+    )
 
     resolve_module = importlib.reload(importlib.import_module("app.services.resolve"))
     resolve_module.ASSETS_ROOT = str(assets_root)
@@ -45,6 +58,7 @@ def overrides_env(tmp_path, monkeypatch):
         movie_folder=movie_folder,
         movies_dir=movies_dir,
         collections_dir=collections_dir,
+        loose_dir=loose_dir,
     )
 
 
@@ -102,3 +116,22 @@ def test_list_asset_folders(overrides_env):
 
     with pytest.raises(HTTPException):
         router.list_asset_folders(library="Movies", parent="../..")
+
+
+def test_unmapped_library_navigation(overrides_env):
+    router = overrides_env.assets_router
+
+    listing = router.list_asset_folders(library="Documentaries")
+    assert listing["parent"] == ""
+    names = {item["name"] for item in listing["items"]}
+    assert overrides_env.loose_dir.name in names
+    assert overrides_env.movies_dir.name in names
+
+    nested = router.list_asset_folders(
+        library="Documentaries", parent=overrides_env.loose_dir.name
+    )
+    nested_names = {item["name"] for item in nested["items"]}
+    assert "Clips" in nested_names
+
+    with pytest.raises(HTTPException):
+        router.list_asset_folders(library="Documentaries", parent="../Collections")
