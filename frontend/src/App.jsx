@@ -1,4 +1,5 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import CollectionDetailPage from './pages/CollectionDetailPage.jsx';
 import LibraryPage from './pages/LibraryPage.jsx';
 import MovieDetailPage from './pages/MovieDetailPage.jsx';
 import NotReadyPage from './pages/NotReadyPage.jsx';
@@ -15,9 +16,13 @@ function App() {
           <Routes>
             <Route path="/" element={<Navigate to="/libraries" replace />} />
             <Route path="/libraries" element={<LibraryPage />} />
+            <Route path="/libraries/:library" element={<LibraryPage />} />
             <Route path="/libraries/:library/not-ready" element={<NotReadyPage />} />
-            <Route path="/libraries/*" element={<LibraryPage />} />
+            <Route path="/libraries/:library/movies/:ratingKey" element={<MovieDetailPage />} />
+            <Route path="/libraries/:library/shows/:ratingKey" element={<ShowDetailPage />} />
+            <Route path="/libraries/:library/collections/:ratingKey" element={<CollectionDetailPage />} />
             <Route path="/settings" element={<SettingsPage />} />
+            <Route path="*" element={<Navigate to="/libraries" replace />} />
           </Routes>
         </LibraryItemsProvider>
       </BrowserRouter>
