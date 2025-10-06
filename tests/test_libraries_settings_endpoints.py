@@ -34,21 +34,9 @@ def _create_libraries_client(
     monkeypatch: pytest.MonkeyPatch,
     load_settings_payload: dict,
     sections: List[_DummySection] | None = None,
-    config_summaries: dict | None = None,
-    capture_paths: List[str] | None = None,
 ) -> TestClient:
     settings_module = importlib.reload(importlib.import_module("app.services.settings"))
     monkeypatch.setattr(settings_module, "load_settings", lambda: load_settings_payload)
-
-    kometa_module = importlib.reload(importlib.import_module("app.services.kometa_config"))
-    def _load_library_summaries(path):
-        if capture_paths is not None:
-            capture_paths.append(path)
-        return config_summaries or {}
-
-    monkeypatch.setattr(
-        kometa_module, "load_library_summaries", _load_library_summaries
-    )
 
     plex_settings_module = importlib.reload(importlib.import_module("app.services.plex_settings"))
     plex_settings_module.clear_cache()
@@ -70,7 +58,6 @@ def _create_libraries_client(
 
 
 def test_settings_libraries_endpoint_lists_sections(monkeypatch):
-    captured_paths: List[str] = []
     client = _create_libraries_client(
         monkeypatch,
         {
@@ -84,7 +71,6 @@ def test_settings_libraries_endpoint_lists_sections(monkeypatch):
                     "collectionsPath": "/collections/movies",
                 }
             ],
-            "kometaConfigPath": "/config/config.yml",
         },
         sections=[
             _DummySection("TV Shows", "show", "2"),
@@ -92,20 +78,6 @@ def test_settings_libraries_endpoint_lists_sections(monkeypatch):
             _DummySection("Movies", "movie", "1"),
             _DummySection("Music", "artist", "4"),
         ],
-        config_summaries={
-            "Movies": {
-                "collectionsPaths": ["config/assets/Collections"],
-            },
-            "Documentaries": {
-                "assetPath": "/assets/Documentaries",
-                "collectionsPaths": [
-                    "config/assets/Docs",
-                    "config/assets/Docs",
-                    "config/assets/Docs Extras",
-                ],
-            },
-        },
-        capture_paths=captured_paths,
     )
 
     resp = client.get("/api/settings/libraries")
@@ -138,11 +110,9 @@ def test_settings_libraries_endpoint_lists_sections(monkeypatch):
         },
     ]
 
-    assert captured_paths == ["/config/config.yml"]
-
+    
 
 def test_settings_libraries_endpoint_omits_music_sections(monkeypatch):
-    captured_paths: List[str] = []
     client = _create_libraries_client(
         monkeypatch,
         {
@@ -150,14 +120,12 @@ def test_settings_libraries_endpoint_omits_music_sections(monkeypatch):
             "plexUrl": "http://plex.example:32400",
             "plexToken": "token",
             "libraryMappings": [],
-            "kometaConfigPath": "/config/config.yml",
         },
         sections=[
             _DummySection("Music", "artist", "4"),
             _DummySection("Concerts", "audio", "5"),
             _DummySection("Movies", "movie", "1"),
         ],
-        capture_paths=captured_paths,
     )
 
     resp = client.get("/api/settings/libraries")
@@ -174,31 +142,6 @@ def test_settings_libraries_endpoint_omits_music_sections(monkeypatch):
             "collectionAssetPaths": [],
         }
     ]
-
-    assert captured_paths == ["/config/config.yml"]
-
-
-def test_settings_libraries_endpoint_accepts_override_path(monkeypatch):
-    captured_paths: List[str] = []
-    client = _create_libraries_client(
-        monkeypatch,
-        {
-            "theme": "dark",
-            "plexUrl": "http://plex.example:32400",
-            "plexToken": "token",
-            "libraryMappings": [],
-            "kometaConfigPath": "/config/config.yml",
-        },
-        config_summaries={},
-        capture_paths=captured_paths,
-    )
-
-    resp = client.get(
-        "/api/settings/libraries",
-        params={"kometaConfigPath": "/override/config.yml"},
-    )
-    assert resp.status_code == 200
-    assert captured_paths[-1] == "/override/config.yml"
 
 
 def test_update_library_mappings_endpoint(monkeypatch):
@@ -454,101 +397,3 @@ def test_asset_folders_settings_mode_allows_assets_root(tmp_path, monkeypatch):
     assert outside.status_code == 400
 
 
-def _create_settings_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
-    settings_module = importlib.reload(importlib.import_module("app.services.settings"))
-    kometa_module = importlib.reload(importlib.import_module("app.services.kometa_config"))
-    router_module = importlib.reload(importlib.import_module("app.routers.settings"))
-
-    app = FastAPI()
-    app.include_router(router_module.router)
-    client = TestClient(app)
-
-    # Ensure patched modules remain referenced for the duration of the test
-    monkeypatch.setattr("app.routers.settings.settings_service", settings_module)
-    monkeypatch.setattr("app.routers.settings.kometa_config_service", kometa_module)
-    return client
-
-
-def test_browse_kometa_config_lists_files(tmp_path, monkeypatch):
-    config_root = tmp_path / "config"
-    config_root.mkdir()
-    primary_config = config_root / "config.yml"
-    primary_config.write_text("libraries: {}", encoding="utf-8")
-    extra_file = config_root / "extra.yaml"
-    extra_file.write_text("", encoding="utf-8")
-
-    monkeypatch.setenv("KOMETA_CONFIG_PATH", str(primary_config))
-
-    settings_module = importlib.reload(importlib.import_module("app.services.settings"))
-    settings_module.set_settings_path(str(tmp_path / "settings.json"))
-    settings_module.save_settings({"kometaConfigPath": str(primary_config)})
-
-    client = _create_settings_client(monkeypatch)
-
-    resp = client.get("/api/settings/kometa-config/browse")
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["root"] == config_root.resolve().as_posix()
-    assert data["parent"] == ""
-
-    names = {item["name"]: item for item in data["items"]}
-    assert "config.yml" in names
-    assert names["config.yml"]["isFile"] is True
-    assert names["config.yml"]["path"] == "config.yml"
-    assert names["extra.yaml"]["isFile"] is True
-
-
-def test_browse_kometa_config_supports_navigation_and_search(tmp_path, monkeypatch):
-    config_root = tmp_path / "config"
-    config_root.mkdir()
-    primary_config = config_root / "config.yml"
-    primary_config.write_text("libraries: {}", encoding="utf-8")
-    nested_dir = config_root / "profiles"
-    nested_dir.mkdir()
-    nested_file = nested_dir / "alt.yml"
-    nested_file.write_text("", encoding="utf-8")
-
-    monkeypatch.setenv("KOMETA_CONFIG_PATH", str(primary_config))
-
-    settings_module = importlib.reload(importlib.import_module("app.services.settings"))
-    settings_module.set_settings_path(str(tmp_path / "settings.json"))
-    settings_module.save_settings({"kometaConfigPath": str(primary_config)})
-
-    client = _create_settings_client(monkeypatch)
-
-    # Navigate into a subdirectory
-    nested = client.get(
-        "/api/settings/kometa-config/browse",
-        params={"parent": "profiles"},
-    )
-    assert nested.status_code == 200
-    nested_payload = nested.json()
-    assert nested_payload["parent"] == "profiles"
-    nested_names = {item["name"] for item in nested_payload["items"]}
-    assert "alt.yml" in nested_names
-
-    # Search within the current directory
-    search = client.get(
-        "/api/settings/kometa-config/browse",
-        params={"search": "alt"},
-    )
-    assert search.status_code == 200
-    search_payload = search.json()
-    search_names = {item["name"] for item in search_payload["items"]}
-    assert "alt.yml" in search_names
-
-    # Ensure the current path highlights the configured file
-    current = client.get(
-        "/api/settings/kometa-config/browse",
-        params={"current": str(nested_file)},
-    )
-    assert current.status_code == 200
-    current_payload = current.json()
-    assert current_payload["selection"] == "profiles/alt.yml"
-    assert current_payload["parent"] == "profiles"
-
-    invalid = client.get(
-        "/api/settings/kometa-config/browse",
-        params={"parent": "../"},
-    )
-    assert invalid.status_code == 400
