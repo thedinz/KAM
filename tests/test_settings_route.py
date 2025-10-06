@@ -73,11 +73,13 @@ def test_get_settings_returns_defaults(settings_modules):
                 "library": "Movies",
                 "assetPath": "/assets/Movies",
                 "collectionsPath": "/assets/Collections",
+                "collectionSections": [],
             },
             {
                 "library": "TV Shows",
                 "assetPath": "/assets/TV Shows",
                 "collectionsPath": "/assets/Collections",
+                "collectionSections": [],
             },
         ],
     }
@@ -115,11 +117,13 @@ def test_put_settings_updates_file(settings_modules):
                 "library": "Movies",
                 "assetPath": "/assets/New Movies",
                 "collectionsPath": None,
+                "collectionSections": [],
             },
             {
                 "library": "TV Shows",
                 "assetPath": "/assets/TV Shows",
                 "collectionsPath": "/assets/Collections/Shows",
+                "collectionSections": [],
             },
         ],
     }

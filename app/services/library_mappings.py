@@ -8,6 +8,7 @@ from typing import Any, Dict, Iterable, List, Optional
 
 __all__ = [
     "normalize_path",
+    "normalize_collection_sections",
     "sanitize_library_mappings",
     "seed_from_env",
     "set_cached_mappings",
@@ -37,6 +38,47 @@ def normalize_path(value: Any) -> str:
     return normalized.replace("\\", "/")
 
 
+def normalize_collection_sections(value: Any) -> List[Dict[str, str]]:
+    """Normalize collection override mappings into a sorted list."""
+
+    if not value:
+        return []
+
+    items: List[Dict[str, Any]] = []
+    if isinstance(value, dict):
+        for key, entry in value.items():
+            if isinstance(entry, dict):
+                candidate = dict(entry)
+            else:
+                candidate = {"collectionsPath": entry}
+            candidate.setdefault("name", key)
+            items.append(candidate)
+    elif isinstance(value, list):
+        items = [dict(entry) for entry in value if isinstance(entry, dict)]
+    else:
+        return []
+
+    ordered: Dict[str, Dict[str, str]] = {}
+    for item in items:
+        raw_name = item.get("name") or item.get("section") or item.get("default") or item.get("key")
+        if raw_name in (None, ""):
+            continue
+        name = str(raw_name).strip()
+        if not name:
+            continue
+        path = normalize_path(
+            item.get("collectionsPath")
+            or item.get("path")
+            or item.get("assetPath")
+            or item.get("asset_directory")
+        )
+        if not path:
+            continue
+        ordered[name] = {"name": name, "collectionsPath": path}
+
+    return [ordered[key] for key in sorted(ordered.keys(), key=lambda s: s.lower())]
+
+
 def sanitize_library_mappings(raw: Any) -> List[Dict[str, Any]]:
     """Normalize arbitrary input into a deterministic list of mappings."""
     if not raw:
@@ -63,6 +105,9 @@ def sanitize_library_mappings(raw: Any) -> List[Dict[str, Any]]:
         library = library.strip()
         asset_path = normalize_path(item.get("assetPath"))
         collections_path = normalize_path(item.get("collectionsPath"))
+        sections = normalize_collection_sections(
+            item.get("collectionSections") or item.get("collectionOverrides")
+        )
 
         if not library or not asset_path:
             continue
@@ -72,6 +117,8 @@ def sanitize_library_mappings(raw: Any) -> List[Dict[str, Any]]:
             "assetPath": asset_path,
             "collectionsPath": collections_path or None,
         }
+        if sections:
+            ordered[library]["collectionSections"] = sections
 
     return [copy.deepcopy(value) for value in ordered.values()]
 
