@@ -397,3 +397,83 @@ def test_asset_folders_settings_mode_allows_assets_root(tmp_path, monkeypatch):
     assert outside.status_code == 400
 
 
+def test_asset_folders_allow_beyond_mapping(tmp_path, monkeypatch):
+    assets_root = tmp_path / "assets"
+    movies_dir = assets_root / "Movies"
+    featured_dir = movies_dir / "Featured"
+    posters_dir = featured_dir / "Posters"
+    loose_dir = assets_root / "LooseAssets"
+
+    posters_dir.mkdir(parents=True)
+    loose_dir.mkdir(parents=True)
+
+    monkeypatch.setenv("KAM_ASSETS_ROOT", str(assets_root))
+
+    resolve_module = importlib.reload(importlib.import_module("app.services.resolve"))
+    resolve_module.ASSETS_ROOT = str(assets_root)
+
+    settings_module = importlib.reload(importlib.import_module("app.services.settings"))
+    settings_module.set_settings_path(str(tmp_path / "settings.json"))
+    settings_module.save_settings(
+        {
+            "libraryMappings": [
+                {
+                    "library": "Movies",
+                    "assetPath": str(featured_dir),
+                    "collectionsPath": None,
+                }
+            ]
+        }
+    )
+
+    library_mappings_module = importlib.reload(
+        importlib.import_module("app.services.library_mappings")
+    )
+    library_mappings_module.clear_cache()
+
+    assets_router = importlib.reload(importlib.import_module("app.routers.assets"))
+
+    app = FastAPI()
+    app.include_router(assets_router.router)
+
+    client = TestClient(app)
+
+    scoped = client.get(
+        "/api/asset-folders",
+        params={"library": "Movies", "allowBeyondMapping": "true"},
+    )
+    assert scoped.status_code == 200
+    scoped_payload = scoped.json()
+    assert scoped_payload["parent"] == "Movies/Featured"
+    scoped_names = {item["name"] for item in scoped_payload["items"]}
+    assert scoped_names == {"Posters"}
+
+    ascended = client.get(
+        "/api/asset-folders",
+        params={
+            "library": "Movies",
+            "allowBeyondMapping": "true",
+            "parent": "Movies",
+        },
+    )
+    assert ascended.status_code == 200
+    ascended_payload = ascended.json()
+    assert ascended_payload["parent"] == "Movies"
+    ascended_names = {item["name"] for item in ascended_payload["items"]}
+    assert "Featured" in ascended_names
+
+    root_view = client.get(
+        "/api/asset-folders",
+        params={
+            "library": "Movies",
+            "allowBeyondMapping": "true",
+            "parent": "",
+        },
+    )
+    assert root_view.status_code == 200
+    root_payload = root_view.json()
+    assert root_payload["parent"] == ""
+    root_names = {item["name"] for item in root_payload["items"]}
+    assert {"Movies", "LooseAssets"}.issubset(root_names)
+
+
