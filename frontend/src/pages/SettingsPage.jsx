@@ -1,6 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import ConfigFinderModal from '../components/ConfigFinderModal.jsx';
 import FolderFinderModal from '../components/FolderFinderModal.jsx';
 import { useTheme } from '../theme/ThemeProvider.jsx';
 import {
@@ -39,8 +38,6 @@ function SettingsPage() {
     savedTheme,
     plexUrl,
     plexToken,
-    kometaConfigPath,
-    savedKometaConfigPath,
     savedSettings,
     libraryMappings,
     savedLibraryMappings,
@@ -64,7 +61,6 @@ function SettingsPage() {
   const [status, setStatus] = useState(null);
   const [selectedLibraries, setSelectedLibraries] = useState([]);
   const [modalState, setModalState] = useState(initialModalState);
-  const [configModalOpen, setConfigModalOpen] = useState(false);
   const selectAllRef = useRef(null);
   const previousLoadingFlagsRef = useRef({
     loading,
@@ -74,8 +70,6 @@ function SettingsPage() {
 
   const savedPlexUrl = savedSettings?.plexUrl || '';
   const savedPlexToken = savedSettings?.plexToken || '';
-  const savedKometaPath = savedKometaConfigPath || savedSettings?.kometaConfigPath || '';
-  const configModalInitialPath = kometaConfigPath || savedKometaPath;
 
   useEffect(() => {
     if (error) {
@@ -344,8 +338,7 @@ function SettingsPage() {
     const settingsChanged =
       theme !== savedTheme ||
       plexUrl !== savedPlexUrl ||
-      plexToken !== savedPlexToken ||
-      kometaConfigPath !== savedKometaPath;
+      plexToken !== savedPlexToken;
     return settingsChanged || mappingsDirty;
   }, [
     hasUnsavedChanges,
@@ -355,8 +348,6 @@ function SettingsPage() {
     savedPlexUrl,
     plexToken,
     savedPlexToken,
-    kometaConfigPath,
-    savedKometaPath,
     mappingsDirty,
   ]);
 
@@ -378,49 +369,6 @@ function SettingsPage() {
   const handlePlexTokenChange = (event) => {
     updateSettings({ plexToken: event.target.value });
     setStatus(null);
-  };
-
-  const handleOpenKometaConfigModal = () => {
-    setStatus(null);
-    setConfigModalOpen(true);
-  };
-
-  const handleCloseKometaConfigModal = () => {
-    setConfigModalOpen(false);
-  };
-
-  const persistKometaConfig = useCallback(
-    async (nextPath, successMessage) => {
-      setStatus(null);
-      updateSettings({ kometaConfigPath: nextPath });
-      try {
-        await saveSettings({ kometaConfigPath: nextPath });
-        setStatus({ type: 'success', message: successMessage });
-        return true;
-      } catch (err) {
-        revertSettings();
-        setStatus({
-          type: 'error',
-          message: err?.message || 'Failed to save Kometa config path.',
-        });
-        return false;
-      }
-    },
-    [saveSettings, updateSettings, revertSettings]
-  );
-
-  const handleKometaConfigSelected = async (nextPath) => {
-    setConfigModalOpen(false);
-    await persistKometaConfig(nextPath, 'Kometa config path saved.');
-  };
-
-  const handleClearKometaConfig = () => {
-    void persistKometaConfig('', 'Kometa config path cleared.');
-  };
-
-  const handleModalClearKometaConfig = () => {
-    setConfigModalOpen(false);
-    void persistKometaConfig('', 'Kometa config path cleared.');
   };
 
   const handleToggleLibrary = (libraryName) => {
@@ -683,21 +631,6 @@ function SettingsPage() {
     openModal(selectedLibraries, 'collections', 'collections');
   };
 
-  const handleScanKometaConfig = async () => {
-    setStatus(null);
-    setConfigScanInProgress(true);
-    try {
-      const hasUnsavedOverride = kometaConfigPath !== savedKometaPath;
-      const options = hasUnsavedOverride ? { kometaConfigPath } : undefined;
-      await refreshLibraries(options);
-      setStatus({ type: 'success', message: 'Kometa config scanned.' });
-    } catch (err) {
-      setStatus({ type: 'error', message: err?.message || 'Failed to scan Kometa config.' });
-    } finally {
-      setConfigScanInProgress(false);
-    }
-  };
-
   const handleRefreshLibraries = async () => {
     setStatus(null);
     try {
@@ -824,32 +757,6 @@ function SettingsPage() {
                   disabled={busy}
                 />
               </label>
-            </div>
-            <div className="settings-section">
-              <h3>Kometa</h3>
-              <p className="settings-description">
-                Provide the path to your Kometa configuration file for reference.
-              </p>
-              <div className="settings-input">
-                <span>Kometa config path</span>
-                <div className="settings-config-picker">
-                  {kometaConfigPath ? (
-                    <code>{kometaConfigPath}</code>
-                  ) : (
-                    <span className="placeholder">Not set</span>
-                  )}
-                  <div className="settings-config-buttons">
-                    <button type="button" onClick={handleOpenKometaConfigModal} disabled={busy}>
-                      {kometaConfigPath ? 'Change file' : 'Choose file'}
-                    </button>
-                    {kometaConfigPath ? (
-                      <button type="button" onClick={handleClearKometaConfig} disabled={busy}>
-                        Clear
-                      </button>
-                    ) : null}
-                  </div>
-                </div>
-              </div>
             </div>
           </form>
         </section>
@@ -1060,13 +967,6 @@ function SettingsPage() {
           </button>
         </div>
       </main>
-      <ConfigFinderModal
-        isOpen={configModalOpen}
-        initialPath={configModalInitialPath}
-        onClose={handleCloseKometaConfigModal}
-        onConfirm={handleKometaConfigSelected}
-        onClear={kometaConfigPath ? handleModalClearKometaConfig : undefined}
-      />
       <FolderFinderModal
         isOpen={modalState.open}
         context="settings"
