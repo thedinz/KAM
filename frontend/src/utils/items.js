@@ -7,11 +7,15 @@ export function isShowItem(item, libraryName) {
 export function buildDetailPath(item, libraryName) {
   const lib = (libraryName || '').trim();
   if (!lib) return null;
-  if (lib.toLowerCase() === 'collections') return null;
   const ratingKey = item?.ratingKey ?? item?.key ?? item?.id;
   if (ratingKey == null) return null;
   const encodedLib = encodeURIComponent(lib);
   const encodedKey = encodeURIComponent(ratingKey);
+  if (lib.toLowerCase() === 'collections') {
+    const sourceLibrary = item?.library ? String(item.library).trim() : '';
+    const sourceParam = sourceLibrary ? `?source=${encodeURIComponent(sourceLibrary)}` : '';
+    return `/libraries/${encodedLib}/collections/${encodedKey}${sourceParam}`;
+  }
   if (isShowItem(item, libraryName)) {
     return `/libraries/${encodedLib}/shows/${encodedKey}`;
   }
