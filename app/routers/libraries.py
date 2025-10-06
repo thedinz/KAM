@@ -115,7 +115,13 @@ class LibrarySectionInfo(BaseModel):
 
 
 @router.get("/api/settings/libraries", response_model=List[LibrarySectionInfo])
-def list_available_libraries() -> List[LibrarySectionInfo]:
+def list_available_libraries(
+    kometa_config_path: str | None = Query(
+        default=None,
+        alias="kometaConfigPath",
+        description="Optional Kometa config path to use when scanning overrides.",
+    )
+) -> List[LibrarySectionInfo]:
     """Return Plex libraries alongside any stored mapping metadata."""
     from ..services import plex_settings
     from ..services.plex import get_plex
@@ -133,11 +139,14 @@ def list_available_libraries() -> List[LibrarySectionInfo]:
     mapping_lookup = {item["library"]: item for item in mappings}
 
     settings_payload = settings_service.load_settings()
-    config_path = (
-        settings_payload.get("kometaConfigPath")
-        if isinstance(settings_payload, dict)
-        else ""
-    )
+    if kometa_config_path is not None:
+        config_path = kometa_config_path
+    else:
+        config_path = (
+            settings_payload.get("kometaConfigPath")
+            if isinstance(settings_payload, dict)
+            else ""
+        )
     config_summaries = kometa_config_service.load_library_summaries(config_path)
 
     results: List[LibrarySectionInfo] = []

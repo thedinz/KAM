@@ -250,13 +250,33 @@ export function ThemeProvider({ children }) {
     }
   }, []);
 
-  const refreshLibraries = useCallback(async () => {
+  const refreshLibraries = useCallback(async (options = {}) => {
     if (isMountedRef.current) {
       setLibrariesLoading(true);
       setLibrariesError(null);
     }
     try {
-      const response = await fetch('/api/settings/libraries');
+      const hasOverride =
+        options && Object.prototype.hasOwnProperty.call(options, 'kometaConfigPath');
+      let overrideValue = '';
+      if (hasOverride) {
+        const rawOverride = options.kometaConfigPath;
+        if (rawOverride == null) {
+          overrideValue = '';
+        } else {
+          overrideValue = normalizePathValue(rawOverride);
+        }
+      }
+
+      const params = new URLSearchParams();
+      if (hasOverride) {
+        params.set('kometaConfigPath', overrideValue);
+      }
+
+      const query = params.toString();
+      const url = query ? `/api/settings/libraries?${query}` : '/api/settings/libraries';
+
+      const response = await fetch(url);
       const data = await safeJson(response);
       if (!response.ok) {
         throw new Error(responseErrorMessage(response, data));
