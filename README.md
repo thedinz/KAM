@@ -97,6 +97,8 @@ KAM only cares about the **internal** path (e.g., `/assets`). You choose what ho
 * Read/write access to your media **assets** directories (bind-mounted)
 * Optional: Reverse proxy (Caddy/Traefik/Nginx) if you want TLS or auth
 
+> 🆕 The web UI is now powered by **React**. We no longer ship the legacy Ninja templates, so make sure you rebuild/pull the latest image to get the updated frontend.
+
 ---
 
 ## Quick Start (Docker)
@@ -142,18 +144,20 @@ Bring it up:
 ```bash
 docker compose up -d
 ```
-Edit the .env file to configure
+Edit the `.env` file to configure the container before bringing it up:
 
-Sample .env
-```yaml
+Sample `.env`
+```dotenv
 # Example environment file for KAM
 # Copy to .env and edit values before running
 
 # Plex connection
 PLEX_URL=http://192.168.1.XXX:32400
 PLEX_TOKEN=CHANGE_ME
+# Set to false only if your Plex server has a self-signed cert
+PLEX_VERIFY_SSL=true
 
-# Map Plex libraries to asset folders inside container
+# Map Plex libraries to asset folders inside the container
 # e.g. Movies:/assets/Movies,Kids Movies:/assets/Kids Movies
 LIBRARIES=Movies:/assets/Movies,Kids Movies:/assets/Kids Movies
 
