@@ -298,20 +298,38 @@ function SettingsPage() {
     setConfigModalOpen(false);
   };
 
-  const handleKometaConfigSelected = (nextPath) => {
-    updateSettings({ kometaConfigPath: nextPath });
+  const persistKometaConfig = useCallback(
+    async (nextPath, successMessage) => {
+      setStatus(null);
+      updateSettings({ kometaConfigPath: nextPath });
+      try {
+        await saveSettings({ kometaConfigPath: nextPath });
+        setStatus({ type: 'success', message: successMessage });
+        return true;
+      } catch (err) {
+        revertSettings();
+        setStatus({
+          type: 'error',
+          message: err?.message || 'Failed to save Kometa config path.',
+        });
+        return false;
+      }
+    },
+    [saveSettings, updateSettings, revertSettings]
+  );
+
+  const handleKometaConfigSelected = async (nextPath) => {
     setConfigModalOpen(false);
-    setStatus({ type: 'success', message: 'Kometa config path updated.' });
+    await persistKometaConfig(nextPath, 'Kometa config path saved.');
   };
 
   const handleClearKometaConfig = () => {
-    updateSettings({ kometaConfigPath: '' });
-    setStatus({ type: 'success', message: 'Kometa config path cleared.' });
+    void persistKometaConfig('', 'Kometa config path cleared.');
   };
 
   const handleModalClearKometaConfig = () => {
-    handleClearKometaConfig();
     setConfigModalOpen(false);
+    void persistKometaConfig('', 'Kometa config path cleared.');
   };
 
   const handleToggleLibrary = (libraryName) => {
