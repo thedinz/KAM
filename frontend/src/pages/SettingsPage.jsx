@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import ConfigFinderModal from '../components/ConfigFinderModal.jsx';
 import FolderFinderModal from '../components/FolderFinderModal.jsx';
@@ -8,6 +8,7 @@ import {
   createLibraryMappingLookup,
   normalizeLibraryName,
   normalizePathValue,
+  normalizeSectionName,
 } from '../utils/libraryMappings.js';
 
 const initialModalState = {
@@ -20,6 +21,10 @@ const initialModalState = {
   initialCollectionsPath: '',
   canClearAsset: false,
   canClearCollections: false,
+  overrideName: '',
+  overrideKey: '',
+  overrideDisplayName: '',
+  collectionSuggestions: [],
 };
 
 const normalizeText = (value) => {
@@ -53,6 +58,7 @@ function SettingsPage() {
     revertSettings,
     refreshLibraries,
     setLibraryMappings,
+    getLibraryMapping,
   } = useTheme();
 
   const [status, setStatus] = useState(null);
@@ -200,7 +206,92 @@ function SettingsPage() {
         const collectionSuggestionExtras = collectionSuggestions.filter(
           (value) => value !== collectionsPath
         );
-        const isDirty = assetPath !== savedAssetPath || collectionsPath !== savedCollectionsPath;
+        const infoOverrides = Array.isArray(info.collectionOverrides)
+          ? info.collectionOverrides
+          : [];
+        const currentOverrides = Array.isArray(current?.collectionSections)
+          ? current.collectionSections
+          : [];
+        const savedOverrides = Array.isArray(saved?.collectionSections)
+          ? saved.collectionSections
+          : [];
+        const overrideMap = new Map();
+
+        infoOverrides.forEach((override) => {
+          const normalizedName = normalizeSectionName(override?.name);
+          if (!normalizedName) return;
+          const suggestions = Array.isArray(override?.suggestionPaths)
+            ? override.suggestionPaths.map((value) => normalizePathValue(value)).filter(Boolean)
+            : [];
+          overrideMap.set(normalizedName, {
+            key: normalizedName,
+            name: override.name || normalizedName,
+            collectionsPath: '',
+            savedCollectionsPath: '',
+            suggestions: Array.from(new Set(suggestions)),
+          });
+        });
+
+        currentOverrides.forEach((override) => {
+          const normalizedName = normalizeSectionName(override?.name);
+          if (!normalizedName) return;
+          const path = normalizePathValue(override?.collectionsPath);
+          const existing = overrideMap.get(normalizedName) || {
+            key: normalizedName,
+            name: override?.name || normalizedName,
+            collectionsPath: '',
+            savedCollectionsPath: '',
+            suggestions: [],
+          };
+          if (!existing.name) {
+            existing.name = override?.name || normalizedName;
+          }
+          existing.collectionsPath = path;
+          overrideMap.set(normalizedName, existing);
+        });
+
+        savedOverrides.forEach((override) => {
+          const normalizedName = normalizeSectionName(override?.name);
+          if (!normalizedName) return;
+          const path = normalizePathValue(override?.collectionsPath);
+          const existing = overrideMap.get(normalizedName) || {
+            key: normalizedName,
+            name: override?.name || normalizedName,
+            collectionsPath: '',
+            savedCollectionsPath: '',
+            suggestions: [],
+          };
+          if (!existing.name) {
+            existing.name = override?.name || normalizedName;
+          }
+          existing.savedCollectionsPath = path;
+          overrideMap.set(normalizedName, existing);
+        });
+
+        const collectionOverrides = Array.from(overrideMap.values())
+          .map((override) => {
+            const currentPath = normalizePathValue(override.collectionsPath);
+            const savedPath = normalizePathValue(override.savedCollectionsPath);
+            const suggestions = Array.from(
+              new Set([currentPath, ...(override.suggestions || [])].filter(Boolean))
+            );
+            const suggestionExtras = suggestions.filter((value) => value !== currentPath);
+            return {
+              key: override.key,
+              name: override.name,
+              collectionsPath: currentPath,
+              savedCollectionsPath: savedPath,
+              collectionSuggestions: suggestions,
+              collectionSuggestionExtras: suggestionExtras,
+              isDirty: currentPath !== savedPath,
+            };
+          })
+          .sort((a, b) => a.name.localeCompare(b.name));
+
+        const isDirty =
+          assetPath !== savedAssetPath ||
+          collectionsPath !== savedCollectionsPath ||
+          collectionOverrides.some((override) => override.isDirty);
         return {
           name,
           type: info.type,
@@ -212,6 +303,7 @@ function SettingsPage() {
           isDirty,
           collectionSuggestions,
           collectionSuggestionExtras,
+          collectionOverrides,
         };
       });
   }, [libraries, libraryMappings, savedLibraryMappings]);
@@ -354,7 +446,7 @@ function SettingsPage() {
     setModalState(initialModalState);
   };
 
-  const openModal = (librariesList, intent, defaultTarget) => {
+  const openModal = (librariesList, intent, defaultTarget, options = {}) => {
     const uniqueNames = Array.from(new Set(librariesList.map((name) => normalizeText(name)).filter(Boolean)));
     if (!uniqueNames.length) {
       setStatus({ type: 'error', message: 'Select at least one library first.' });
@@ -364,7 +456,10 @@ function SettingsPage() {
     const primaryRow = libraryRowMap.get(primary);
     const modalRows = uniqueNames.map((name) => libraryRowMap.get(name)).filter(Boolean);
     const canClearAsset = modalRows.some((row) => row.assetPath);
-    const canClearCollections = modalRows.some((row) => row.collectionsPath);
+    const canClearCollections =
+      options.canClearCollections !== undefined
+        ? Boolean(options.canClearCollections)
+        : modalRows.some((row) => row.collectionsPath);
     setStatus(null);
     setModalState({
       open: true,
@@ -373,9 +468,18 @@ function SettingsPage() {
       intent: intent || 'asset',
       defaultTarget: defaultTarget || (intent === 'collections' ? 'collections' : 'asset'),
       initialAssetPath: primaryRow?.assetPath || '',
-      initialCollectionsPath: primaryRow?.collectionsPath || '',
+      initialCollectionsPath:
+        options.initialCollectionsPath !== undefined
+          ? options.initialCollectionsPath
+          : primaryRow?.collectionsPath || '',
       canClearAsset,
       canClearCollections,
+      overrideName: options.overrideName || '',
+      overrideKey: options.overrideKey || '',
+      overrideDisplayName: options.overrideDisplayName || '',
+      collectionSuggestions: Array.isArray(options.collectionSuggestions)
+        ? options.collectionSuggestions.filter(Boolean)
+        : primaryRow?.collectionSuggestions || [],
     });
   };
 
@@ -384,6 +488,52 @@ function SettingsPage() {
     const names = modalState.libraries;
 
     if (!names.length) {
+      closeModal();
+      return;
+    }
+
+    if (modalState.overrideKey) {
+      const libraryName = modalState.primaryLibrary;
+      if (!libraryName) {
+        closeModal();
+        return;
+      }
+      const mapping = getLibraryMapping(libraryName);
+      const existingSections = Array.isArray(mapping?.collectionSections)
+        ? mapping.collectionSections
+        : [];
+      const filteredSections = existingSections.filter(
+        (section) => normalizeSectionName(section?.name) !== modalState.overrideKey
+      );
+
+      if (meta?.clearTarget === 'collections') {
+        setLibraryMappings([libraryName], { collectionSections: filteredSections });
+        const displayName = modalState.overrideDisplayName || modalState.overrideName || modalState.overrideKey;
+        setStatus({
+          type: 'success',
+          message: `Cleared collections folder for ${displayName} in ${libraryName}.`,
+        });
+        closeModal();
+        return;
+      }
+
+      let nextPath = values?.collectionsPath;
+      if (nextPath === undefined) {
+        nextPath = modalState.initialCollectionsPath;
+      }
+      nextPath = normalizePathValue(nextPath);
+      if (!nextPath) {
+        setStatus({ type: 'error', message: 'Select a collections folder before applying changes.' });
+        return;
+      }
+
+      const displayName = modalState.overrideDisplayName || modalState.overrideName || modalState.overrideKey;
+      const nextSections = [...filteredSections, { name: displayName, collectionsPath: nextPath }];
+      setLibraryMappings([libraryName], { collectionSections: nextSections });
+      setStatus({
+        type: 'success',
+        message: `Updated collections folder for ${displayName} in ${libraryName}.`,
+      });
       closeModal();
       return;
     }
@@ -479,7 +629,36 @@ function SettingsPage() {
       });
       return;
     }
-    openModal([libraryName], 'collections', 'collections');
+    openModal([libraryName], 'collections', 'collections', {
+      collectionSuggestions: row.collectionSuggestions,
+    });
+  };
+
+  const handleOpenCollectionOverrideModal = (libraryName, overrideKey) => {
+    const row = libraryRowMap.get(libraryName);
+    if (!row?.assetPath) {
+      setStatus({
+        type: 'error',
+        message: `${libraryName} needs an asset folder before setting collections overrides.`,
+      });
+      return;
+    }
+    const override = row.collectionOverrides?.find((item) => item.key === overrideKey);
+    if (!override) return;
+
+    const suggestions = override.collectionSuggestions?.length
+      ? override.collectionSuggestions
+      : row.collectionSuggestions || [];
+    const initialPath = override.collectionsPath || suggestions[0] || row.collectionsPath || '';
+
+    openModal([libraryName], 'collections', 'collections', {
+      overrideName: override.name,
+      overrideDisplayName: override.name,
+      overrideKey,
+      initialCollectionsPath: initialPath,
+      canClearCollections: Boolean(override.collectionsPath),
+      collectionSuggestions: suggestions,
+    });
   };
 
   const handleApplyAssetToSelection = () => {
@@ -742,64 +921,117 @@ function SettingsPage() {
                   {libraryRows.map((row) => {
                     const isSelected = selectedLibraries.includes(row.name);
                     return (
-                      <tr key={row.name} className={row.isDirty ? 'is-dirty' : undefined}>
-                        <td className="library-select">
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={() => handleToggleLibrary(row.name)}
-                            disabled={combinedBusy}
-                            aria-label={`Select ${row.name}`}
-                          />
-                        </td>
-                        <th scope="row">
-                          <div className="library-name">{row.name}</div>
-                          <div className="library-meta">
-                            {row.type ? <span className="library-tag">{row.type}</span> : null}
-                            {row.key ? <span className="library-tag">Key {row.key}</span> : null}
-                          </div>
-                        </th>
-                        <td>
-                          {row.assetPath ? <code>{row.assetPath}</code> : <span className="placeholder">Not set</span>}
-                        </td>
-                        <td>
-                          {row.collectionsPath ? (
-                            <code>{row.collectionsPath}</code>
-                          ) : (
-                            <span className="placeholder">Not set</span>
-                          )}
-                          {row.collectionSuggestionExtras?.length ? (
-                            <div className="collection-suggestions">
-                              Suggested:{' '}
-                              {row.collectionSuggestionExtras.map((value, index) => (
-                                <span key={value}>
-                                  {index > 0 ? ', ' : ''}
-                                  <code>{value}</code>
-                                </span>
-                              ))}
+                      <Fragment key={row.name}>
+                        <tr className={row.isDirty ? 'is-dirty' : undefined}>
+                          <td className="library-select">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => handleToggleLibrary(row.name)}
+                              disabled={combinedBusy}
+                              aria-label={`Select ${row.name}`}
+                            />
+                          </td>
+                          <th scope="row">
+                            <div className="library-name">{row.name}</div>
+                            <div className="library-meta">
+                              {row.type ? <span className="library-tag">{row.type}</span> : null}
+                              {row.key ? <span className="library-tag">Key {row.key}</span> : null}
                             </div>
-                          ) : null}
-                        </td>
-                        <td>
-                          {row.isDirty ? <span className="status-unsaved">Unsaved changes</span> : <span>Saved</span>}
-                        </td>
-                        <td className="library-actions">
-                          <button
-                            type="button"
-                            onClick={() => handleOpenAssetModal(row.name)}
-                            disabled={combinedBusy}
+                          </th>
+                          <td>
+                            {row.assetPath ? <code>{row.assetPath}</code> : <span className="placeholder">Not set</span>}
+                          </td>
+                          <td>
+                            {row.collectionsPath ? (
+                              <code>{row.collectionsPath}</code>
+                            ) : (
+                              <span className="placeholder">Not set</span>
+                            )}
+                            {row.collectionSuggestionExtras?.length ? (
+                              <div className="collection-suggestions">
+                                Suggested:{' '}
+                                {row.collectionSuggestionExtras.map((value, index) => (
+                                  <span key={value}>
+                                    {index > 0 ? ', ' : ''}
+                                    <code>{value}</code>
+                                  </span>
+                                ))}
+                              </div>
+                            ) : null}
+                          </td>
+                          <td>
+                            {row.isDirty ? <span className="status-unsaved">Unsaved changes</span> : <span>Saved</span>}
+                          </td>
+                          <td className="library-actions">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenAssetModal(row.name)}
+                              disabled={combinedBusy}
+                            >
+                              Set asset folder
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenCollectionsModal(row.name)}
+                              disabled={combinedBusy || !row.assetPath}
+                            >
+                              Set collections folder
+                            </button>
+                          </td>
+                        </tr>
+                        {row.collectionOverrides?.map((override) => (
+                          <tr
+                            key={`${row.name}::${override.key}`}
+                            className={`library-override-row${override.isDirty ? ' is-dirty' : ''}`}
                           >
-                            Set asset folder
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleOpenCollectionsModal(row.name)}
-                            disabled={combinedBusy || !row.assetPath}
-                          >
-                            Set collections folder
-                          </button>
-                        </td>
-                      </tr>
+                            <td className="library-select" aria-hidden="true" />
+                            <th scope="row">
+                              <div className="library-name override-name">{override.name}</div>
+                              <div className="library-meta">
+                                <span className="library-tag">Collections override</span>
+                              </div>
+                            </th>
+                            <td>
+                              <span className="placeholder">Uses library asset folder</span>
+                            </td>
+                            <td>
+                              {override.collectionsPath ? (
+                                <code>{override.collectionsPath}</code>
+                              ) : (
+                                <span className="placeholder">Not set</span>
+                              )}
+                              {override.collectionSuggestionExtras?.length ? (
+                                <div className="collection-suggestions">
+                                  Suggested:{' '}
+                                  {override.collectionSuggestionExtras.map((value, index) => (
+                                    <span key={value}>
+                                      {index > 0 ? ', ' : ''}
+                                      <code>{value}</code>
+                                    </span>
+                                  ))}
+                                </div>
+                              ) : null}
+                            </td>
+                            <td>
+                              {override.isDirty ? (
+                                <span className="status-unsaved">Unsaved changes</span>
+                              ) : (
+                                <span>Saved</span>
+                              )}
+                            </td>
+                            <td className="library-actions">
+                              <button
+                                type="button"
+                                onClick={() => handleOpenCollectionOverrideModal(row.name, override.key)}
+                                disabled={combinedBusy || !row.assetPath}
+                              >
+                                Set collections folder
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </Fragment>
                     );
                   })}
                 </tbody>
@@ -848,6 +1080,11 @@ function SettingsPage() {
         context="settings"
         library={modalState.primaryLibrary}
         settingsLibraries={modalState.libraries}
+        settingsContextNote={
+          modalState.overrideDisplayName
+            ? `Override: ${modalState.overrideDisplayName}`
+            : ''
+        }
         defaultTarget={modalState.defaultTarget}
         settingsIntent={modalState.intent}
         initialAssetPath={modalState.initialAssetPath}
