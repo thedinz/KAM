@@ -65,7 +65,6 @@ function SettingsPage() {
   const [selectedLibraries, setSelectedLibraries] = useState([]);
   const [modalState, setModalState] = useState(initialModalState);
   const [configModalOpen, setConfigModalOpen] = useState(false);
-  const [configScanInProgress, setConfigScanInProgress] = useState(false);
   const selectAllRef = useRef(null);
   const previousLoadingFlagsRef = useRef({
     loading,
@@ -829,8 +828,7 @@ function SettingsPage() {
             <div className="settings-section">
               <h3>Kometa</h3>
               <p className="settings-description">
-                Provide the path to your Kometa configuration file so KAM can scan it for asset
-                folders.
+                Provide the path to your Kometa configuration file for reference.
               </p>
               <div className="settings-input">
                 <span>Kometa config path</span>
@@ -852,14 +850,6 @@ function SettingsPage() {
                   </div>
                 </div>
               </div>
-              <button
-                type="button"
-                className="settings-config-scan"
-                onClick={handleScanKometaConfig}
-                disabled={combinedBusy}
-              >
-                {configScanInProgress ? 'Scanning…' : 'Scan Kometa config'}
-              </button>
             </div>
           </form>
         </section>

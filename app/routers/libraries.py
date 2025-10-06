@@ -12,11 +12,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 from typing import Any, Dict, List, Optional
 
-from ..services import (
-    kometa_config as kometa_config_service,
-    library_mappings as library_mappings_service,
-    settings as settings_service,
-)
+from ..services import library_mappings as library_mappings_service
 
 router = APIRouter()
 
@@ -172,21 +168,52 @@ def list_available_libraries(
             entry["assetPath"] = mapping.get("assetPath") or None
             entry["collectionsPath"] = mapping.get("collectionsPath") or None
 
-        config_info = config_summaries.get(name)
-        if config_info:
-            config_asset = config_info.get("assetPath")
-            if config_asset and not entry["assetPath"]:
-                entry["assetPath"] = config_asset
+        overrides: Dict[str, Dict[str, Any]] = {}
+        stored_sections = mapping.get("collectionSections") if mapping else []
+        if isinstance(stored_sections, list):
+            for section in stored_sections:
+                if not isinstance(section, dict):
+                    continue
+                raw_name = section.get("name")
+                if not raw_name:
+                    continue
+                name_key = str(raw_name).strip()
+                if not name_key:
+                    continue
+                key_norm = name_key.casefold()
+                current = overrides.setdefault(
+                    key_norm,
+                    {
+                        "name": name_key,
+                        "collectionsPath": None,
+                        "suggestionPaths": [],
+                    },
+                )
+                path = library_mappings_service.normalize_path(
+                    section.get("collectionsPath")
+                )
+                if path:
+                    current["collectionsPath"] = path
+                if not current.get("name"):
+                    current["name"] = name_key
 
-            suggestions: List[str] = []
-            if entry["collectionsPath"]:
-                suggestions.append(entry["collectionsPath"])
-            suggestions.extend(config_info.get("collectionsPaths") or [])
-
-            deduped: List[str] = []
-            for path in suggestions:
-                if path and path not in deduped:
-                    deduped.append(path)
+        if overrides:
+            entry["collectionOverrides"] = [
+                CollectionOverrideInfo(
+                    name=value.get("name") or key,
+                    collectionsPath=value.get("collectionsPath"),
+                    suggestionPaths=sorted(
+                        [
+                            path
+                            for path in value.get("suggestionPaths", [])
+                            if path
+                        ]
+                    ),
+                )
+                for key, value in sorted(
+                    overrides.items(), key=lambda item: item[0]
+                )
+            ]
 
             entry["collectionAssetPaths"] = deduped
             if not entry["collectionsPath"] and deduped:

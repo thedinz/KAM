@@ -116,12 +116,9 @@ def test_settings_libraries_endpoint_lists_sections(monkeypatch):
             "name": "Documentaries",
             "type": "show",
             "key": "3",
-            "assetPath": "/assets/Documentaries",
-            "collectionsPath": "config/assets/Docs",
-            "collectionAssetPaths": [
-                "config/assets/Docs",
-                "config/assets/Docs Extras",
-            ],
+            "assetPath": None,
+            "collectionsPath": None,
+            "collectionAssetPaths": [],
         },
         {
             "name": "Movies",
@@ -129,10 +126,7 @@ def test_settings_libraries_endpoint_lists_sections(monkeypatch):
             "key": "1",
             "assetPath": "/assets/Movies",
             "collectionsPath": "/collections/movies",
-            "collectionAssetPaths": [
-                "/collections/movies",
-                "config/assets/Collections",
-            ],
+            "collectionAssetPaths": [],
         },
         {
             "name": "TV Shows",

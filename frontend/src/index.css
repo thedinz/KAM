@@ -821,11 +821,6 @@ main {
   gap: 8px;
 }
 
-.settings-config-scan {
-  align-self: flex-start;
-  margin-top: 4px;
-}
-
 .settings-radio {
   display: inline-flex;
   align-items: center;
