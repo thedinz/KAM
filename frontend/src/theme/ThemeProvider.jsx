@@ -14,14 +14,12 @@ const ThemeContext = createContext({
     theme: 'dark',
     plexUrl: '',
     plexToken: '',
-    kometaConfigPath: '',
     libraryMappings: [],
   },
   savedSettings: {
     theme: 'dark',
     plexUrl: '',
     plexToken: '',
-    kometaConfigPath: '',
     libraryMappings: [],
   },
   theme: 'dark',
@@ -30,8 +28,6 @@ const ThemeContext = createContext({
   plexToken: '',
   savedPlexUrl: '',
   savedPlexToken: '',
-  kometaConfigPath: '',
-  savedKometaConfigPath: '',
   libraryMappings: [],
   savedLibraryMappings: [],
   libraries: [],
@@ -116,7 +112,6 @@ const sanitizeSettings = (raw = {}) => {
   const themeValue = normalizeTheme(raw.theme);
   const plexUrlValue = raw.plexUrl;
   const plexTokenValue = raw.plexToken;
-  const kometaConfigValue = raw.kometaConfigPath;
 
   return {
     theme: themeValue,
@@ -132,7 +127,6 @@ const sanitizeSettings = (raw = {}) => {
         : plexTokenValue
         ? String(plexTokenValue)
         : '',
-    kometaConfigPath: normalizePathValue(kometaConfigValue),
     libraryMappings: sanitizeLibraryMappings(raw.libraryMappings),
   };
 };
@@ -250,33 +244,13 @@ export function ThemeProvider({ children }) {
     }
   }, []);
 
-  const refreshLibraries = useCallback(async (options = {}) => {
+  const refreshLibraries = useCallback(async () => {
     if (isMountedRef.current) {
       setLibrariesLoading(true);
       setLibrariesError(null);
     }
     try {
-      const hasOverride =
-        options && Object.prototype.hasOwnProperty.call(options, 'kometaConfigPath');
-      let overrideValue = '';
-      if (hasOverride) {
-        const rawOverride = options.kometaConfigPath;
-        if (rawOverride == null) {
-          overrideValue = '';
-        } else {
-          overrideValue = normalizePathValue(rawOverride);
-        }
-      }
-
-      const params = new URLSearchParams();
-      if (hasOverride) {
-        params.set('kometaConfigPath', overrideValue);
-      }
-
-      const query = params.toString();
-      const url = query ? `/api/settings/libraries?${query}` : '/api/settings/libraries';
-
-      const response = await fetch(url);
+      const response = await fetch('/api/settings/libraries');
       const data = await safeJson(response);
       if (!response.ok) {
         throw new Error(responseErrorMessage(response, data));
@@ -371,8 +345,7 @@ export function ThemeProvider({ children }) {
     () =>
       settings.theme !== savedSettings.theme ||
       settings.plexUrl !== savedSettings.plexUrl ||
-      settings.plexToken !== savedSettings.plexToken ||
-      settings.kometaConfigPath !== savedSettings.kometaConfigPath,
+      settings.plexToken !== savedSettings.plexToken,
     [settings, savedSettings]
   );
 
@@ -477,8 +450,6 @@ export function ThemeProvider({ children }) {
       plexToken: settings.plexToken,
       savedPlexUrl: savedSettings.plexUrl,
       savedPlexToken: savedSettings.plexToken,
-      kometaConfigPath: settings.kometaConfigPath,
-      savedKometaConfigPath: savedSettings.kometaConfigPath,
       libraryMappings: settings.libraryMappings,
       savedLibraryMappings: savedSettings.libraryMappings,
       libraries,

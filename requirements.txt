@@ -4,4 +4,3 @@ python-multipart
 plexapi
 requests
 pillow
-pyyaml
