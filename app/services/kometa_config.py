@@ -49,10 +49,66 @@ def normalize_config_path(value: Any, base_dir: Optional[Path] = None) -> str:
             base = Path(base_dir)
         except TypeError:  # pragma: no cover - defensive
             base = None
+
         if base and not os.path.isabs(normalized):
-            candidate = normalize_path(str(base.joinpath(normalized)))
-            if candidate and os.path.exists(candidate):
-                return candidate
+            candidates: List[str] = []
+
+            def _add_candidate(value: str) -> None:
+                candidate = normalize_path(value)
+                if candidate and candidate not in candidates:
+                    candidates.append(candidate)
+
+            def _join_and_add(root: Path, fragment: str) -> None:
+                try:
+                    combined = root.joinpath(fragment)
+                except Exception:  # pragma: no cover - defensive
+                    return
+                _add_candidate(str(combined))
+                try:
+                    resolved = combined.resolve(strict=False)
+                except Exception:  # pragma: no cover - defensive
+                    return
+                _add_candidate(str(resolved))
+
+            fragments: List[str] = []
+            name = base.name
+            if name and normalized.startswith(f"{name}/"):
+                trimmed = normalized[len(name) + 1 :]
+                if trimmed:
+                    fragments.append(trimmed)
+            fragments.append(normalized)
+
+            roots: List[Path] = []
+
+            def _add_root(path: Path) -> None:
+                if path not in roots:
+                    roots.append(path)
+
+            _add_root(base)
+            try:
+                resolved_base = base.resolve(strict=False)
+            except Exception:  # pragma: no cover - defensive
+                resolved_base = None
+            if resolved_base:
+                _add_root(resolved_base)
+
+            for root in list(roots):
+                parent = root.parent
+                if parent != root:
+                    _add_root(parent)
+
+            for root in roots:
+                for fragment in fragments:
+                    _join_and_add(root, fragment)
+
+            _add_candidate(normalized)
+
+            for candidate in candidates:
+                if os.path.exists(candidate):
+                    return candidate
+
+            if candidates:
+                return candidates[0]
 
     return normalized
 
