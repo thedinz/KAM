@@ -71,6 +71,13 @@ libraries:
         str(config_dir / "assets" / "Holidays"),
     }
 
+    assert movies["collectionOverrides"] == [
+        {
+            "name": "Franchise",
+            "assetPath": str(config_dir / "assets" / "Collections"),
+        }
+    ]
+
     assert summaries["Documentaries"] == {}
 
 

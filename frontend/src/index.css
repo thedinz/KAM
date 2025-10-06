@@ -971,6 +971,21 @@ main {
   background: rgba(94, 161, 255, 0.08);
 }
 
+.settings-libraries-table tr.library-override-row th,
+.settings-libraries-table tr.library-override-row td {
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
+.settings-libraries-table tr.library-override-row th {
+  padding-left: 40px;
+  font-weight: 500;
+}
+
+.settings-libraries-table .library-name.override-name {
+  font-weight: 600;
+}
+
 .library-select {
   width: 48px;
   text-align: center;
