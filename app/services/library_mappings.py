@@ -10,7 +10,6 @@ __all__ = [
     "normalize_path",
     "normalize_collection_sections",
     "sanitize_library_mappings",
-    "seed_from_env",
     "set_cached_mappings",
     "get_cached_mappings",
     "clear_cache",
@@ -123,28 +122,6 @@ def sanitize_library_mappings(raw: Any) -> List[Dict[str, Any]]:
     return [copy.deepcopy(value) for value in ordered.values()]
 
 
-def seed_from_env() -> List[Dict[str, Any]]:
-    """Return library mappings derived from the LIBRARIES/COLLECTIONS_ROOT envs."""
-    env_raw = os.environ.get("LIBRARIES", "")
-    collection_root = normalize_path(os.environ.get("COLLECTIONS_ROOT"))
-
-    candidates = []
-    for part in env_raw.split(","):
-        part = part.strip()
-        if not part or ":" not in part:
-            continue
-        name, path = part.split(":", 1)
-        candidates.append(
-            {
-                "library": name,
-                "assetPath": path,
-                "collectionsPath": collection_root or None,
-            }
-        )
-
-    return sanitize_library_mappings(candidates)
-
-
 def set_cached_mappings(mappings: List[Dict[str, Any]] | None) -> None:
     """Persist a copy of the mappings in memory for fast reuse."""
     global _CACHE
@@ -164,7 +141,7 @@ def clear_cache() -> None:
 
 
 def _load_from_settings() -> List[Dict[str, Any]]:
-    """Return sanitized mappings from persisted settings with env fallback."""
+    """Return sanitized mappings from persisted settings."""
     try:
         from . import settings as settings_service  # Local import to avoid cycle
 
@@ -174,9 +151,7 @@ def _load_from_settings() -> List[Dict[str, Any]]:
         raw = None
 
     mappings = sanitize_library_mappings(raw)
-    if mappings:
-        return mappings
-    return seed_from_env()
+    return mappings
 
 
 def load_library_mappings() -> List[Dict[str, Any]]:
@@ -220,7 +195,7 @@ def get_asset_path(library: str) -> Optional[str]:
 
 
 def _default_collections_root() -> Optional[str]:
-    return normalize_path(os.environ.get("COLLECTIONS_ROOT"))
+    return None
 
 
 def get_collections_path(library: Optional[str] = None) -> Optional[str]:

@@ -15,9 +15,9 @@ logger = logging.getLogger(__name__)
 
 _DEFAULT_SETTINGS: Dict[str, Any] = {
     "theme": "dark",
-    "plexUrl": os.environ.get("PLEX_URL") or "",
-    "plexToken": os.environ.get("PLEX_TOKEN") or "",
-    "libraryMappings": library_mappings.seed_from_env(),
+    "plexUrl": "",
+    "plexToken": "",
+    "libraryMappings": [],
 }
 
 _DEF_BASE = (

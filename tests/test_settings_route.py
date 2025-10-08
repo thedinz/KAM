@@ -16,13 +16,6 @@ if str(ROOT) not in sys.path:
 def settings_modules(tmp_path, monkeypatch):
     settings_path = tmp_path / "state" / "settings.json"
     monkeypatch.setenv("KAM_SETTINGS_PATH", str(settings_path))
-    monkeypatch.setenv("PLEX_URL", "http://plex.example:32400")
-    monkeypatch.setenv("PLEX_TOKEN", "initial-token")
-    monkeypatch.setenv(
-        "LIBRARIES",
-        "Movies:/assets/Movies,TV Shows:/assets/TV Shows",
-    )
-    monkeypatch.setenv("COLLECTIONS_ROOT", " /assets/Collections ")
 
     library_module = importlib.reload(
         importlib.import_module("app.services.library_mappings")
@@ -33,21 +26,10 @@ def settings_modules(tmp_path, monkeypatch):
     return settings_router, settings_service, settings_path, library_module
 
 
-def test_defaults_without_library_env(tmp_path, monkeypatch):
-    settings_path = tmp_path / "state" / "settings.json"
-    monkeypatch.setenv("KAM_SETTINGS_PATH", str(settings_path))
-    monkeypatch.delenv("LIBRARIES", raising=False)
-    monkeypatch.delenv("COLLECTIONS_ROOT", raising=False)
+def test_get_settings_returns_defaults_when_missing_file(settings_modules):
+    router, _, _, _ = settings_modules
 
-    library_module = importlib.reload(
-        importlib.import_module("app.services.library_mappings")
-    )
-    settings_service = importlib.reload(importlib.import_module("app.services.settings"))
-    settings_router = importlib.reload(importlib.import_module("app.routers.settings"))
-
-    assert library_module.seed_from_env() == []
-
-    resp = settings_router.get_settings()
+    resp = router.get_settings()
     assert resp.model_dump() == {
         "theme": "dark",
         "plexUrl": "",
@@ -56,8 +38,28 @@ def test_defaults_without_library_env(tmp_path, monkeypatch):
     }
 
 
-def test_get_settings_returns_defaults(settings_modules):
-    router, _, _, _ = settings_modules
+def test_get_settings_returns_stored_values(settings_modules):
+    router, service, _, _ = settings_modules
+
+    service.save_settings(
+        {
+            "theme": "dark",
+            "plexUrl": "http://plex.example:32400",
+            "plexToken": "initial-token",
+            "libraryMappings": [
+                {
+                    "library": "Movies",
+                    "assetPath": "/assets/Movies",
+                    "collectionsPath": "/assets/Collections",
+                },
+                {
+                    "library": "TV Shows",
+                    "assetPath": "/assets/TV Shows",
+                    "collectionsPath": "/assets/Collections",
+                },
+            ],
+        }
+    )
 
     resp = router.get_settings()
     assert resp.model_dump() == {
