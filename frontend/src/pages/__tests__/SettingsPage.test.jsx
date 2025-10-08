@@ -114,9 +114,9 @@ describe('SettingsPage', () => {
     useTheme.mockReturnValue({
       theme: 'dark',
       savedTheme: 'dark',
-      plexUrl: '',
-      plexToken: '',
-      savedSettings: { plexUrl: '', plexToken: '' },
+      plexUrl: 'http://plex.local',
+      plexToken: 'token',
+      savedSettings: { plexUrl: 'http://plex.local', plexToken: 'token' },
       libraryMappings: [],
       savedLibraryMappings: [],
       libraries: [],
@@ -146,6 +146,53 @@ describe('SettingsPage', () => {
 
     expect(mockRefresh).toHaveBeenCalled();
     expect(await screen.findByRole('status')).toHaveTextContent('Plex libraries refreshed.');
+  });
+
+  it('prevents refreshing libraries when Plex credentials are missing', async () => {
+    const mockRefresh = vi.fn();
+    useTheme.mockReturnValue({
+      theme: 'dark',
+      savedTheme: 'dark',
+      plexUrl: '',
+      plexToken: '',
+      savedSettings: { plexUrl: '', plexToken: '' },
+      libraryMappings: [],
+      savedLibraryMappings: [],
+      libraries: [
+        { name: 'Movies', type: 'movie', key: '1', assetPath: '/assets/Movies', collectionsPath: '' },
+      ],
+      librariesLoading: false,
+      librariesError: null,
+      loading: false,
+      saving: false,
+      error: null,
+      libraryMappingsDirty: false,
+      hasUnsavedChanges: false,
+      applyTheme: vi.fn(),
+      updateSettings: vi.fn(),
+      saveSettings: vi.fn(),
+      revertSettings: vi.fn(),
+      refreshLibraries: mockRefresh,
+      setLibraryMappings: vi.fn(),
+    });
+
+    render(
+      <MemoryRouter>
+        <SettingsPage />
+      </MemoryRouter>
+    );
+
+    const refreshButton = screen.getByRole('button', { name: /Refresh libraries/i });
+    expect(refreshButton).toBeDisabled();
+
+    fireEvent.click(refreshButton);
+
+    expect(mockRefresh).not.toHaveBeenCalled();
+    expect(
+      await screen.findByText(
+        'Enter your Plex URL and token, then save and refresh to load Plex libraries.'
+      )
+    ).toBeInTheDocument();
   });
 
   it('shows loading status when settings are loading', async () => {
