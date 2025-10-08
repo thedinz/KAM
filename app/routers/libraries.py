@@ -1,10 +1,5 @@
 # app/routers/libraries.py
-"""
-Libraries router: only expose libraries explicitly mapped in the environment.
-
-Env format (in your .env):
-  LIBRARIES=Movies:/assets/Movies,Kids Movies:/assets/Kids Movies,TV Shows:/assets/TV Shows
-"""
+"""Libraries router: exposes libraries configured via the settings service."""
 
 from __future__ import annotations
 
@@ -48,8 +43,8 @@ def _ensure_any_mapped() -> Dict[str, str]:
         raise HTTPException(
             status_code=500,
             detail=(
-                "No mapped libraries were found. Set LIBRARIES=Name:/path,... "
-                "in your environment (or ensure config.LIBRARY_MAPPINGS is populated)."
+                "No mapped libraries were found. Configure library mappings "
+                "on the Settings page."
             ),
         )
     return mapping
