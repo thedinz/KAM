@@ -40,22 +40,22 @@ def reload_config(monkeypatch, tmp_path):
             importlib.reload(module)
 
 
-def test_config_errors_ignore_missing_library_mappings(reload_config, monkeypatch):
-    monkeypatch.delenv("LIBRARIES", raising=False)
-    monkeypatch.delenv("COLLECTIONS_ROOT", raising=False)
-    monkeypatch.setenv("PLEX_URL", "http://plex.example:32400")
-    monkeypatch.setenv("PLEX_TOKEN", "example-token")
-
+def test_config_errors_use_persisted_settings(reload_config):
     config_module = reload_config()
+    settings_service = sys.modules["app.services.settings"]
+    plex_settings = sys.modules["app.services.plex_settings"]
+
+    settings_service.save_settings(
+        {"plexUrl": "http://plex.example:32400", "plexToken": "example-token"}
+    )
+    plex_settings.clear_cache()
+
     errors = config_module.get_config_errors()
 
-    assert "Missing LIBRARIES" not in errors
+    assert errors == []
 
 
-def test_config_errors_require_plex_credentials(reload_config, monkeypatch):
-    monkeypatch.delenv("PLEX_URL", raising=False)
-    monkeypatch.delenv("PLEX_TOKEN", raising=False)
-
+def test_config_errors_require_plex_credentials(reload_config):
     config_module = reload_config()
     errors = config_module.get_config_errors()
 
