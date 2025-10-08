@@ -1,14 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { responseErrorMessage, safeJson } from '../utils/api.js';
+
 const PAGE_SIZE = 60;
 
 async function fetchJson(url, options) {
   const response = await fetch(url, options);
+  const data = await safeJson(response);
   if (!response.ok) {
-    const message = `${response.status} ${response.statusText}`;
+    const message = responseErrorMessage(response, data);
     throw new Error(message);
   }
-  return response.json();
+  return data;
 }
 
 export function useLibraryItems({ initialLibrary } = {}) {
@@ -95,11 +98,11 @@ export function useLibraryItems({ initialLibrary } = {}) {
 
       try {
         const response = await fetch(`${base}?${params.toString()}`, { signal: controller.signal });
+        const data = await safeJson(response);
         if (!response.ok) {
-          const message = `${response.status} ${response.statusText}`;
+          const message = responseErrorMessage(response, data);
           throw new Error(message);
         }
-        const data = await response.json();
         setItems(Array.isArray(data?.items) ? data.items : []);
         setTotalPages(data?.total_pages || 1);
         setTotalCount(data?.total_count || (Array.isArray(data?.items) ? data.items.length : 0));
@@ -165,11 +168,11 @@ export function useLibraryItems({ initialLibrary } = {}) {
       params.set('page_size', '1');
       try {
         const response = await fetch(`${base}?${params.toString()}`);
+        const data = await safeJson(response);
         if (!response.ok) {
-          const message = `${response.status} ${response.statusText}`;
+          const message = responseErrorMessage(response, data);
           throw new Error(message);
         }
-        const data = await response.json();
         const nextNotReady =
           typeof data?.not_ready_count === 'number'
             ? data.not_ready_count
@@ -210,11 +213,11 @@ export function useLibraryItems({ initialLibrary } = {}) {
       };
 
       const firstResponse = await fetch(makeUrl(1));
+      const firstData = await safeJson(firstResponse);
       if (!firstResponse.ok) {
-        const message = `${firstResponse.status} ${firstResponse.statusText}`;
+        const message = responseErrorMessage(firstResponse, firstData);
         throw new Error(message);
       }
-      const firstData = await firstResponse.json();
       const allItems = Array.isArray(firstData?.items) ? [...firstData.items] : [];
       const totalPagesResp = firstData?.total_pages || 1;
       const totalCountResp = firstData?.total_count || allItems.length;
@@ -222,11 +225,11 @@ export function useLibraryItems({ initialLibrary } = {}) {
 
       for (let p = 2; p <= totalPagesResp; p += 1) {
         const response = await fetch(makeUrl(p));
+        const data = await safeJson(response);
         if (!response.ok) {
-          const message = `${response.status} ${response.statusText}`;
+          const message = responseErrorMessage(response, data);
           throw new Error(message);
         }
-        const data = await response.json();
         if (Array.isArray(data?.items)) {
           allItems.push(...data.items);
         }
