@@ -70,6 +70,9 @@ function SettingsPage() {
 
   const savedPlexUrl = savedSettings?.plexUrl || '';
   const savedPlexToken = savedSettings?.plexToken || '';
+  const normalizedPlexUrl = normalizeText(plexUrl);
+  const normalizedPlexToken = normalizeText(plexToken);
+  const hasPlexCredentials = Boolean(normalizedPlexUrl && normalizedPlexToken);
 
   useEffect(() => {
     if (error) {
@@ -143,6 +146,9 @@ function SettingsPage() {
   const combinedBusy = busy || librariesLoading;
 
   const libraryRows = useMemo(() => {
+    if (!hasPlexCredentials) {
+      return [];
+    }
     const infoMap = new Map(
       (Array.isArray(libraries) ? libraries : []).map((entry) => {
         const name = normalizeLibraryName(entry?.name ?? entry?.library);
@@ -299,7 +305,7 @@ function SettingsPage() {
           collectionOverrides,
         };
       });
-  }, [libraries, libraryMappings, savedLibraryMappings]);
+  }, [hasPlexCredentials, libraries, libraryMappings, savedLibraryMappings]);
 
   const libraryRowMap = useMemo(() => new Map(libraryRows.map((row) => [row.name, row])), [libraryRows]);
 
@@ -633,6 +639,13 @@ function SettingsPage() {
 
   const handleRefreshLibraries = async () => {
     setStatus(null);
+    if (!hasPlexCredentials) {
+      setStatus({
+        type: 'error',
+        message: 'Enter your Plex URL and token before refreshing libraries.',
+      });
+      return;
+    }
     try {
       await refreshLibraries();
       setStatus({ type: 'success', message: 'Plex libraries refreshed.' });
@@ -785,7 +798,11 @@ function SettingsPage() {
               </button>
             </div>
             <div className="settings-libraries-group">
-              <button type="button" onClick={handleRefreshLibraries} disabled={combinedBusy}>
+              <button
+                type="button"
+                onClick={handleRefreshLibraries}
+                disabled={combinedBusy || !hasPlexCredentials}
+              >
                 {librariesLoading ? 'Refreshing…' : 'Refresh libraries'}
               </button>
             </div>
@@ -793,7 +810,11 @@ function SettingsPage() {
           <div className="settings-libraries-table-wrapper" aria-live="polite">
             {librariesLoading ? <p className="settings-libraries-status">Loading libraries…</p> : null}
             {!librariesLoading && !libraryRows.length ? (
-              <p className="settings-libraries-status">No libraries are available. Configure Plex and refresh.</p>
+              <p className="settings-libraries-status">
+                {hasPlexCredentials
+                  ? 'No libraries are available. Configure Plex and refresh.'
+                  : 'Enter your Plex URL and token, then save and refresh to load Plex libraries.'}
+              </p>
             ) : null}
             {libraryRows.length ? (
               <table className="settings-libraries-table">

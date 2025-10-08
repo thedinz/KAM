@@ -244,35 +244,51 @@ export function ThemeProvider({ children }) {
     }
   }, []);
 
-  const refreshLibraries = useCallback(async () => {
-    if (isMountedRef.current) {
-      setLibrariesLoading(true);
-      setLibrariesError(null);
-    }
-    try {
-      const response = await fetch('/api/settings/libraries');
-      const data = await safeJson(response);
-      if (!response.ok) {
-        throw new Error(responseErrorMessage(response, data));
+  const hasPlexCredentials = useMemo(
+    () => Boolean(settings.plexUrl && settings.plexToken),
+    [settings.plexUrl, settings.plexToken]
+  );
+
+  const refreshLibraries = useCallback(
+    async (options = {}) => {
+      const force = Boolean(options?.force);
+      if (!hasPlexCredentials && !force) {
+        if (isMountedRef.current) {
+          setLibraries([]);
+          setLibrariesError(null);
+        }
+        return [];
       }
-      const next = sanitizeLibrariesList(data);
       if (isMountedRef.current) {
-        setLibraries(next);
+        setLibrariesLoading(true);
+        setLibrariesError(null);
       }
-      return next;
-    } catch (err) {
-      const message = err?.message || 'Failed to load libraries';
-      if (isMountedRef.current) {
-        setLibraries([]);
-        setLibrariesError(message);
+      try {
+        const response = await fetch('/api/settings/libraries');
+        const data = await safeJson(response);
+        if (!response.ok) {
+          throw new Error(responseErrorMessage(response, data));
+        }
+        const next = sanitizeLibrariesList(data);
+        if (isMountedRef.current) {
+          setLibraries(next);
+        }
+        return next;
+      } catch (err) {
+        const message = err?.message || 'Failed to load libraries';
+        if (isMountedRef.current) {
+          setLibraries([]);
+          setLibrariesError(message);
+        }
+        throw new Error(message);
+      } finally {
+        if (isMountedRef.current) {
+          setLibrariesLoading(false);
+        }
       }
-      throw new Error(message);
-    } finally {
-      if (isMountedRef.current) {
-        setLibrariesLoading(false);
-      }
-    }
-  }, []);
+    },
+    [hasPlexCredentials]
+  );
 
   const saveSettings = useCallback(
     async (overrides = null) => {
@@ -296,7 +312,8 @@ export function ThemeProvider({ children }) {
           setSavedSettings(next);
           setSettings(next);
         }
-        await refreshLibraries().catch(() => {});
+        const nextHasCredentials = Boolean(next.plexUrl && next.plexToken);
+        await refreshLibraries({ force: nextHasCredentials }).catch(() => {});
         return next;
       } catch (err) {
         const message = err?.message || 'Failed to save settings';
