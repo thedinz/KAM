@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { useTheme } from '../theme/ThemeProvider.jsx';
+
 import { responseErrorMessage, safeJson } from '../utils/api.js';
 
 const PAGE_SIZE = 60;
@@ -15,6 +17,10 @@ async function fetchJson(url, options) {
 }
 
 export function useLibraryItems({ initialLibrary } = {}) {
+  const { savedPlexUrl = '', savedPlexToken = '' } = useTheme();
+  const hasSavedPlexCredentials = Boolean(savedPlexUrl && savedPlexToken);
+  const savedCredentialsKey = `${savedPlexUrl}::${savedPlexToken}`;
+
   const [libraries, setLibraries] = useState([]);
   const [library, setLibrary] = useState(initialLibrary || '');
   const [page, setPage] = useState(1);
@@ -67,6 +73,9 @@ export function useLibraryItems({ initialLibrary } = {}) {
   useEffect(() => {
     fetchLibraries();
   }, [fetchLibraries]);
+
+  const previousCredentialsKeyRef = useRef(savedCredentialsKey);
+  const previousHasCredentialsRef = useRef(hasSavedPlexCredentials);
 
   const loadItems = useCallback(
     async ({ targetLibrary, targetPage, searchTerm, notReadyOnly: overrideNotReadyOnly } = {}) => {
@@ -155,6 +164,23 @@ export function useLibraryItems({ initialLibrary } = {}) {
   const reload = useCallback(() => {
     loadItems();
   }, [loadItems]);
+
+  useEffect(() => {
+    const previousKey = previousCredentialsKeyRef.current;
+    const previousHasCredentials = previousHasCredentialsRef.current;
+
+    previousCredentialsKeyRef.current = savedCredentialsKey;
+    previousHasCredentialsRef.current = hasSavedPlexCredentials;
+
+    if (!hasSavedPlexCredentials) {
+      return;
+    }
+
+    if (!previousHasCredentials || previousKey !== savedCredentialsKey) {
+      fetchLibraries();
+      reload();
+    }
+  }, [hasSavedPlexCredentials, savedCredentialsKey, fetchLibraries, reload]);
 
   const refreshNotReadyCount = useCallback(
     async (targetLibrary) => {
