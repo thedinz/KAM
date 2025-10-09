@@ -10,6 +10,7 @@ const IDLE_OPERATION = Object.freeze({
 
 function ArtworkCard({
   label,
+  variant: variantProp = null,
   exists = false,
   imageUrl = null,
   folderExists = false,
@@ -79,6 +80,11 @@ function ArtworkCard({
     statusText = uploading ? 'Uploading…' : 'Importing…';
   }
 
+  const normalizedLabel = typeof label === 'string' ? label.trim().toLowerCase() : '';
+  const variant = variantProp || (normalizedLabel === 'poster' ? 'poster' : 'default');
+  const imageWrapperClassName = ['asset-image-wrapper'];
+  if (variant === 'poster') imageWrapperClassName.push('asset-image-wrapper--poster');
+
   return (
     <div className="asset-card">
       <div className="asset-label">
@@ -87,13 +93,15 @@ function ArtworkCard({
           {exists ? 'exists' : 'missing'}
         </span>
       </div>
-      {imageUrl ? (
-        <img className="asset-image" src={imageUrl} alt={label} loading="lazy" />
-      ) : (
-        <div className="asset-placeholder" aria-hidden="true">
-          No preview available
-        </div>
-      )}
+      <div className={imageWrapperClassName.join(' ')}>
+        {imageUrl ? (
+          <img className="asset-image" src={imageUrl} alt={label} loading="lazy" />
+        ) : (
+          <div className="asset-placeholder" aria-hidden="true">
+            No preview available
+          </div>
+        )}
+      </div>
       <div className="asset-actions">
         {hasUpload ? (
           <input

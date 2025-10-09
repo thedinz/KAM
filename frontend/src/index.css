@@ -708,16 +708,34 @@ main {
   color: var(--muted);
 }
 
+.asset-image-wrapper {
+  width: 100%;
+  border-radius: 12px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.04);
+  aspect-ratio: 16 / 9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.asset-image-wrapper--poster {
+  background: #000;
+}
+
 .asset-image {
   width: 100%;
-  height: auto;
-  border-radius: 12px;
+  height: 100%;
   object-fit: cover;
-  background: #000;
+}
+
+.asset-image-wrapper--poster .asset-image {
+  object-fit: contain;
 }
 
 .asset-placeholder {
   width: 100%;
+  height: 100%;
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.04);
   color: var(--muted);
@@ -725,7 +743,7 @@ main {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 40px 12px;
+  padding: 12px;
   text-align: center;
 }
 
