@@ -2,21 +2,32 @@
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 from typing import Optional
 import os
+import shutil
 
 from ..services.resolve import resolve_existing_dir_or_422
 
 router = APIRouter()
 
 def _write_file(dest_path: str, up: UploadFile) -> None:
-    data = up.file.read()
-    if not data:
-        raise HTTPException(status_code=422, detail="Empty file")
     # ensure parent exists (we only ever write into an existing dir)
     parent = os.path.dirname(dest_path)
     if not os.path.isdir(parent):
         raise HTTPException(status_code=422, detail="Asset folder does not exist")
+
+    try:
+        up.file.seek(0)
+    except Exception:
+        # Some file-like objects (e.g., SpooledTemporaryFile) always support seek,
+        # but if they don't we simply continue from the current position.
+        pass
+
+    first_chunk = up.file.read(1024 * 1024)
+    if not first_chunk:
+        raise HTTPException(status_code=422, detail="Empty file")
+
     with open(dest_path, "wb") as f:
-        f.write(data)
+        f.write(first_chunk)
+        shutil.copyfileobj(up.file, f)
 
 @router.post("/api/upload")
 def upload_movie_asset(
