@@ -59,8 +59,13 @@
 
 <script>
   (function () {
-    const t = localStorage.getItem('kam-theme') || 'light';
-    document.documentElement.setAttribute('data-theme', t);
+    try {
+      const stored = localStorage.getItem('kam-theme');
+      const theme = stored === 'light' ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', theme);
+    } catch (error) {
+      document.documentElement.setAttribute('data-theme', 'dark');
+    }
   })();
 
   const $ = (sel) => document.querySelector(sel);
