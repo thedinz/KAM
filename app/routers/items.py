@@ -12,8 +12,6 @@ from ..services.resolve import resolve_existing_dir_or_422
 
 router = APIRouter()
 
-ASSETS_ROOT = os.environ.get("KAM_ASSETS_ROOT", "/assets")
-
 # ---------- Plex helpers ----------
 
 def _require_plex() -> Tuple[str, str]:
@@ -89,43 +87,73 @@ def _to_int(x) -> Optional[int]:
 
 # ---------- Local folder & poster helpers ----------
 
-def _try_existing_asset_folder(library: str, title: Optional[str], year: Optional[int]) -> Optional[str]:
+def _try_existing_asset_folder(
+    library: str, title: Optional[str], year: Optional[int]
+) -> Tuple[Optional[str], Optional[str]]:
     """
     Use your resolver to find an actual, existing Kometa folder.
     Try 'Title (Year)' first, then 'Title'. Never create anything.
     """
     if not title:
-        return None
+        return None, None
     candidates: List[str] = []
     if year: candidates.append(f"{title} ({year})")
     candidates.append(title)
     for cand in candidates:
         try:
             full = resolve_existing_dir_or_422(library, cand)
-            return os.path.basename(full.rstrip(os.sep))
+            return os.path.basename(full.rstrip(os.sep)), full
         except Exception:
             continue
+    return None, None
+
+def _resolve_override_folder(library: str, folder: Optional[str]) -> Tuple[Optional[str], Optional[str]]:
+    if not folder:
+        return None, None
+    try:
+        full = resolve_existing_dir_or_422(library, folder)
+    except Exception:
+        return folder, None
+    name = os.path.basename(full.rstrip(os.sep))
+    return name, full
+
+def _local_poster_path(folder_path: Optional[str]) -> Optional[str]:
+    if not folder_path:
+        return None
+    poster_path = os.path.join(folder_path, "poster.jpg")
+    try:
+        if os.path.isfile(poster_path) and os.path.getsize(poster_path) > 0:
+            return poster_path
+    except Exception:
+        return None
     return None
 
-def _local_poster_exists(library: str, folder: str) -> bool:
-    p = os.path.join(ASSETS_ROOT, library, folder, "poster.jpg")
+def _fileproxy_poster_url(poster_path: str) -> str:
+    url = f"/fileproxy?path={quote(poster_path, safe='')}"
     try:
-        return os.path.isfile(p) and os.path.getsize(p) > 0
+        ts = int(os.path.getmtime(poster_path))
     except Exception:
-        return False
-
-def _fileproxy_poster_url(library: str, folder: str) -> str:
-    # Correct route: /fileproxy (no /api prefix)
-    lib_enc = quote(library, safe="")
-    fol_enc = quote(folder,  safe="")
-    return f"/fileproxy?path=/assets/{lib_enc}/{fol_enc}/poster.jpg&t=0"
+        ts = 0
+    if ts:
+        url = f"{url}&t={ts}" if "?" in url else f"{url}?t={ts}"
+    return url
 
 def _plex_poster_url(rating_key: Optional[str], thumb: Optional[str]) -> str:
     plex_url, plex_token = _require_plex()
     path = thumb or (f"/library/metadata/{rating_key}/thumb" if rating_key else None)
     if not path:
         return "/fallback.png"
-    return f"{plex_url}{path}?X-Plex-Token={plex_token}"
+
+    if path.startswith("http://") or path.startswith("https://"):
+        base = path
+    else:
+        base = f"{plex_url}{path}"
+
+    if "X-Plex-Token=" in base:
+        return base
+
+    separator = "&" if "?" in base else "?"
+    return f"{base}{separator}X-Plex-Token={plex_token}"
 
 # ---------- API ----------
 
@@ -167,23 +195,36 @@ def list_items(
     not_ready_count = 0
     for it in rows:
         override = folder_overrides.get_override(library, it["ratingKey"])
-        folder = override or _try_existing_asset_folder(library, it["title"], it["year"])
-        asset_ready = True if override else bool(folder)
+
+        folder_name, folder_path = _resolve_override_folder(library, override)
+        if not folder_path:
+            auto_name, auto_path = _try_existing_asset_folder(
+                library, it["title"], it["year"]
+            )
+            if auto_name:
+                folder_name = folder_name or auto_name
+            if auto_path:
+                folder_path = folder_path or auto_path
+
+        asset_ready = bool(folder_path)
         if not asset_ready:
             not_ready_count += 1
-        if folder and _local_poster_exists(library, folder):
-            poster = _fileproxy_poster_url(library, folder)   # <-- /fileproxy now
-        else:
-            poster = _plex_poster_url(it["ratingKey"], it["thumb"])
+
+        local_poster = _local_poster_path(folder_path)
+        poster_local = _fileproxy_poster_url(local_poster) if local_poster else None
+        poster_plex = _plex_poster_url(it["ratingKey"], it["thumb"])
+        poster = poster_local or poster_plex
         enriched.append({
             "ratingKey": it["ratingKey"],
             "title": it["title"],
             "year": it["year"],
             "type": it["type"],
-            "folder": folder,
-            "folderName": folder,
+            "folder": folder_name,
+            "folderName": folder_name,
             "assetReady": asset_ready,
             "posterUrl": poster,
+            "posterUrlLocal": poster_local,
+            "posterUrlPlex": poster_plex,
         })
 
     if not_ready_only:
