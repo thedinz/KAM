@@ -1,5 +1,6 @@
 # app/routers/upload.py
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
+from fastapi.concurrency import run_in_threadpool
 from typing import Optional
 import os
 import shutil
@@ -47,7 +48,7 @@ async def upload_movie_asset(
 
     filename = "background.jpg" if (kind or "").lower() == "background" else "poster.jpg"
     dest_path = os.path.join(dest_dir, filename)
-    await _write_file(dest_path, file)
+    await run_in_threadpool(_write_file, dest_path, file)
     return {"ok": True, "path": dest_path}
 
 @router.post("/api/upload_show")
@@ -70,7 +71,7 @@ async def upload_show_asset(
 
     dest_name = "poster.jpg" if kind == "poster" else "background.jpg"
     dest_path = os.path.join(dest_dir, dest_name)
-    await _write_file(dest_path, file)
+    await run_in_threadpool(_write_file, dest_path, file)
     return {"ok": True, "path": dest_path}
 
 @router.post("/api/upload_season")
@@ -95,5 +96,5 @@ async def upload_season_asset(
 
     dest_name = f"Season{idx:02d}.jpg"
     dest_path = os.path.join(dest_dir, dest_name)
-    await _write_file(dest_path, file)
+    await run_in_threadpool(_write_file, dest_path, file)
     return {"ok": True, "path": dest_path}
