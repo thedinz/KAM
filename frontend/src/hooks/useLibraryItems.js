@@ -32,6 +32,7 @@ export function useLibraryItems({ initialLibrary } = {}) {
 
   const fetchLibraries = useCallback(async () => {
     try {
+      setError(null);
       const data = await fetchJson('/api/libraries');
       let libs = Array.isArray(data?.libraries) ? data.libraries : Array.isArray(data) ? data : [];
       libs = libs.map((name) => String(name));
@@ -46,6 +47,7 @@ export function useLibraryItems({ initialLibrary } = {}) {
       }
 
       setLibraries(libs);
+      setError(null);
       if (!libs.length) return;
 
       const desired = initialLibraryRef.current;
