@@ -17,9 +17,26 @@ async function fetchJson(url, options) {
 }
 
 export function useLibraryItems({ initialLibrary } = {}) {
-  const { savedPlexUrl = '', savedPlexToken = '' } = useTheme();
+  const {
+    savedPlexUrl = '',
+    savedPlexToken = '',
+    savedLibraryMappings = [],
+  } = useTheme();
   const hasSavedPlexCredentials = Boolean(savedPlexUrl && savedPlexToken);
   const savedCredentialsKey = `${savedPlexUrl}::${savedPlexToken}`;
+  const savedLibraryMappingsKey = useMemo(() => {
+    if (!Array.isArray(savedLibraryMappings)) return '';
+    return savedLibraryMappings
+      .map((entry) => {
+        if (!entry || typeof entry !== 'object') return '';
+        const name = entry.library || '';
+        const asset = entry.assetPath || '';
+        const collections = entry.collectionsPath || '';
+        return `${name}::${asset}::${collections}`;
+      })
+      .sort()
+      .join('|');
+  }, [savedLibraryMappings]);
 
   const [libraries, setLibraries] = useState([]);
   const [library, setLibrary] = useState(initialLibrary || '');
@@ -74,8 +91,16 @@ export function useLibraryItems({ initialLibrary } = {}) {
     fetchLibraries();
   }, [fetchLibraries]);
 
+  useEffect(() => {
+    if (!hasSavedPlexCredentials) {
+      return;
+    }
+    fetchLibraries();
+  }, [fetchLibraries, hasSavedPlexCredentials, savedLibraryMappingsKey]);
+
   const previousCredentialsKeyRef = useRef(savedCredentialsKey);
   const previousHasCredentialsRef = useRef(hasSavedPlexCredentials);
+  const previousLibraryMappingsKeyRef = useRef(savedLibraryMappingsKey);
 
   const loadItems = useCallback(
     async ({ targetLibrary, targetPage, searchTerm, notReadyOnly: overrideNotReadyOnly } = {}) => {
@@ -168,19 +193,33 @@ export function useLibraryItems({ initialLibrary } = {}) {
   useEffect(() => {
     const previousKey = previousCredentialsKeyRef.current;
     const previousHasCredentials = previousHasCredentialsRef.current;
-
-    previousCredentialsKeyRef.current = savedCredentialsKey;
-    previousHasCredentialsRef.current = hasSavedPlexCredentials;
+    const previousMappingsKey = previousLibraryMappingsKeyRef.current;
 
     if (!hasSavedPlexCredentials) {
+      previousCredentialsKeyRef.current = savedCredentialsKey;
+      previousHasCredentialsRef.current = hasSavedPlexCredentials;
+      previousLibraryMappingsKeyRef.current = savedLibraryMappingsKey;
       return;
     }
 
-    if (!previousHasCredentials || previousKey !== savedCredentialsKey) {
+    if (
+      !previousHasCredentials ||
+      previousKey !== savedCredentialsKey ||
+      savedLibraryMappingsKey !== previousMappingsKey
+    ) {
       fetchLibraries();
       reload();
     }
-  }, [hasSavedPlexCredentials, savedCredentialsKey, fetchLibraries, reload]);
+    previousCredentialsKeyRef.current = savedCredentialsKey;
+    previousHasCredentialsRef.current = hasSavedPlexCredentials;
+    previousLibraryMappingsKeyRef.current = savedLibraryMappingsKey;
+  }, [
+    hasSavedPlexCredentials,
+    savedCredentialsKey,
+    savedLibraryMappingsKey,
+    fetchLibraries,
+    reload,
+  ]);
 
   const refreshNotReadyCount = useCallback(
     async (targetLibrary) => {
