@@ -721,6 +721,7 @@ main {
 
 .asset-image-wrapper--poster {
   background: #000;
+  aspect-ratio: 2 / 3;
 }
 
 .asset-image {

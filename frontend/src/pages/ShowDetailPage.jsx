@@ -452,6 +452,7 @@ function ShowDetailPage() {
             <section className="asset-card-grid">
               <ArtworkCard
                 label="Series Poster"
+                variant="poster"
                 exists={showPosterExists}
                 imageUrl={showPosterImage}
                 folderExists={folderExists}
@@ -479,6 +480,7 @@ function ShowDetailPage() {
                       <ArtworkCard
                         key={season.index}
                         label={season.title}
+                        variant="poster"
                         exists={season.exists}
                         imageUrl={season.posterUrl}
                         folderExists={folderExists}
