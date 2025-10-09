@@ -83,13 +83,7 @@ function ItemCard({ item, library, onRequestFolder }) {
 
   if (detailPath) {
     return (
-      <Link
-        className="card"
-        data-ready={ready ? 'true' : 'false'}
-        title={cardTitle}
-        to={detailPath}
-        reloadDocument
-      >
+      <Link className="card" data-ready={ready ? 'true' : 'false'} title={cardTitle} to={detailPath}>
         {content}
       </Link>
     );

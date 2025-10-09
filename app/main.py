@@ -57,7 +57,9 @@ MOVIE_PAGE = WEB_DIR / "movie.html"
 
 @app.get("/libraries/{library}/movies/{ratingKey}", include_in_schema=False)
 async def movie_details_page(library: str, ratingKey: str):
-    """Serve the dedicated movie HTML shell."""
+    """Serve the SPA shell for movie details when available."""
+    if SPA_INDEX.exists():
+        return FileResponse(SPA_INDEX)
     return FileResponse(MOVIE_PAGE)
 
 
