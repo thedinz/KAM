@@ -1,55 +1,33 @@
 # app/routers/upload.py
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 from typing import Optional
-import inspect
 import os
+import shutil
 
 from ..services.resolve import resolve_existing_dir_or_422
 
 router = APIRouter()
 
-async def _maybe_await(result):
-    if inspect.isawaitable(result):
-        return await result
-    return result
-
-
-async def _write_file(dest_path: str, up: UploadFile) -> None:
+def _write_file(dest_path: str, up: UploadFile) -> None:
     # ensure parent exists (we only ever write into an existing dir)
     parent = os.path.dirname(dest_path)
     if not os.path.isdir(parent):
         raise HTTPException(status_code=422, detail="Asset folder does not exist")
 
-    # FastAPI's UploadFile exposes async helpers that always work regardless of
-    # whether the underlying stream is spooled to disk or kept in memory.
     try:
-        await _maybe_await(up.seek(0))
+        up.file.seek(0)
     except Exception:
-        try:
-            up.file.seek(0)
-        except Exception:
-            pass
+        # Some file-like objects (e.g., SpooledTemporaryFile) always support seek,
+        # but if they don't we simply continue from the current position.
+        pass
 
-    try:
-        first_chunk = await _maybe_await(up.read(1024 * 1024))
-        if not first_chunk:
-            raise HTTPException(status_code=422, detail="Empty file")
+    first_chunk = up.file.read(1024 * 1024)
+    if not first_chunk:
+        raise HTTPException(status_code=422, detail="Empty file")
 
-        with open(dest_path, "wb") as f:
-            f.write(first_chunk)
-            while True:
-                chunk = await _maybe_await(up.read(1024 * 1024))
-                if not chunk:
-                    break
-                f.write(chunk)
-    finally:
-        try:
-            await _maybe_await(up.close())
-        except Exception:
-            try:
-                up.file.close()
-            except Exception:
-                pass
+    with open(dest_path, "wb") as f:
+        f.write(first_chunk)
+        shutil.copyfileobj(up.file, f)
 
 @router.post("/api/upload")
 async def upload_movie_asset(
