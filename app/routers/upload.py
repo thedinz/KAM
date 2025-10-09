@@ -30,7 +30,7 @@ def _write_file(dest_path: str, up: UploadFile) -> None:
         shutil.copyfileobj(up.file, f)
 
 @router.post("/api/upload")
-def upload_movie_asset(
+async def upload_movie_asset(
     library: str = Form(...),
     folderName: str = Form(...),
     file: UploadFile = File(...),
@@ -47,11 +47,11 @@ def upload_movie_asset(
 
     filename = "background.jpg" if (kind or "").lower() == "background" else "poster.jpg"
     dest_path = os.path.join(dest_dir, filename)
-    _write_file(dest_path, file)
+    await _write_file(dest_path, file)
     return {"ok": True, "path": dest_path}
 
 @router.post("/api/upload_show")
-def upload_show_asset(
+async def upload_show_asset(
     library: str = Form(...),
     folderName: str = Form(...),
     kind: str = Form(...),                  # "poster" | "background"
@@ -70,11 +70,11 @@ def upload_show_asset(
 
     dest_name = "poster.jpg" if kind == "poster" else "background.jpg"
     dest_path = os.path.join(dest_dir, dest_name)
-    _write_file(dest_path, file)
+    await _write_file(dest_path, file)
     return {"ok": True, "path": dest_path}
 
 @router.post("/api/upload_season")
-def upload_season_asset(
+async def upload_season_asset(
     library: str = Form(...),
     folderName: str = Form(...),
     season: str = Form(...),                # numeric string (e.g., "1", "02")
@@ -95,5 +95,5 @@ def upload_season_asset(
 
     dest_name = f"Season{idx:02d}.jpg"
     dest_path = os.path.join(dest_dir, dest_name)
-    _write_file(dest_path, file)
+    await _write_file(dest_path, file)
     return {"ok": True, "path": dest_path}
