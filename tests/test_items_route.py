@@ -63,7 +63,7 @@ def items_env(tmp_path, monkeypatch):
                     "year": 2020,
                     "ratingKey": "22",
                     "type": "movie",
-                    "thumb": "/thumb2",
+                    "thumb": "/thumb2?width=500&height=750",
                 },
             ]
         return []
@@ -98,6 +98,8 @@ def test_items_route_prefers_override(items_env):
     assert overridden["folderName"] == items_env.folder.name
     assert overridden["assetReady"] is True
     assert overridden["posterUrl"].startswith("/fileproxy")
+    assert overridden["posterUrlLocal"].startswith("/fileproxy")
+    assert overridden["posterUrlPlex"].startswith("http://plex.test")
 
 
 def test_items_route_reports_not_ready_count_and_filters(items_env):
@@ -108,6 +110,9 @@ def test_items_route_reports_not_ready_count_and_filters(items_env):
     by_key = {it["ratingKey"]: it for it in data["items"]}
     assert by_key["22"]["assetReady"] is False
     assert by_key["22"]["posterUrl"].startswith("http://plex.test")
+    assert by_key["22"]["posterUrlPlex"].startswith("http://plex.test")
+    assert "?" in by_key["22"]["posterUrlPlex"]
+    assert "X-Plex-Token=token" in by_key["22"]["posterUrlPlex"].split("?")[-1]
 
     filtered = items_env.call(not_ready_only=True)
 

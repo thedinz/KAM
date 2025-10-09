@@ -143,7 +143,17 @@ def _plex_poster_url(rating_key: Optional[str], thumb: Optional[str]) -> str:
     path = thumb or (f"/library/metadata/{rating_key}/thumb" if rating_key else None)
     if not path:
         return "/fallback.png"
-    return f"{plex_url}{path}?X-Plex-Token={plex_token}"
+
+    if path.startswith("http://") or path.startswith("https://"):
+        base = path
+    else:
+        base = f"{plex_url}{path}"
+
+    if "X-Plex-Token=" in base:
+        return base
+
+    separator = "&" if "?" in base else "?"
+    return f"{base}{separator}X-Plex-Token={plex_token}"
 
 # ---------- API ----------
 
@@ -201,10 +211,9 @@ def list_items(
             not_ready_count += 1
 
         local_poster = _local_poster_path(folder_path)
-        if local_poster:
-            poster = _fileproxy_poster_url(local_poster)
-        else:
-            poster = _plex_poster_url(it["ratingKey"], it["thumb"])
+        poster_local = _fileproxy_poster_url(local_poster) if local_poster else None
+        poster_plex = _plex_poster_url(it["ratingKey"], it["thumb"])
+        poster = poster_local or poster_plex
         enriched.append({
             "ratingKey": it["ratingKey"],
             "title": it["title"],
@@ -214,6 +223,8 @@ def list_items(
             "folderName": folder_name,
             "assetReady": asset_ready,
             "posterUrl": poster,
+            "posterUrlLocal": poster_local,
+            "posterUrlPlex": poster_plex,
         })
 
     if not_ready_only:
