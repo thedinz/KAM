@@ -41,10 +41,13 @@ def _fileproxy_url(path: Optional[str]) -> Optional[str]:
     return url
 
 
-def _resolve_existing_folder_basename(library: str, title: Optional[str], year: Optional[int]) -> Optional[str]:
-    """Return the basename of an existing asset folder that best matches the title."""
+def _resolve_existing_folder(
+    library: str, title: Optional[str], year: Optional[int]
+) -> Tuple[Optional[str], Optional[str]]:
+    """Return ``(basename, full_path)`` for the best matching existing asset folder."""
+
     if not title:
-        return None
+        return None, None
 
     candidates = []
     if year:
@@ -57,8 +60,10 @@ def _resolve_existing_folder_basename(library: str, title: Optional[str], year: 
         except Exception:
             continue
         if resolved:
-            return os.path.basename(resolved.rstrip(os.sep))
-    return None
+            basename = os.path.basename(resolved.rstrip(os.sep))
+            return basename, resolved
+
+    return None, None
 
 def _plex_url_parts() -> Tuple[str, str]:
     cfg = plex_settings.get_plex_config()
@@ -82,31 +87,43 @@ def movie(library: str = Query(...), ratingKey: int = Query(...)):
     year = getattr(item, "year", None)
     folder = folder_name_for(title, year)
     override_folder = folder_overrides.get_override(library, str(ratingKey))
-    resolved_folder = _resolve_existing_folder_basename(library, title, year)
+    auto_folder, auto_path = _resolve_existing_folder(library, title, year)
+
     if override_folder:
         folder = override_folder
-    elif resolved_folder:
-        folder = resolved_folder
+    elif auto_folder:
+        folder = auto_folder
 
-    # Map to asset root for this library
-    base = library_mappings_service.get_asset_path(library)
+    # Determine which folder (if any) truly exists so status messaging matches
+    # the library overview page.
+    folder_path = None
+    if override_folder:
+        try:
+            folder_path = resolve_existing_dir_or_422(library, override_folder)
+        except Exception:
+            folder_path = None
+    if folder_path is None and auto_path:
+        folder_path = auto_path
+
+    if folder_path is None:
+        base = library_mappings_service.get_asset_path(library)
+        if base and folder:
+            candidate = os.path.join(base, folder)
+            if os.path.isdir(candidate):
+                folder_path = candidate
+
     poster_exists = False
     background_exists = False
     poster_url_local = None
     background_url_local = None
-    folder_exists = bool(override_folder)
+    folder_exists = folder_path is not None
 
-    if base:
-        movie_folder = os.path.join(base, folder)
-        actual_exists = os.path.isdir(movie_folder)
-        folder_exists = folder_exists or actual_exists
-        # poster
-        p = _first_existing(os.path.join(movie_folder, "poster"))
+    if folder_path:
+        p = _first_existing(os.path.join(folder_path, "poster"))
         if p:
             poster_exists = True
             poster_url_local = _fileproxy_url(p)
-        # background
-        b = _first_existing(os.path.join(movie_folder, "background"))
+        b = _first_existing(os.path.join(folder_path, "background"))
         if b:
             background_exists = True
             background_url_local = _fileproxy_url(b)
