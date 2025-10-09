@@ -81,7 +81,7 @@ function ArtworkCard({
   }
 
   const normalizedLabel = typeof label === 'string' ? label.trim().toLowerCase() : '';
-  const variant = variantProp || (normalizedLabel === 'poster' ? 'poster' : 'default');
+  const variant = variantProp || (normalizedLabel.includes('poster') ? 'poster' : 'default');
   const imageWrapperClassName = ['asset-image-wrapper'];
   if (variant === 'poster') imageWrapperClassName.push('asset-image-wrapper--poster');
 
