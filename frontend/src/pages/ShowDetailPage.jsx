@@ -473,7 +473,7 @@ function ShowDetailPage() {
             <section>
               <h2 className="detail-section-title">Seasons</h2>
               {seasons.length ? (
-                <div className="season-grid">
+                <div className="asset-card-grid season-grid">
                   {seasons.map((season) => {
                     const op = operations.seasons?.[String(season.index)] ?? createOperation();
                     return (
