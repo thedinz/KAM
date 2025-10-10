@@ -449,7 +449,7 @@ function ShowDetailPage() {
               Asset folder:
               <span className="detail-folder-name">{folderDisplay}</span>
             </div>
-            <section className="asset-card-grid">
+            <section className="asset-card-grid asset-card-grid--show">
               <ArtworkCard
                 label="Series Poster"
                 variant="poster"
@@ -473,7 +473,7 @@ function ShowDetailPage() {
             <section>
               <h2 className="detail-section-title">Seasons</h2>
               {seasons.length ? (
-                <div className="asset-card-grid season-grid">
+                <div className="asset-card-grid asset-card-grid--show season-grid">
                   {seasons.map((season) => {
                     const op = operations.seasons?.[String(season.index)] ?? createOperation();
                     return (
