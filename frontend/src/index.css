@@ -689,6 +689,16 @@ main {
   align-items: start;
 }
 
+.asset-card-grid--show {
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  justify-items: center;
+}
+
+.asset-card-grid--show .asset-card {
+  width: 100%;
+  max-width: 220px;
+}
+
 .asset-card {
   background: var(--card);
   border: 1px solid var(--border);
