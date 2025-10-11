@@ -85,6 +85,11 @@ function ArtworkCard({
   const imageWrapperClassName = ['asset-image-wrapper'];
   if (variant === 'poster') imageWrapperClassName.push('asset-image-wrapper--poster');
 
+  const imageWrapperStyle = {
+    '--asset-aspect-ratio': variant === 'poster' ? '2 / 3' : '16 / 9',
+    '--asset-aspect-fallback': variant === 'poster' ? '150%' : '56.25%',
+  };
+
   return (
     <div className="asset-card">
       <div className="asset-label">
@@ -93,7 +98,7 @@ function ArtworkCard({
           {exists ? 'exists' : 'missing'}
         </span>
       </div>
-      <div className={imageWrapperClassName.join(' ')}>
+      <div className={imageWrapperClassName.join(' ')} style={imageWrapperStyle}>
         {imageUrl ? (
           <img className="asset-image" src={imageUrl} alt={label} loading="lazy" />
         ) : (
