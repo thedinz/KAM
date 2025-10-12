@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 
 const IDLE_OPERATION = Object.freeze({
   uploading: false,
@@ -20,7 +20,6 @@ function ArtworkCard({
   uploadLabel = 'Upload',
   importLabel = 'Import',
 }) {
-  const [file, setFile] = useState(null);
   const inputRef = useRef(null);
 
   const uploading = Boolean(operation?.uploading);
@@ -34,24 +33,24 @@ function ArtworkCard({
   const hasUpload = typeof onUpload === 'function';
 
   useEffect(() => {
-    if (!busy && success && lastAction === 'upload') {
-      setFile(null);
-      if (inputRef.current) {
-        inputRef.current.value = '';
-      }
-    }
-  }, [busy, success, lastAction]);
-
-  useEffect(() => {
     if (!folderExists && inputRef.current) {
       inputRef.current.value = '';
-      setFile(null);
     }
   }, [folderExists]);
 
   const handleUploadClick = () => {
-    if (!hasUpload || !file) return;
-    const result = onUpload(file);
+    if (!hasUpload || busy || !folderExists) return;
+    if (inputRef.current) {
+      inputRef.current.value = '';
+      inputRef.current.click();
+    }
+  };
+
+  const handleFileChange = (event) => {
+    if (!hasUpload || busy || !folderExists) return;
+    const selected = event.target.files && event.target.files[0] ? event.target.files[0] : null;
+    if (!selected) return;
+    const result = onUpload(selected);
     if (result && typeof result.catch === 'function') {
       result.catch(() => {});
     }
@@ -65,7 +64,7 @@ function ArtworkCard({
     }
   };
 
-  const uploadDisabled = !folderExists || !file || busy;
+  const uploadDisabled = !folderExists || busy;
   const importDisabled = !folderExists || busy;
 
   let statusText = '\u00a0';
@@ -113,11 +112,10 @@ function ArtworkCard({
             ref={inputRef}
             type="file"
             accept="image/*"
+            className="asset-file-input"
+            tabIndex={-1}
             disabled={!folderExists || busy}
-            onChange={(event) => {
-              const selected = event.target.files && event.target.files[0] ? event.target.files[0] : null;
-              setFile(selected);
-            }}
+            onChange={handleFileChange}
           />
         ) : null}
         {hasUpload ? (
