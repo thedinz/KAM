@@ -49,6 +49,8 @@ def collections_env(tmp_path, monkeypatch):
     ready_folder.mkdir(parents=True)
     override_folder = collections_root / "override folder"
     override_folder.mkdir()
+    sanitized_only_folder = collections_root / "Mission Impossible Collection"
+    sanitized_only_folder.mkdir()
 
     settings_module = importlib.reload(importlib.import_module("app.services.settings"))
     settings_module.set_settings_path(str(tmp_path / "settings.json"))
@@ -86,6 +88,7 @@ def collections_env(tmp_path, monkeypatch):
         [
             _DummyCollection("My Cool Collection", 1),
             _DummyCollection("Missing Assets", 2),
+            _DummyCollection("Mission: Impossible Collection", 3),
         ],
     )]
 
@@ -119,6 +122,11 @@ def test_collections_route_marks_asset_readiness(collections_env):
     assert missing["folderName"] == "Missing Assets"
     assert missing["library"] == "Movies"
     assert missing["posterUrlPlex"].startswith("http://plex.test")
+
+    sanitized = items["Mission: Impossible Collection"]
+    assert sanitized["assetReady"] is True
+    assert sanitized["folderName"] == "Mission Impossible Collection"
+    assert sanitized["library"] == "Movies"
 
 
 INDEX_HTML = ROOT / "app" / "web" / "index.html"

@@ -175,3 +175,15 @@ def _resolve_within_base(base: str, library: str, folder_name: str) -> Optional[
     raise FileNotFoundError(
         f"No existing asset folder matches '{folder_name}' in '{library}'"
     )
+
+
+def find_existing_dir_in_base(base: str, folder_name: str) -> Optional[str]:
+    """Return the resolved directory within *base* if present."""
+
+    if not base or not folder_name:
+        return None
+
+    try:
+        return _resolve_within_base(base, "Collections", folder_name)
+    except FileNotFoundError:
+        return None
