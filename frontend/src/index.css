@@ -699,6 +699,14 @@ main {
   max-width: 200px;
 }
 
+.asset-card-grid--show.season-grid {
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.asset-card-grid--show.season-grid .asset-card {
+  max-width: 240px;
+}
+
 .asset-card {
   background: var(--card);
   border: 1px solid var(--border);
@@ -1164,10 +1172,6 @@ main {
 
 .status-text.error {
   color: #f87171;
-}
-
-.season-grid {
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
 }
 
 .folder-open {
