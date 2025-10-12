@@ -82,12 +82,11 @@ function ArtworkCard({
   const normalizedLabel = typeof label === 'string' ? label.trim().toLowerCase() : '';
   const variant = variantProp || (normalizedLabel.includes('poster') ? 'poster' : 'default');
   const imageWrapperClassName = ['asset-image-wrapper'];
-  if (variant === 'poster') imageWrapperClassName.push('asset-image-wrapper--poster');
-
-  const imageWrapperStyle = {
-    '--asset-aspect-ratio': variant === 'poster' ? '2 / 3' : '16 / 9',
-    '--asset-aspect-fallback': variant === 'poster' ? '150%' : '56.25%',
-  };
+  if (variant === 'poster') {
+    imageWrapperClassName.push('asset-image-wrapper--poster');
+  } else {
+    imageWrapperClassName.push('asset-image-wrapper--landscape');
+  }
 
   return (
     <div className="asset-card">
@@ -97,7 +96,7 @@ function ArtworkCard({
           {exists ? 'exists' : 'missing'}
         </span>
       </div>
-      <div className={imageWrapperClassName.join(' ')} style={imageWrapperStyle}>
+      <div className={imageWrapperClassName.join(' ')}>
         {imageUrl ? (
           <img className="asset-image" src={imageUrl} alt={label} loading="lazy" />
         ) : (
