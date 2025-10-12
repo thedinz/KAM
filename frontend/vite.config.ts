@@ -17,7 +17,6 @@ type StaticFile = {
 
 const staticFiles: StaticFile[] = [
   { source: resolve(repoRoot, "app/web/fallback.png"), destName: "fallback.png" },
-  { source: resolve(repoRoot, "app/web/show-react.html"), destName: "show-react.html" },
 ];
 
 const staticBuffers = new Map<string, Buffer>();

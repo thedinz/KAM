@@ -8,13 +8,12 @@ router = APIRouter()
 
 _WEB_DIR = Path(__file__).resolve().parents[1] / "web"
 _SPA_INDEX = _WEB_DIR / "index.html"
-_SHOW_REACT = _WEB_DIR / "show-react.html"
 
 
 @router.get("/libraries/{library}/shows/{ratingKey}")
 async def show_details_page(library: str, ratingKey: str):
-    """Serve the dedicated React show shell so its bundle can hydrate."""
-    return FileResponse(_SHOW_REACT)
+    """Serve the SPA shell for direct navigation to show details."""
+    return FileResponse(_SPA_INDEX)
 
 
 @router.get("/libraries/{library}/not-ready")
