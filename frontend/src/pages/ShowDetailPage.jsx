@@ -165,7 +165,7 @@ function ShowDetailPage() {
 
   const seasons = useMemo(() => {
     if (!Array.isArray(detail?.seasons)) return [];
-    return detail.seasons
+    const normalized = detail.seasons
       .filter((season) => season && season.index != null)
       .map((season) => {
         const idx = season.index;
@@ -183,6 +183,15 @@ function ShowDetailPage() {
           exists,
         };
       });
+
+    normalized.sort((a, b) => {
+      if (a.index === b.index) {
+        return a.title.localeCompare(b.title, undefined, { numeric: true, sensitivity: 'base' });
+      }
+      return a.index - b.index;
+    });
+
+    return normalized;
   }, [detail]);
 
   const handleShowUpload = useCallback(
