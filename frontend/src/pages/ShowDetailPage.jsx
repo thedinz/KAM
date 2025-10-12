@@ -562,7 +562,8 @@ function ShowDetailPage() {
               <span className="detail-folder-name">{folderDisplay}</span>
             </div>
             <section className="detail-series-cards">
-              <div className="asset-card-grid">
+              <h2 className="detail-section-title">Series &amp; Seasons</h2>
+              <div className="asset-card-grid asset-card-grid--seasons">
                 <ArtworkCard
                   label="Series Poster"
                   variant="poster"
@@ -573,30 +574,24 @@ function ShowDetailPage() {
                   onUpload={(file) => handleShowUpload('poster', file)}
                   onImport={() => handleShowImport('poster')}
                 />
+                {seasons.map((season) => {
+                  const op = operations.seasons?.[String(season.index)] ?? createOperation();
+                  return (
+                    <ArtworkCard
+                      key={season.index}
+                      label={season.title}
+                      variant="poster"
+                      exists={season.exists}
+                      imageUrl={season.posterUrl}
+                      folderExists={folderExists}
+                      operation={op}
+                      onUpload={(file) => handleSeasonUpload(season.index, file)}
+                      onImport={() => handleSeasonImport(season.index, season.plexPosterUrl)}
+                    />
+                  );
+                })}
               </div>
-            </section>
-            <section>
-              <h2 className="detail-section-title">Seasons</h2>
-              {seasons.length ? (
-                <div className="asset-card-grid asset-card-grid--seasons">
-                  {seasons.map((season) => {
-                    const op = operations.seasons?.[String(season.index)] ?? createOperation();
-                    return (
-                      <ArtworkCard
-                        key={season.index}
-                        label={season.title}
-                        variant="poster"
-                        exists={season.exists}
-                        imageUrl={season.posterUrl}
-                        folderExists={folderExists}
-                        operation={op}
-                        onUpload={(file) => handleSeasonUpload(season.index, file)}
-                        onImport={() => handleSeasonImport(season.index, season.plexPosterUrl)}
-                      />
-                    );
-                  })}
-                </div>
-              ) : (
+              {seasons.length ? null : (
                 <div className="status-text" aria-live="polite">
                   No seasons found for this series.
                 </div>
