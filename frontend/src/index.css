@@ -686,7 +686,7 @@ main {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 16px;
-  align-items: start;
+  align-items: stretch;
 }
 
 .asset-card-grid--seasons {
@@ -721,26 +721,37 @@ main {
   overflow: hidden;
   background: rgba(255, 255, 255, 0.04);
   flex: 0 0 auto;
-  --asset-aspect-ratio: 16 / 9;
-  --asset-aspect-fallback: 56.25%;
-  aspect-ratio: var(--asset-aspect-ratio, 16 / 9);
+  aspect-ratio: 16 / 9;
 }
 
 .asset-image-wrapper::before {
   content: '';
   display: block;
   width: 100%;
-  padding-bottom: var(--asset-aspect-fallback, 56.25%);
+  padding-bottom: 56.25%;
 }
 
 .asset-image-wrapper--poster {
   background: #000;
-  --asset-aspect-ratio: 2 / 3;
-  --asset-aspect-fallback: 150%;
+  aspect-ratio: 2 / 3;
+}
+
+.asset-image-wrapper--poster::before {
+  padding-bottom: 150%;
+}
+
+.asset-image-wrapper--landscape {
+  aspect-ratio: 16 / 9;
+}
+
+.asset-image-wrapper--landscape::before {
+  padding-bottom: 56.25%;
 }
 
 @supports (aspect-ratio: 1) {
-  .asset-image-wrapper::before {
+  .asset-image-wrapper::before,
+  .asset-image-wrapper--poster::before,
+  .asset-image-wrapper--landscape::before {
     content: none;
   }
 }
@@ -758,7 +769,7 @@ main {
 }
 
 .asset-image-wrapper--poster .asset-image {
-  object-fit: contain;
+  object-fit: cover;
 }
 
 .asset-placeholder {
@@ -778,6 +789,14 @@ main {
   align-items: stretch;
   gap: 8px;
   margin-top: auto;
+  width: 100%;
+}
+
+.asset-file-input {
+  display: none;
+}
+
+.asset-actions .btn {
   width: 100%;
 }
 
