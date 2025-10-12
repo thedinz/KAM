@@ -46,10 +46,31 @@ def _first_existing_background(dir_path: Path) -> Path | None:
     return None
 
 def _collections_root_for_library(library: str | None) -> Path | None:
+    """Return the best-known collections root for *library*.
+
+    The settings UI may omit explicit ``collectionsPath`` entries when they
+    match the general Kometa layout. In that case fall back to the legacy
+    ``COLLECTIONS_ROOT`` environment variable or the library's ``assetPath`` so
+    we can still detect ready folders.
+    """
+
     path = library_mappings_service.get_collections_path(library)
+
     if not path:
-        return None
-    return Path(path)
+        env_root = os.environ.get("COLLECTIONS_ROOT")
+        if env_root:
+            path = env_root
+
+    if not path and library:
+        # Library-specific fallback – older installs only configured assetPath.
+        fallback_asset = library_mappings_service.get_asset_path(library)
+        if fallback_asset:
+            path = fallback_asset
+
+    if path:
+        return Path(path)
+
+    return None
 
 
 def _local_poster_for_title(
