@@ -6,6 +6,7 @@ from ..services import folder_overrides
 from ..services import plex_settings
 from ..services import library_mappings as library_mappings_service
 from ..services.assets import sanitize_name
+from ..services.resolve import find_existing_dir_in_base
 
 import os
 from pathlib import Path
@@ -26,21 +27,6 @@ BACKGROUND_FILENAMES = (
     "background.jpg", "background.png", "background.webp", "background.jpeg",
     "art.jpg", "art.png", "art.webp", "fanart.jpg", "fanart.png"
 )
-
-def _case_insensitive_dir(base: Path, want: str) -> Path | None:
-    """
-    Return an existing subdir in `base` whose name matches `want` case-insensitively.
-    """
-    if not want:
-        return None
-    want_l = want.lower()
-    try:
-        for child in base.iterdir():
-            if child.is_dir() and child.name.lower() == want_l:
-                return child
-    except Exception:
-        pass
-    return None
 
 def _first_existing_poster(dir_path: Path) -> Path | None:
     """Return the first existing poster file in the given directory."""
@@ -69,59 +55,30 @@ def _collections_root_for_library(library: str | None) -> Path | None:
 def _local_poster_for_title(
     title: str, base: Path | None
 ) -> Tuple[Path | None, str | None, str, bool]:
-    """
-    Find a local poster for this collection title.
+    """Return poster info for *title* within the given collections base."""
 
-    Returns: (path_on_disk, public_url_or_None, folder_used, folder_exists)
-    """
     if not title or not base:
         return None, None, "", False
 
-    raw_folder = title
-    sani_folder = sanitize_name(title)
-    found_folder = ""
-    found_exists = False
+    resolved = find_existing_dir_in_base(str(base), title)
+    if not resolved:
+        sanitized = sanitize_name(title)
+        if sanitized and sanitized != title:
+            resolved = find_existing_dir_in_base(str(base), sanitized)
 
-    # 1) exact raw
-    d1 = base / raw_folder
-    if d1.is_dir():
-        found_folder = d1.name
-        found_exists = True
-        p = _first_existing_poster(d1)
-        if p:
-            return p, _url_for_local(base, d1.name, p), d1.name, True
+    if not resolved:
+        return None, None, "", False
 
-    # 2) exact sanitized
-    d2 = base / sani_folder
-    if d2.is_dir():
-        found_folder = d2.name
-        found_exists = True
-        p = _first_existing_poster(d2)
-        if p:
-            return p, _url_for_local(base, d2.name, p), d2.name, True
+    folder_path = Path(resolved)
+    folder_name = folder_path.name
+    poster_path = _first_existing_poster(folder_path)
 
-    # 3) case-insensitive match (raw)
-    d3 = _case_insensitive_dir(base, raw_folder)
-    if d3:
-        found_folder = d3.name
-        found_exists = True
-        p = _first_existing_poster(d3)
-        if p:
-            return p, _url_for_local(base, d3.name, p), d3.name, True
+    if poster_path:
+        poster_url = _url_for_local(base, folder_name, poster_path)
+    else:
+        poster_url = None
 
-    # 4) case-insensitive match (sanitized)
-    d4 = _case_insensitive_dir(base, sani_folder)
-    if d4:
-        found_folder = d4.name
-        found_exists = True
-        p = _first_existing_poster(d4)
-        if p:
-            return p, _url_for_local(base, d4.name, p), d4.name, True
-
-    if found_exists:
-        return None, None, found_folder, True
-
-    return None, None, "", False
+    return poster_path, poster_url, folder_name, True
 
 def _url_for_local(base: Path, folder_name: str, file_path: Path) -> str:
     """
