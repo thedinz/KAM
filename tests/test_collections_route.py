@@ -43,13 +43,14 @@ class _DummyPlex:
 def collections_env(tmp_path, monkeypatch):
     assets_root = tmp_path / "assets"
     collections_root = assets_root / "Collections"
+    movies_section_root = collections_root / "Movies"
     movies_root = assets_root / "Movies"
     movies_root.mkdir(parents=True)
-    ready_folder = collections_root / "my cool collection"
+    ready_folder = movies_section_root / "my cool collection"
     ready_folder.mkdir(parents=True)
-    override_folder = collections_root / "override folder"
+    override_folder = movies_section_root / "override folder"
     override_folder.mkdir()
-    sanitized_only_folder = collections_root / "Mission Impossible Collection"
+    sanitized_only_folder = movies_section_root / "Mission Impossible Collection"
     sanitized_only_folder.mkdir()
 
     settings_module = importlib.reload(importlib.import_module("app.services.settings"))
@@ -61,9 +62,19 @@ def collections_env(tmp_path, monkeypatch):
             "plexToken": "token",
             "libraryMappings": [
                 {
+                    "library": "Collections",
+                    "assetPath": str(collections_root),
+                    "collectionSections": [
+                        {
+                            "name": "Movies",
+                            "collectionsPath": str(movies_section_root),
+                        }
+                    ],
+                },
+                {
                     "library": "Movies",
                     "assetPath": str(movies_root),
-                    "collectionsPath": str(collections_root),
+                    "collectionsPath": None,
                 }
             ],
         }
@@ -103,7 +114,7 @@ def collections_env(tmp_path, monkeypatch):
         call=_call,
         folder_overrides=folder_overrides,
         override_folder=override_folder,
-        collections_root=collections_root,
+        collections_root=movies_section_root,
     )
 
 
