@@ -721,7 +721,8 @@ main {
   overflow: hidden;
   background: rgba(255, 255, 255, 0.04);
   flex: 0 0 auto;
-  aspect-ratio: 16 / 9;
+  --asset-aspect-ratio: 16 / 9;
+  --asset-aspect-fallback: 56.25%;
 }
 
 .asset-image-wrapper::before {
@@ -748,11 +749,13 @@ main {
   padding-bottom: 56.25%;
 }
 
-@supports (aspect-ratio: 1) {
-  .asset-image-wrapper::before,
-  .asset-image-wrapper--poster::before,
-  .asset-image-wrapper--landscape::before {
-    content: none;
+@supports (aspect-ratio: 1 / 1) {
+  .asset-image-wrapper {
+    aspect-ratio: var(--asset-aspect-ratio, 16 / 9);
+  }
+
+  .asset-image-wrapper::before {
+    display: none;
   }
 }
 
