@@ -198,6 +198,30 @@ def _default_collections_root() -> Optional[str]:
     return None
 
 
+def _section_override_path(entry: Dict[str, Any], library: str) -> Optional[str]:
+    """Return a collectionsPath override within *entry* matching *library*."""
+
+    if not entry or not library:
+        return None
+
+    raw_sections = entry.get("collectionSections")
+    if not raw_sections:
+        return None
+
+    library_key = library.casefold()
+    for section in raw_sections:
+        name = str(section.get("name") or "").strip()
+        if not name:
+            continue
+        if name.casefold() != library_key:
+            continue
+        path = normalize_path(section.get("collectionsPath"))
+        if path:
+            return path
+
+    return None
+
+
 def get_collections_path(library: Optional[str] = None) -> Optional[str]:
     """Return the collections path for *library* or the global default."""
     if library:
@@ -206,9 +230,16 @@ def get_collections_path(library: Optional[str] = None) -> Optional[str]:
             path = normalize_path(entry.get("collectionsPath"))
             if path:
                 return path
+            override = _section_override_path(entry, library)
+            if override:
+                return override
 
     explicit = get_library_entry("Collections")
     if explicit:
+        if library:
+            override = _section_override_path(explicit, library)
+            if override:
+                return override
         explicit_coll = normalize_path(explicit.get("collectionsPath") or explicit.get("assetPath"))
         if explicit_coll:
             return explicit_coll
@@ -218,6 +249,10 @@ def get_collections_path(library: Optional[str] = None) -> Optional[str]:
         return fallback
 
     for entry in load_library_mappings():
+        if library:
+            override = _section_override_path(entry, library)
+            if override:
+                return override
         candidate = normalize_path(entry.get("collectionsPath"))
         if candidate:
             return candidate
