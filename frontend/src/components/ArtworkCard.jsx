@@ -115,6 +115,8 @@ function ArtworkCard({
             tabIndex={-1}
             disabled={!folderExists || busy}
             onChange={handleFileChange}
+            hidden
+            style={{ display: 'none' }}
           />
         ) : null}
         {hasUpload ? (
