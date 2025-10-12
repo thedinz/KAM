@@ -723,7 +723,6 @@ main {
   flex: 0 0 auto;
   --asset-aspect-ratio: 16 / 9;
   --asset-aspect-fallback: 56.25%;
-  aspect-ratio: var(--asset-aspect-ratio, 16 / 9);
 }
 
 .asset-image-wrapper::before {
@@ -739,9 +738,13 @@ main {
   --asset-aspect-fallback: 150%;
 }
 
-@supports (aspect-ratio: 1) {
+@supports (aspect-ratio: 1 / 1) {
+  .asset-image-wrapper {
+    aspect-ratio: var(--asset-aspect-ratio, 16 / 9);
+  }
+
   .asset-image-wrapper::before {
-    content: none;
+    display: none;
   }
 }
 
@@ -758,7 +761,7 @@ main {
 }
 
 .asset-image-wrapper--poster .asset-image {
-  object-fit: contain;
+  object-fit: cover;
 }
 
 .asset-placeholder {
@@ -778,6 +781,14 @@ main {
   align-items: stretch;
   gap: 8px;
   margin-top: auto;
+  width: 100%;
+}
+
+.asset-file-input {
+  display: none;
+}
+
+.asset-actions .btn {
   width: 100%;
 }
 
