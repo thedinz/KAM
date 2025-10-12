@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import ArtworkCard from '../components/ArtworkCard.jsx';
 import { responseErrorMessage, safeJson } from '../utils/api.js';
@@ -32,6 +32,8 @@ function ShowDetailPage() {
     background: createOperation(),
     seasons: {},
   });
+
+  const backgroundInputRef = useRef(null);
 
   useEffect(() => {
     setDetail(null);
@@ -150,6 +152,12 @@ function ShowDetailPage() {
   const folderName = detail?.folderName || '';
   const effectiveRatingKey = detail?.ratingKey != null ? String(detail.ratingKey) : ratingKey;
 
+  useEffect(() => {
+    if (!folderExists && backgroundInputRef.current) {
+      backgroundInputRef.current.value = '';
+    }
+  }, [folderExists]);
+
   const showPosterExists = useMemo(() => {
     if (typeof detail?.posterExists === 'boolean') return detail.posterExists;
     return Boolean(detail?.posterUrl);
@@ -162,6 +170,27 @@ function ShowDetailPage() {
 
   const showPosterImage = detail?.posterUrl || detail?.posterUrlPlex || detail?.plexPosterUrl || null;
   const showBackgroundImage = detail?.backgroundUrl || detail?.backgroundUrlPlex || detail?.plexBackgroundUrl || null;
+
+  const backgroundOperation = operations.background ?? createOperation();
+  const backgroundUploading = Boolean(backgroundOperation.uploading);
+  const backgroundImporting = Boolean(backgroundOperation.importing);
+  const backgroundBusy = backgroundUploading || backgroundImporting;
+  const backgroundStatus = (() => {
+    if (backgroundOperation.error) {
+      return { text: backgroundOperation.error, className: 'status-text error' };
+    }
+    if (backgroundOperation.success) {
+      const label = backgroundOperation.lastAction === 'upload' ? 'Upload complete.' : 'Import complete.';
+      return { text: label, className: 'status-text success' };
+    }
+    if (backgroundUploading) {
+      return { text: 'Uploading…', className: 'status-text' };
+    }
+    if (backgroundImporting) {
+      return { text: 'Importing…', className: 'status-text' };
+    }
+    return { text: '\u00a0', className: 'status-text' };
+  })();
 
   const seasons = useMemo(() => {
     if (!Array.isArray(detail?.seasons)) return [];
@@ -417,6 +446,32 @@ function ShowDetailPage() {
   const headerTitle = detail?.title || 'Show Details';
   const headerYear = detail?.year;
 
+  const handleBackgroundUploadClick = () => {
+    if (!folderExists || backgroundBusy) return;
+    if (backgroundInputRef.current) {
+      backgroundInputRef.current.value = '';
+      backgroundInputRef.current.click();
+    }
+  };
+
+  const handleBackgroundFileChange = (event) => {
+    if (!folderExists || backgroundBusy) return;
+    const file = event.target.files && event.target.files[0] ? event.target.files[0] : null;
+    if (!file) return;
+    const result = handleShowUpload('background', file);
+    if (result && typeof result.catch === 'function') {
+      result.catch(() => {});
+    }
+  };
+
+  const handleBackgroundImportClick = () => {
+    if (!folderExists || backgroundBusy) return;
+    const result = handleShowImport('background');
+    if (result && typeof result.catch === 'function') {
+      result.catch(() => {});
+    }
+  };
+
   return (
     <div className="detail-page">
       <header>
@@ -448,6 +503,54 @@ function ShowDetailPage() {
           </div>
         ) : detail ? (
           <div className="detail-container">
+            <section className="detail-hero">
+              <div className="detail-hero-image">
+                {showBackgroundImage ? (
+                  <img className="detail-hero-image-src" src={showBackgroundImage} alt="Series background" loading="lazy" />
+                ) : (
+                  <div className="detail-hero-placeholder" aria-hidden="true">
+                    No background available
+                  </div>
+                )}
+              </div>
+              <div className="detail-hero-body">
+                <div className="detail-hero-header">
+                  <span className="detail-hero-title">Background</span>
+                  <span className={`asset-flag ${showBackgroundExists ? 'exists' : 'missing'}`}>
+                    {showBackgroundExists ? 'exists' : 'missing'}
+                  </span>
+                </div>
+                <div className="detail-hero-actions">
+                  <input
+                    ref={backgroundInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="asset-file-input"
+                    disabled={!folderExists || backgroundBusy}
+                    onChange={handleBackgroundFileChange}
+                  />
+                  <button
+                    type="button"
+                    className="btn"
+                    onClick={handleBackgroundUploadClick}
+                    disabled={!folderExists || backgroundBusy}
+                  >
+                    {backgroundUploading ? 'Uploading…' : 'Upload'}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn"
+                    onClick={handleBackgroundImportClick}
+                    disabled={!folderExists || backgroundBusy}
+                  >
+                    {backgroundImporting ? 'Importing…' : 'Import'}
+                  </button>
+                </div>
+                <div className={backgroundStatus.className} aria-live="polite">
+                  {backgroundStatus.text}
+                </div>
+              </div>
+            </section>
             {!folderExists ? (
               <div className="detail-warning" role="alert">
                 <strong>✖</strong>
@@ -458,26 +561,19 @@ function ShowDetailPage() {
               Asset folder:
               <span className="detail-folder-name">{folderDisplay}</span>
             </div>
-            <section className="asset-card-grid">
-              <ArtworkCard
-                label="Series Poster"
-                variant="poster"
-                exists={showPosterExists}
-                imageUrl={showPosterImage}
-                folderExists={folderExists}
-                operation={operations.poster}
-                onUpload={(file) => handleShowUpload('poster', file)}
-                onImport={() => handleShowImport('poster')}
-              />
-              <ArtworkCard
-                label="Background"
-                exists={showBackgroundExists}
-                imageUrl={showBackgroundImage}
-                folderExists={folderExists}
-                operation={operations.background}
-                onUpload={(file) => handleShowUpload('background', file)}
-                onImport={() => handleShowImport('background')}
-              />
+            <section className="detail-series-cards">
+              <div className="asset-card-grid">
+                <ArtworkCard
+                  label="Series Poster"
+                  variant="poster"
+                  exists={showPosterExists}
+                  imageUrl={showPosterImage}
+                  folderExists={folderExists}
+                  operation={operations.poster}
+                  onUpload={(file) => handleShowUpload('poster', file)}
+                  onImport={() => handleShowImport('poster')}
+                />
+              </div>
             </section>
             <section>
               <h2 className="detail-section-title">Seasons</h2>
