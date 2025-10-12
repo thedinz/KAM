@@ -689,22 +689,8 @@ main {
   align-items: start;
 }
 
-.asset-card-grid--show {
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  justify-items: center;
-}
-
-.asset-card-grid--show .asset-card {
-  width: 100%;
-  max-width: 200px;
-}
-
-.asset-card-grid--show.season-grid {
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-}
-
-.asset-card-grid--show.season-grid .asset-card {
-  max-width: 240px;
+.asset-card-grid--seasons {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }
 
 .asset-card {
