@@ -258,7 +258,7 @@ npm install
 npm run build
 ```
 
-Only the shared assets (`app/web/fallback.png` and `app/web/show-react.html`) are tracked in Git.
+Only the shared asset (`app/web/fallback.png`) is tracked in Git.
 The compiled bundle (`app/web/index.html` and `app/web/spa-assets/`) is generated at build-time.
 Re-run `npm run build` whenever frontend dependencies change or before packaging/deploying the app.
 
