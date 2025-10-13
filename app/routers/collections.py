@@ -9,6 +9,7 @@ from ..services.assets import sanitize_name
 from ..services.resolve import find_existing_dir_in_base
 
 import os
+import re
 from pathlib import Path
 from urllib.parse import quote
 
@@ -73,6 +74,16 @@ def _collections_root_for_library(library: str | None) -> Path | None:
     return None
 
 
+def _strip_year_suffix(name: str) -> str:
+    """Return *name* without a trailing ``(YYYY)`` suffix."""
+
+    if not name:
+        return ""
+
+    stripped = re.sub(r"\s*\(\d{4}\)\s*$", "", name).strip()
+    return stripped
+
+
 def _local_poster_for_title(
     title: str, base: Path | None
 ) -> Tuple[Path | None, str | None, str, bool]:
@@ -81,11 +92,24 @@ def _local_poster_for_title(
     if not title or not base:
         return None, None, "", False
 
-    resolved = find_existing_dir_in_base(str(base), title)
-    if not resolved:
-        sanitized = sanitize_name(title)
-        if sanitized and sanitized != title:
-            resolved = find_existing_dir_in_base(str(base), sanitized)
+    candidates: List[str] = []
+    for candidate in (
+        title,
+        sanitize_name(title),
+        _strip_year_suffix(title),
+        _strip_year_suffix(sanitize_name(title)),
+    ):
+        candidate = (candidate or "").strip()
+        if not candidate:
+            continue
+        if candidate not in candidates:
+            candidates.append(candidate)
+
+    resolved: str | None = None
+    for candidate in candidates:
+        resolved = find_existing_dir_in_base(str(base), candidate)
+        if resolved:
+            break
 
     if not resolved:
         return None, None, "", False
