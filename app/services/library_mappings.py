@@ -177,11 +177,14 @@ def get_library_map() -> Dict[str, Dict[str, Any]]:
     return lookup
 
 
-def get_library_entry(library: str) -> Optional[Dict[str, Any]]:
+def get_library_entry(library: str | None) -> Optional[Dict[str, Any]]:
     """Return the mapping entry for *library* (if any)."""
-    if not library:
+    if library is None:
         return None
-    mapping = get_library_map().get(str(library))
+    key = str(library).strip()
+    if not key:
+        return None
+    mapping = get_library_map().get(key)
     return dict(mapping) if mapping else None
 
 
