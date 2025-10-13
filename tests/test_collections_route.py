@@ -52,6 +52,8 @@ def collections_env(tmp_path, monkeypatch):
     override_folder.mkdir()
     sanitized_only_folder = movies_section_root / "Mission Impossible Collection"
     sanitized_only_folder.mkdir()
+    yearless_folder = movies_section_root / "Franchise Collection"
+    yearless_folder.mkdir()
 
     settings_module = importlib.reload(importlib.import_module("app.services.settings"))
     settings_module.set_settings_path(str(tmp_path / "settings.json"))
@@ -100,6 +102,7 @@ def collections_env(tmp_path, monkeypatch):
             _DummyCollection("My Cool Collection", 1),
             _DummyCollection("Missing Assets", 2),
             _DummyCollection("Mission: Impossible Collection", 3),
+            _DummyCollection("Franchise Collection (2024)", 4),
         ],
     )]
 
@@ -128,6 +131,8 @@ def collections_env_without_mapping(tmp_path, monkeypatch):
     ready_folder.mkdir(parents=True)
     sanitized_only_folder = collections_root / "Mission Impossible Collection"
     sanitized_only_folder.mkdir()
+    yearless_folder = collections_root / "Franchise Collection"
+    yearless_folder.mkdir()
 
     settings_module = importlib.reload(importlib.import_module("app.services.settings"))
     settings_module.set_settings_path(str(tmp_path / "settings.json"))
@@ -167,6 +172,7 @@ def collections_env_without_mapping(tmp_path, monkeypatch):
             _DummyCollection("My Cool Collection", 1),
             _DummyCollection("Missing Assets", 2),
             _DummyCollection("Mission: Impossible Collection", 3),
+            _DummyCollection("Franchise Collection (2024)", 4),
         ],
     )]
 
@@ -198,6 +204,10 @@ def test_collections_route_marks_asset_readiness(collections_env):
 
     sanitized = items["Mission: Impossible Collection"]
     assert sanitized["assetReady"] is True
+
+    yearless = items["Franchise Collection (2024)"]
+    assert yearless["assetReady"] is True
+    assert yearless["folderName"] == "Franchise Collection"
     assert sanitized["folderName"] == "Mission Impossible Collection"
     assert sanitized["library"] == "Movies"
 
@@ -216,6 +226,10 @@ def test_collections_route_falls_back_to_env_path(collections_env_without_mappin
 
     missing = items["Missing Assets"]
     assert missing["assetReady"] is False
+
+    yearless = items["Franchise Collection (2024)"]
+    assert yearless["assetReady"] is True
+    assert yearless["folderName"] == "Franchise Collection"
 
 
 INDEX_HTML = ROOT / "app" / "web" / "index.html"
