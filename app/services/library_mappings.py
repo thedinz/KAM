@@ -24,6 +24,89 @@ _CACHE: Optional[List[Dict[str, Any]]] = None
 _LOCK = threading.Lock()
 
 
+def _normalize_env_path(value: Any) -> str:
+    """Return a normalized absolute path for environment-derived values."""
+
+    if value in (None, ""):
+        return ""
+    text = str(value).strip()
+    if not text:
+        return ""
+    normalized = os.path.normpath(text)
+    if normalized in (".", ""):
+        return ""
+    return normalized.replace("\\", "/")
+
+
+def _compute_expected_assets_root() -> str:
+    """Determine the container assets root using current environment hints."""
+
+    for key in ("KAM_ASSETS_ROOT", "ASSETS_ROOT"):
+        candidate = _normalize_env_path(os.environ.get(key))
+        if candidate:
+            return candidate
+
+    collections_root = _normalize_env_path(os.environ.get("COLLECTIONS_ROOT"))
+    if collections_root:
+        parent = _normalize_env_path(os.path.dirname(collections_root))
+        if parent:
+            return parent
+
+    return "/assets"
+
+
+def _compute_legacy_roots(expected_root: str) -> List[str]:
+    """Return possible legacy assets roots that should be remapped."""
+
+    legacy_candidates = []
+    for key in ("KAM_LEGACY_ASSETS_ROOT", "LEGACY_ASSETS_ROOT"):
+        candidate = _normalize_env_path(os.environ.get(key))
+        if candidate and candidate not in legacy_candidates:
+            legacy_candidates.append(candidate)
+
+    for default in ("/app", "/app/assets"):
+        normalized = _normalize_env_path(default)
+        if normalized and normalized not in legacy_candidates:
+            legacy_candidates.append(normalized)
+
+    # Never treat the expected root as legacy even if hints include it.
+    filtered = [root for root in legacy_candidates if root and root != expected_root]
+    filtered.sort(key=len, reverse=True)
+    return filtered
+
+
+_EXPECTED_ASSETS_ROOT = _compute_expected_assets_root()
+_LEGACY_ASSETS_ROOTS = _compute_legacy_roots(_EXPECTED_ASSETS_ROOT)
+
+
+def _remap_legacy_root(path: str) -> str:
+    """Rebase legacy asset paths onto the expected assets root."""
+
+    if not path:
+        return path
+
+    expected = _EXPECTED_ASSETS_ROOT
+    if not expected:
+        return path
+
+    normalized_expected = expected.rstrip("/") or "/"
+
+    for legacy_root in _LEGACY_ASSETS_ROOTS:
+        if not legacy_root:
+            continue
+        legacy_normalized = legacy_root.rstrip("/") or "/"
+        if path == legacy_normalized:
+            return normalized_expected
+        legacy_prefix = legacy_normalized + "/"
+        if path.startswith(legacy_prefix):
+            suffix = path[len(legacy_normalized) :]
+            combined = normalized_expected + suffix
+            remapped = os.path.normpath(combined).replace("\\", "/")
+            return remapped
+
+    return path
+
+
 def normalize_path(value: Any) -> str:
     """Return a trimmed, normalized path or an empty string."""
     if value in (None, ""):
@@ -34,7 +117,16 @@ def normalize_path(value: Any) -> str:
     normalized = os.path.normpath(text)
     if normalized in (".", ""):
         return ""
-    return normalized.replace("\\", "/")
+    normalized = normalized.replace("\\", "/")
+
+    if _LEGACY_ASSETS_ROOTS:
+        remapped = _remap_legacy_root(normalized)
+        if remapped != normalized:
+            normalized = remapped
+            if normalized in (".", ""):
+                return ""
+
+    return normalized
 
 
 def normalize_collection_sections(value: Any) -> List[Dict[str, str]]:

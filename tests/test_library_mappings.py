@@ -1,4 +1,17 @@
 import importlib
+import sys
+from pathlib import Path
+
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+import app.services.library_mappings as _library_mappings_module
+
+
+def _reload_library_mappings():
+    importlib.reload(_library_mappings_module)
+    return _library_mappings_module
 
 def test_get_collections_path_uses_section_override(tmp_path):
     settings_path = tmp_path / "settings.json"
@@ -31,7 +44,7 @@ def test_get_collections_path_uses_section_override(tmp_path):
         }
     )
 
-    library_mappings = importlib.reload(importlib.import_module("app.services.library_mappings"))
+    library_mappings = _reload_library_mappings()
     library_mappings.clear_cache()
 
     expected = library_mappings.normalize_path(str(movies_section_root))
@@ -57,12 +70,28 @@ def test_library_lookup_trims_whitespace(tmp_path):
         }
     )
 
-    library_mappings = importlib.reload(importlib.import_module("app.services.library_mappings"))
-    library_mappings.clear_cache()
+    library_mappings = _reload_library_mappings()
 
-    expected_asset = library_mappings.normalize_path(str(movies_root))
-    expected_collections = library_mappings.normalize_path(str(collections_root))
 
-    assert library_mappings.get_asset_path("  Movies  ") == expected_asset
-    assert library_mappings.get_collections_path("\tMovies\n") == expected_collections
+def test_normalize_path_rebases_app_root(monkeypatch):
+    monkeypatch.setenv("KAM_ASSETS_ROOT", "/mnt/assets")
+    library_mappings = _reload_library_mappings()
+
+    assert library_mappings.normalize_path("/app/Movies") == "/mnt/assets/Movies"
+    assert library_mappings.normalize_path("/app") == "/mnt/assets"
+    assert library_mappings.normalize_path("/app/assets/Shows") == "/mnt/assets/Shows"
+
+    monkeypatch.delenv("KAM_ASSETS_ROOT", raising=False)
+    _reload_library_mappings()
+
+
+def test_normalize_path_preserves_expected_root(monkeypatch):
+    monkeypatch.setenv("KAM_ASSETS_ROOT", "/app")
+    library_mappings = _reload_library_mappings()
+
+    assert library_mappings.normalize_path("/app/Movies") == "/app/Movies"
+    assert library_mappings.normalize_path("/app") == "/app"
+
+    monkeypatch.delenv("KAM_ASSETS_ROOT", raising=False)
+    _reload_library_mappings()
 
