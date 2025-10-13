@@ -84,6 +84,16 @@ def _strip_year_suffix(name: str) -> str:
     return stripped
 
 
+def _strip_collection_suffix(name: str) -> str:
+    """Return *name* without a trailing "collection" style suffix."""
+
+    if not name:
+        return ""
+
+    stripped = re.sub(r"\s+(collection|collections|collection set)\s*$", "", name, flags=re.IGNORECASE).strip()
+    return stripped
+
+
 def _local_poster_for_title(
     title: str, base: Path | None
 ) -> Tuple[Path | None, str | None, str, bool]:
@@ -93,17 +103,25 @@ def _local_poster_for_title(
         return None, None, "", False
 
     candidates: List[str] = []
-    for candidate in (
+    base_candidates = (
         title,
         sanitize_name(title),
         _strip_year_suffix(title),
         _strip_year_suffix(sanitize_name(title)),
-    ):
+    )
+
+    for candidate in base_candidates:
         candidate = (candidate or "").strip()
         if not candidate:
             continue
         if candidate not in candidates:
             candidates.append(candidate)
+
+    # Collections commonly have folders without the "Collection" suffix.
+    for candidate in list(candidates):
+        stripped = _strip_collection_suffix(candidate)
+        if stripped and stripped not in candidates:
+            candidates.append(stripped)
 
     resolved: str | None = None
     for candidate in candidates:
