@@ -14,10 +14,10 @@ _ILLEGAL_CTRL = re.compile(r"[\u0000-\u001F]")
 _STOPWORDS = {"the", "a", "an", "movie", "film"}
 
 
-def _tokenize_title(s: str) -> list[str]:
-    """Normalize *s* into lowercase word tokens without punctuation."""
+def _tokenize_title(s: str) -> tuple[list[str], Optional[str]]:
+    """Return normalized tokens and an optional trailing year."""
     if not s:
-        return []
+        return [], None
 
     normalized = unicodedata.normalize("NFKC", str(s))
     normalized = _ILLEGAL_CTRL.sub("", normalized)
@@ -26,12 +26,16 @@ def _tokenize_title(s: str) -> list[str]:
     tokens = [tok for tok in re.split(r"[^0-9a-z]+", normalized) if tok]
     tokens = [tok for tok in tokens if tok not in _STOPWORDS]
 
+    year: Optional[str] = None
+
     # Drop trailing year tokens such as "(2023)" so alternate title suffixes
     # compare on the meaningful words only.
     while tokens and re.fullmatch(r"\d{4}", tokens[-1]):
+        if year is None:
+            year = tokens[-1]
         tokens.pop()
 
-    return tokens
+    return tokens, year
 
 
 def _normalize(s: str) -> str:
@@ -40,33 +44,57 @@ def _normalize(s: str) -> str:
     and common stop-words/year suffixes so
     'Batman: The Caped Crusader (2023)' == 'Batman Caped Crusader'.
     """
-    return "".join(_tokenize_title(s))
+    tokens, _ = _tokenize_title(s)
+    return "".join(tokens)
+
+
+def _normalize_with_year(s: str) -> tuple[str, Optional[str]]:
+    """Return the normalized comparison key and trailing year (if any)."""
+
+    tokens, year = _tokenize_title(s)
+    return "".join(tokens), year
 
 def _best_match(candidates, want: str) -> Optional[str]:
     """Return the candidate whose normalized name equals the normalized target."""
-    want_key = _normalize(want)
+    want_key, want_year = _normalize_with_year(want)
     if not want_key:
         return None
 
-    normalized_candidates = [(c, _normalize(c)) for c in candidates]
+    normalized_candidates = [
+        (c, *_normalize_with_year(c)) for c in candidates if c
+    ]
 
-    # exact normalized match first
-    for original, normalized in normalized_candidates:
-        if normalized == want_key:
-            return original
+    # 1) Exact normalized+year match first to prevent cross-year collisions.
+    if want_year:
+        for original, normalized, year in normalized_candidates:
+            if normalized == want_key and year and year == want_year:
+                return original
+
+    # 2) Exact normalized match with compatible years.
+    for original, normalized, year in normalized_candidates:
+        if normalized != want_key:
+            continue
+        if want_year and year and year != want_year:
+            continue
+        return original
 
     # relaxed: startswith normalized (helps with extra year suffixes, etc.)
-    for original, normalized in normalized_candidates:
-        if normalized.startswith(want_key) or want_key.startswith(normalized):
-            return original
+    for original, normalized, year in normalized_candidates:
+        if not (normalized.startswith(want_key) or want_key.startswith(normalized)):
+            continue
+        if want_year and year and year != want_year:
+            continue
+        return original
 
     # fallback: closest fuzzy match when the similarity is very high
     best_score = 0.0
     best_candidate = None
     best_base_ratio = 0.0
     best_lengths: tuple[int, int] = (0, 0)
-    for original, normalized in normalized_candidates:
+    for original, normalized, year in normalized_candidates:
         if not normalized:
+            continue
+        if want_year and year and year != want_year:
             continue
         matcher = SequenceMatcher(a=normalized, b=want_key)
         base_ratio = matcher.ratio()
