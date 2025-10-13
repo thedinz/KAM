@@ -63,11 +63,14 @@ def _best_match(candidates, want: str) -> Optional[str]:
     # fallback: closest fuzzy match when the similarity is very high
     best_score = 0.0
     best_candidate = None
+    best_base_ratio = 0.0
+    best_lengths: tuple[int, int] = (0, 0)
     for original, normalized in normalized_candidates:
         if not normalized:
             continue
         matcher = SequenceMatcher(a=normalized, b=want_key)
-        score = matcher.ratio()
+        base_ratio = matcher.ratio()
+        score = base_ratio
 
         # Evaluate how much of the shorter string aligns contiguously with the
         # longer one to tolerate small insertions like "Extended Edition".
@@ -87,9 +90,28 @@ def _best_match(candidates, want: str) -> Optional[str]:
         if score > best_score:
             best_score = score
             best_candidate = original
+            best_base_ratio = base_ratio
+            best_lengths = (len_norm, len_want)
 
     # require a conservative minimum similarity to avoid unrelated matches
-    if best_score >= 0.86:
+    if best_candidate and best_score >= 0.86:
+        len_norm, len_want = best_lengths
+        shorter = min(len_norm, len_want)
+        longer = max(len_norm, len_want)
+
+        # Disallow fuzzy matches for extremely short titles or wildly
+        # different-length strings so "It" does not match
+        # "In association with Marvel".
+        if shorter < 4:
+            return None
+        if longer and shorter and (longer / shorter) > 2.5:
+            return None
+
+        # Also require the overall ratio to be reasonably close; this ensures
+        # we only accept near-identical titles.
+        if best_base_ratio < 0.7:
+            return None
+
         return best_candidate
     return None
 
