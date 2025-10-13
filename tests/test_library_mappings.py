@@ -37,3 +37,32 @@ def test_get_collections_path_uses_section_override(tmp_path):
     expected = library_mappings.normalize_path(str(movies_section_root))
     assert library_mappings.get_collections_path("Movies") == expected
 
+
+def test_library_lookup_trims_whitespace(tmp_path):
+    settings_path = tmp_path / "settings.json"
+    movies_root = tmp_path / "assets" / "Movies"
+    collections_root = tmp_path / "collections" / "Movies"
+
+    settings_module = importlib.reload(importlib.import_module("app.services.settings"))
+    settings_module.set_settings_path(str(settings_path))
+    settings_module.save_settings(
+        {
+            "libraryMappings": [
+                {
+                    "library": "Movies",
+                    "assetPath": str(movies_root),
+                    "collectionsPath": str(collections_root),
+                }
+            ]
+        }
+    )
+
+    library_mappings = importlib.reload(importlib.import_module("app.services.library_mappings"))
+    library_mappings.clear_cache()
+
+    expected_asset = library_mappings.normalize_path(str(movies_root))
+    expected_collections = library_mappings.normalize_path(str(collections_root))
+
+    assert library_mappings.get_asset_path("  Movies  ") == expected_asset
+    assert library_mappings.get_collections_path("\tMovies\n") == expected_collections
+
