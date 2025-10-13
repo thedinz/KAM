@@ -7,6 +7,7 @@ from ..services import plex_settings
 from ..services import library_mappings as library_mappings_service
 from ..services.assets import sanitize_name
 from ..services.resolve import find_existing_dir_in_base
+from ..services.sanitize import kometa_sanitize_folder
 
 import os
 import re
@@ -47,29 +48,49 @@ def _first_existing_background(dir_path: Path) -> Path | None:
     return None
 
 def _collections_root_for_library(library: str | None) -> Path | None:
-    """Return the best-known collections root for *library*.
+    """Return the best-known collections root for *library*."""
 
-    The settings UI may omit explicit ``collectionsPath`` entries when they
-    match the general Kometa layout. In that case fall back to the legacy
-    ``COLLECTIONS_ROOT`` environment variable or the library's ``assetPath`` so
-    we can still detect ready folders.
-    """
+    library = (library or "").strip() or None
 
-    path = library_mappings_service.get_collections_path(library)
+    direct = library_mappings_service.get_collections_path(library)
+    direct_path = Path(direct) if direct else None
 
-    if not path:
-        env_root = os.environ.get("COLLECTIONS_ROOT")
-        if env_root:
-            path = env_root
+    base_candidates: List[Path] = []
+    if direct_path:
+        base_candidates.append(direct_path)
 
-    if not path and library:
-        # Library-specific fallback – older installs only configured assetPath.
+    env_root = os.environ.get("COLLECTIONS_ROOT")
+    if env_root:
+        base_candidates.append(Path(env_root))
+
+    global_root = library_mappings_service.get_collections_path(None)
+    if global_root:
+        candidate = Path(global_root)
+        if candidate not in base_candidates:
+            base_candidates.append(candidate)
+
+    for base in base_candidates:
+        if library:
+            search_names = {
+                library,
+                sanitize_name(library),
+                kometa_sanitize_folder(library),
+            }
+            for name in filter(None, search_names):
+                candidate = base / name
+                if candidate.is_dir():
+                    return candidate
+
+        if base.is_dir():
+            return base
+
+    if direct_path:
+        return direct_path
+
+    if library:
         fallback_asset = library_mappings_service.get_asset_path(library)
         if fallback_asset:
-            path = fallback_asset
-
-    if path:
-        return Path(path)
+            return Path(fallback_asset)
 
     return None
 
