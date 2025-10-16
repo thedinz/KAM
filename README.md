@@ -7,6 +7,7 @@ KAM is a small web app that makes Kometa/Plex artwork management painless. It le
 * **Replace** existing `poster.*`, `background.*`, or `SeasonNN.*` in the correct asset folder
 * Keep everything in the **same structure Kometa expects**
 * Provide a simple web UI with a **fallback** image to quickly spot missing artwork
+* Let you **exclude** specific movies, shows, or collections from KAM until you re-include them
 
 ---
 
@@ -157,6 +158,20 @@ COLLECTIONS_ROOT=/assets/Collections
 
 # Plex credentials and library mappings are now configured through the web UI.
 ```
+
+---
+
+## Managing exclusions
+
+Sometimes you may want to temporarily hide a title from KAM—for example, if you are
+still preparing artwork or simply do not want it managed. Any movie, TV show, or
+collection can be excluded directly from its detail page. The item will disappear from
+library searches and lists while excluded.
+
+To re-include an item, visit **Settings → Exclusions**. The page lists every excluded
+item, including its library and type, with a one-click **Include** button that restores
+it immediately. You can also refresh the list from the same screen if you make changes
+from another browser tab.
 
 ---
 

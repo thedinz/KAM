@@ -3,7 +3,7 @@ import os
 from typing import Optional, Tuple
 from urllib.parse import quote
 
-from ..services import folder_overrides
+from ..services import exclusions, folder_overrides
 from ..services import plex_settings
 from ..services import library_mappings as library_mappings_service
 from ..services.plex import get_plex
@@ -143,6 +143,7 @@ def movie(library: str = Query(...), ratingKey: int = Query(...)):
         "posterUrlPlex": f"{plex_url}/library/metadata/{int(ratingKey)}/thumb?X-Plex-Token={plex_token}",
         "backgroundUrl": background_url_local,
         "backgroundUrlPlex": f"{plex_url}/library/metadata/{int(ratingKey)}/art?X-Plex-Token={plex_token}",
+        "excluded": exclusions.is_excluded(library, str(ratingKey)),
     }
 
 @router.get("/api/movie", summary="Single movie details (alias)")

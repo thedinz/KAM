@@ -6,7 +6,7 @@ import requests
 import xml.etree.ElementTree as ET
 from urllib.parse import quote
 
-from ..services import folder_overrides
+from ..services import exclusions, folder_overrides
 from ..services import plex_settings
 from ..services.resolve import resolve_existing_dir_or_422
 
@@ -194,6 +194,9 @@ def list_items(
     enriched: List[Dict[str, Any]] = []
     not_ready_count = 0
     for it in rows:
+        if exclusions.is_excluded(library, it["ratingKey"]):
+            continue
+
         override = folder_overrides.get_override(library, it["ratingKey"])
 
         folder_name, folder_path = _resolve_override_folder(library, override)
