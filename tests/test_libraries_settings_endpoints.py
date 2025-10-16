@@ -307,9 +307,15 @@ def test_asset_folders_unmapped_library(tmp_path, monkeypatch):
     resp = client.get("/api/asset-folders", params={"library": "Documentaries"})
     assert resp.status_code == 200
     data = resp.json()
+    assert data["root"] == str(assets_root)
+    assert data["parent"] == ""
+    assert data["parentAbsolute"] == str(assets_root)
     names = {item["name"] for item in data["items"]}
     assert "LooseAssets" in names
     assert "Movies" in names
+    items_by_name = {item["name"]: item for item in data["items"]}
+    assert items_by_name["LooseAssets"]["absolutePath"] == str(loose)
+    assert items_by_name["Movies"]["absolutePath"] == str(movies_dir)
 
     nested = client.get(
         "/api/asset-folders",
@@ -317,8 +323,13 @@ def test_asset_folders_unmapped_library(tmp_path, monkeypatch):
     )
     assert nested.status_code == 200
     nested_data = nested.json()
+    assert nested_data["root"] == str(assets_root)
+    assert nested_data["parent"] == "LooseAssets"
+    assert nested_data["parentAbsolute"] == str(loose)
     nested_names = {item["name"] for item in nested_data["items"]}
     assert "Clips" in nested_names
+    nested_items = {item["name"]: item for item in nested_data["items"]}
+    assert nested_items["Clips"]["absolutePath"] == str(loose / "Clips")
 
     invalid = client.get(
         "/api/asset-folders", params={"library": "Documentaries", "parent": "../"}
@@ -371,8 +382,13 @@ def test_asset_folders_settings_mode_allows_assets_root(tmp_path, monkeypatch):
     restricted = client.get("/api/asset-folders", params={"library": "Movies"})
     assert restricted.status_code == 200
     restricted_data = restricted.json()
+    assert restricted_data["root"] == str(featured_dir)
+    assert restricted_data["parent"] == ""
+    assert restricted_data["parentAbsolute"] == str(featured_dir)
     restricted_names = {item["name"] for item in restricted_data["items"]}
     assert restricted_names == {"Posters"}
+    restricted_item = restricted_data["items"][0]
+    assert restricted_item["absolutePath"] == str(posters_dir)
 
     # Settings browsing exposes the assets root even when a mapping exists
     settings_root = client.get(
@@ -381,8 +397,14 @@ def test_asset_folders_settings_mode_allows_assets_root(tmp_path, monkeypatch):
     )
     assert settings_root.status_code == 200
     root_payload = settings_root.json()
+    assert root_payload["root"] == str(assets_root)
+    assert root_payload["parent"] == ""
+    assert root_payload["parentAbsolute"] == str(assets_root)
     root_names = {item["name"] for item in root_payload["items"]}
     assert {"Movies", "LooseAssets"}.issubset(root_names)
+    root_items = {item["name"]: item for item in root_payload["items"]}
+    assert root_items["Movies"]["absolutePath"] == str(movies_dir)
+    assert root_items["LooseAssets"]["absolutePath"] == str(loose_dir)
 
     # Absolute parent paths resolve relative to the assets root in settings mode
     absolute = client.get(
@@ -396,8 +418,12 @@ def test_asset_folders_settings_mode_allows_assets_root(tmp_path, monkeypatch):
     assert absolute.status_code == 200
     absolute_payload = absolute.json()
     assert absolute_payload["parent"] == "Movies/Featured"
+    assert absolute_payload["root"] == str(assets_root)
+    assert absolute_payload["parentAbsolute"] == str(featured_dir)
     absolute_names = {item["name"] for item in absolute_payload["items"]}
     assert "Posters" in absolute_names
+    absolute_item = absolute_payload["items"][0]
+    assert absolute_item["absolutePath"] == str(posters_dir)
 
     # Relative navigation within settings mode continues to work
     relative = client.get(
@@ -411,8 +437,12 @@ def test_asset_folders_settings_mode_allows_assets_root(tmp_path, monkeypatch):
     assert relative.status_code == 200
     relative_payload = relative.json()
     assert relative_payload["parent"] == "Movies"
+    assert relative_payload["root"] == str(assets_root)
+    assert relative_payload["parentAbsolute"] == str(movies_dir)
     relative_names = {item["name"] for item in relative_payload["items"]}
     assert "Featured" in relative_names
+    relative_item = relative_payload["items"][0]
+    assert relative_item["absolutePath"] == str(featured_dir)
 
     outside = client.get(
         "/api/asset-folders",
@@ -473,8 +503,12 @@ def test_asset_folders_allow_beyond_mapping(tmp_path, monkeypatch):
     assert scoped.status_code == 200
     scoped_payload = scoped.json()
     assert scoped_payload["parent"] == "Movies/Featured"
+    assert scoped_payload["root"] == str(assets_root)
+    assert scoped_payload["parentAbsolute"] == str(featured_dir)
     scoped_names = {item["name"] for item in scoped_payload["items"]}
     assert scoped_names == {"Posters"}
+    scoped_item = scoped_payload["items"][0]
+    assert scoped_item["absolutePath"] == str(posters_dir)
 
     ascended = client.get(
         "/api/asset-folders",
@@ -487,8 +521,12 @@ def test_asset_folders_allow_beyond_mapping(tmp_path, monkeypatch):
     assert ascended.status_code == 200
     ascended_payload = ascended.json()
     assert ascended_payload["parent"] == "Movies"
+    assert ascended_payload["root"] == str(assets_root)
+    assert ascended_payload["parentAbsolute"] == str(movies_dir)
     ascended_names = {item["name"] for item in ascended_payload["items"]}
     assert "Featured" in ascended_names
+    ascended_item = ascended_payload["items"][0]
+    assert ascended_item["absolutePath"] == str(featured_dir)
 
     root_view = client.get(
         "/api/asset-folders",
@@ -501,7 +539,12 @@ def test_asset_folders_allow_beyond_mapping(tmp_path, monkeypatch):
     assert root_view.status_code == 200
     root_payload = root_view.json()
     assert root_payload["parent"] == ""
+    assert root_payload["root"] == str(assets_root)
+    assert root_payload["parentAbsolute"] == str(assets_root)
     root_names = {item["name"] for item in root_payload["items"]}
     assert {"Movies", "LooseAssets"}.issubset(root_names)
+    root_items = {item["name"]: item for item in root_payload["items"]}
+    assert root_items["Movies"]["absolutePath"] == str(movies_dir)
+    assert root_items["LooseAssets"]["absolutePath"] == str(loose_dir)
 
 
