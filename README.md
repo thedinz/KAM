@@ -110,12 +110,14 @@ docker pull ghcr.io/thedinz/kam:latest
 
 ### 2) Run (simple)
 
-Expose KAM on **7171** (mapped to the container's port **8000**) and map your assets:
+Expose KAM on **7171** (mapped to the container's port **8000**) and map your assets
+and configuration storage:
 
 ```bash
 docker run -d \
   --name kam \
   -p 7171:8000 \
+  -v /mnt/user/appdata/kam:/config \
   -v /mnt/user/media/assets:/assets \
   ghcr.io/thedinz/kam:latest
 ```
@@ -134,6 +136,7 @@ services:
     ports:
       - "7171:8000"
     volumes:
+      - /mnt/user/appdata/kam:/config
       - /mnt/user/media/assets:/assets
     restart: unless-stopped
 ```
@@ -161,6 +164,19 @@ COLLECTIONS_ROOT=/assets/Collections
 
 ---
 
+## Persistent configuration
+
+KAM stores UI settings—including Plex credentials, library mappings, and exclusion
+preferences—in `/config/settings.json` inside the container. Bind-mount `/config` to a
+directory on the host (for example, `/mnt/user/appdata/kam`) to persist these values
+across image updates, container recreation, and Unraid upgrades.
+
+> Upgrades from previous versions automatically reuse an existing
+> `/data/settings.json` file if it is present, so your saved settings are retained while
+> migrating to the new `/config` location.
+
+---
+
 ## Managing exclusions
 
 Sometimes you may want to temporarily hide a title from KAM—for example, if you are
@@ -177,7 +193,9 @@ from another browser tab.
 
 ## Unraid setup
 
-Kometa Asset Manager can now be found in the Unraid app store. Simply mount your Kometa asset directory and edit the other easy to understand template variables and GO!
+Kometa Asset Manager can now be found in the Unraid app store. Mount both your Kometa
+asset directory **and** a persistent config directory (e.g., `/mnt/user/appdata/kam ->
+/config`), edit the template variables, and GO!
 
 ---
 
