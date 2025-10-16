@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import ArtworkCard from '../components/ArtworkCard.jsx';
 import { responseErrorMessage, safeJson } from '../utils/api.js';
+import { useTheme } from '../theme/ThemeProvider.jsx';
 
 const MISSING_FOLDER_MESSAGE = 'Create the Kometa asset folder first.';
 
@@ -23,6 +24,8 @@ function ShowDetailPage() {
   const library = rawLibrary ? String(rawLibrary) : '';
   const ratingKey = rawRatingKey ? String(rawRatingKey) : '';
 
+  const { excludeItem, includeItem, isItemExcluded, exclusionsLoading } = useTheme();
+
   const [detail, setDetail] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -32,6 +35,7 @@ function ShowDetailPage() {
     background: createOperation(),
     seasons: {},
   });
+  const [exclusionPending, setExclusionPending] = useState(false);
 
   const backgroundInputRef = useRef(null);
 
@@ -151,6 +155,21 @@ function ShowDetailPage() {
   const folderExists = Boolean(detail?.folderExists);
   const folderName = detail?.folderName || '';
   const effectiveRatingKey = detail?.ratingKey != null ? String(detail.ratingKey) : ratingKey;
+
+  const isExcluded = useMemo(() => {
+    if (detail?.excluded != null) {
+      return Boolean(detail.excluded);
+    }
+    if (!library || !effectiveRatingKey) {
+      return false;
+    }
+    return isItemExcluded(library, effectiveRatingKey);
+  }, [detail, isItemExcluded, library, effectiveRatingKey]);
+
+  const exclusionBusy = exclusionPending || exclusionsLoading;
+
+  const headerTitle = detail?.title || 'Show Details';
+  const headerYear = detail?.year;
 
   useEffect(() => {
     if (!folderExists && backgroundInputRef.current) {
@@ -441,10 +460,46 @@ function ShowDetailPage() {
     [folderExists, library, folderName, effectiveRatingKey, fetchDetails, updateSeasonOperation]
   );
 
+  const handleExclude = useCallback(async () => {
+    if (!library || !effectiveRatingKey) return;
+    setExclusionPending(true);
+    setStatusMessage('Excluding item…');
+    try {
+      await excludeItem({
+        library,
+        ratingKey: effectiveRatingKey,
+        type: 'show',
+        title: detail?.title || headerTitle,
+        year: detail?.year,
+      });
+      setDetail((prev) => (prev ? { ...prev, excluded: true } : prev));
+      setStatusMessage('Item excluded. Restore it from Settings → Exclusions.');
+    } catch (err) {
+      const message = err?.message || 'Failed to exclude item.';
+      setStatusMessage(message);
+    } finally {
+      setExclusionPending(false);
+    }
+  }, [library, effectiveRatingKey, excludeItem, detail, headerTitle]);
+
+  const handleInclude = useCallback(async () => {
+    if (!library || !effectiveRatingKey) return;
+    setExclusionPending(true);
+    setStatusMessage('Including item…');
+    try {
+      await includeItem(library, effectiveRatingKey);
+      setDetail((prev) => (prev ? { ...prev, excluded: false } : prev));
+      setStatusMessage('Item included again.');
+    } catch (err) {
+      const message = err?.message || 'Failed to include item.';
+      setStatusMessage(message);
+    } finally {
+      setExclusionPending(false);
+    }
+  }, [library, effectiveRatingKey, includeItem]);
+
   const backLink = library ? `/libraries?lib=${encodeURIComponent(library)}` : '/libraries';
   const folderDisplay = folderName || 'Not assigned';
-  const headerTitle = detail?.title || 'Show Details';
-  const headerYear = detail?.year;
 
   const handleBackgroundUploadClick = () => {
     if (!folderExists || backgroundBusy) return;
@@ -481,6 +536,22 @@ function ShowDetailPage() {
         <h1>{headerTitle}</h1>
         {headerYear ? <span className="detail-year">({headerYear})</span> : null}
         <span className="detail-header-gap" aria-hidden="true" />
+        <button
+          type="button"
+          className={`detail-action-button ${
+            isExcluded ? 'detail-action-button--include' : 'detail-action-button--exclude'
+          }`}
+          onClick={isExcluded ? handleInclude : handleExclude}
+          disabled={exclusionBusy || !library || !effectiveRatingKey}
+        >
+          {exclusionBusy
+            ? isExcluded
+              ? 'Including…'
+              : 'Excluding…'
+            : isExcluded
+            ? 'Include item'
+            : 'Exclude item'}
+        </button>
         <Link className="settings-link" to="/settings" aria-label="Open settings">
           <span aria-hidden="true">⚙</span>
         </Link>

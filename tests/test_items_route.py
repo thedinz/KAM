@@ -1,5 +1,6 @@
 import importlib
 import importlib
+import importlib
 from types import SimpleNamespace
 
 import pytest
@@ -15,9 +16,11 @@ def items_env(tmp_path, monkeypatch):
     (folder / "poster.jpg").write_bytes(b"poster")
 
     overrides_path = tmp_path / "overrides.json"
+    exclusions_path = tmp_path / "exclusions.json"
 
     monkeypatch.setenv("KAM_ASSETS_ROOT", str(assets_root))
     monkeypatch.setenv("KAM_FOLDER_OVERRIDES_PATH", str(overrides_path))
+    monkeypatch.setenv("KAM_EXCLUSIONS_PATH", str(exclusions_path))
 
     settings_module = importlib.reload(importlib.import_module("app.services.settings"))
     settings_module.set_settings_path(str(tmp_path / "settings.json"))
@@ -43,6 +46,9 @@ def items_env(tmp_path, monkeypatch):
 
     folder_overrides = importlib.reload(importlib.import_module("app.services.folder_overrides"))
     folder_overrides.set_storage_path(str(overrides_path))
+
+    exclusions_module = importlib.reload(importlib.import_module("app.services.exclusions"))
+    exclusions_module.set_storage_path(str(exclusions_path))
 
     items_router = importlib.reload(importlib.import_module("app.routers.items"))
 
@@ -85,6 +91,7 @@ def items_env(tmp_path, monkeypatch):
         call=_call,
         folder_overrides=folder_overrides,
         folder=folder,
+        exclusions=exclusions_module,
     )
 
 
@@ -120,3 +127,12 @@ def test_items_route_reports_not_ready_count_and_filters(items_env):
     assert filtered["total_count"] == 1
     assert len(filtered["items"]) == 1
     assert filtered["items"][0]["ratingKey"] == "22"
+
+
+def test_items_route_omits_excluded_items(items_env):
+    items_env.exclusions.add_exclusion("Movies", "22", "movie", title="Needs Assets")
+
+    data = items_env.call()
+
+    keys = {it["ratingKey"] for it in data["items"]}
+    assert "22" not in keys
