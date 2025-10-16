@@ -56,16 +56,23 @@ function SettingsPage() {
     refreshLibraries,
     setLibraryMappings,
     getLibraryMapping,
+    exclusions,
+    exclusionsLoading,
+    exclusionsError,
+    refreshExclusions,
+    includeItem,
   } = useTheme();
 
   const [status, setStatus] = useState(null);
   const [selectedLibraries, setSelectedLibraries] = useState([]);
   const [modalState, setModalState] = useState(initialModalState);
+  const [includingKeys, setIncludingKeys] = useState([]);
   const selectAllRef = useRef(null);
   const previousLoadingFlagsRef = useRef({
     loading,
     saving,
     librariesLoading,
+    exclusionsLoading,
   });
 
   const savedPlexUrl = savedSettings?.plexUrl || '';
@@ -85,6 +92,12 @@ function SettingsPage() {
       setStatus({ type: 'error', message: librariesError });
     }
   }, [librariesError]);
+
+  useEffect(() => {
+    if (exclusionsError) {
+      setStatus({ type: 'error', message: exclusionsError });
+    }
+  }, [exclusionsError]);
 
   const showInfoStatus = useCallback(
     (message) => {
@@ -117,11 +130,18 @@ function SettingsPage() {
   }, [librariesLoading, showInfoStatus]);
 
   useEffect(() => {
+    if (exclusionsLoading) {
+      showInfoStatus('Loading exclusions…');
+    }
+  }, [exclusionsLoading, showInfoStatus]);
+
+  useEffect(() => {
     const previous = previousLoadingFlagsRef.current;
     const infoMessages = [
       ['loading', loading, 'Loading settings…'],
       ['saving', saving, 'Saving settings…'],
       ['librariesLoading', librariesLoading, 'Loading Plex libraries…'],
+      ['exclusionsLoading', exclusionsLoading, 'Loading exclusions…'],
     ];
 
     const shouldClearInfo =
@@ -139,11 +159,14 @@ function SettingsPage() {
       loading,
       saving,
       librariesLoading,
+      exclusionsLoading,
     };
-  }, [loading, saving, librariesLoading, status]);
+  }, [loading, saving, librariesLoading, exclusionsLoading, status]);
 
   const busy = loading || saving;
   const combinedBusy = busy || librariesLoading;
+
+  const includingSet = useMemo(() => new Set(includingKeys), [includingKeys]);
 
   const libraryRows = useMemo(() => {
     if (!hasPlexCredentials) {
@@ -309,6 +332,31 @@ function SettingsPage() {
 
   const libraryRowMap = useMemo(() => new Map(libraryRows.map((row) => [row.name, row])), [libraryRows]);
 
+  const exclusionRows = useMemo(() => {
+    return (Array.isArray(exclusions) ? exclusions : []).map((entry) => {
+      const typeValue = typeof entry?.type === 'string' ? entry.type.toLowerCase() : '';
+      const typeLabel =
+        typeValue === 'movie' ? 'Movie' : typeValue === 'show' ? 'TV Show' : 'Collection';
+      const titleParts = [];
+      const titleText = typeof entry?.title === 'string' ? entry.title.trim() : '';
+      if (titleText) {
+        titleParts.push(titleText);
+      }
+      const yearNumber = entry?.year != null ? Number(entry.year) : null;
+      if (Number.isFinite(yearNumber) && yearNumber > 0) {
+        titleParts.push(`(${Math.trunc(yearNumber)})`);
+      }
+      const displayTitle = titleParts.length
+        ? titleParts.join(' ')
+        : titleText || entry?.ratingKey || 'Excluded item';
+      return {
+        ...entry,
+        typeLabel,
+        displayTitle,
+      };
+    });
+  }, [exclusions]);
+
   useEffect(() => {
     if (!selectAllRef.current) return;
     const total = libraryRows.length;
@@ -329,6 +377,13 @@ function SettingsPage() {
       return filtered;
     });
   }, [libraryRows]);
+
+  useEffect(() => {
+    const activeKeys = new Set(
+      exclusionRows.map((row) => `${row.library}:::${row.ratingKey}`)
+    );
+    setIncludingKeys((prev) => prev.filter((key) => activeKeys.has(key)));
+  }, [exclusionRows]);
 
   const mappingsDirty = useMemo(() => {
     if (libraryMappingsDirty != null) {
@@ -398,6 +453,22 @@ function SettingsPage() {
   const closeModal = () => {
     setModalState(initialModalState);
   };
+
+  const markIncluding = useCallback((key, active) => {
+    setIncludingKeys((prev) => {
+      if (active) {
+        if (prev.includes(key)) {
+          return prev;
+        }
+        return [...prev, key];
+      }
+      if (!prev.length) {
+        return prev;
+      }
+      const next = prev.filter((item) => item !== key);
+      return next.length === prev.length ? prev : next;
+    });
+  }, []);
 
   const openModal = (librariesList, intent, defaultTarget, options = {}) => {
     const uniqueNames = Array.from(new Set(librariesList.map((name) => normalizeText(name)).filter(Boolean)));
@@ -653,6 +724,42 @@ function SettingsPage() {
       setStatus({ type: 'error', message: err?.message || 'Failed to refresh libraries.' });
     }
   };
+
+  const handleRefreshExclusions = useCallback(async () => {
+    setStatus(null);
+    try {
+      await refreshExclusions();
+      setStatus({ type: 'success', message: 'Exclusions refreshed.' });
+    } catch (err) {
+      setStatus({
+        type: 'error',
+        message: err?.message || 'Failed to refresh exclusions.',
+      });
+    }
+  }, [refreshExclusions]);
+
+  const handleIncludeExclusion = useCallback(
+    async (entry) => {
+      if (!entry) return;
+      const key = `${entry.library}:::${entry.ratingKey}`;
+      markIncluding(key, true);
+      setStatus(null);
+      try {
+        await includeItem(entry.library, entry.ratingKey);
+        const label = entry.title || entry.displayTitle || entry.ratingKey;
+        setStatus({
+          type: 'success',
+          message: `${label} included again.`,
+        });
+      } catch (err) {
+        const message = err?.message || 'Failed to include item.';
+        setStatus({ type: 'error', message });
+      } finally {
+        markIncluding(key, false);
+      }
+    },
+    [includeItem, markIncluding]
+  );
 
   const performSave = useCallback(async () => {
     if (!isDirty) {
@@ -958,6 +1065,64 @@ function SettingsPage() {
               </table>
             ) : null}
           </div>
+        </section>
+
+        <section className="settings-card">
+          <h2>Exclusions</h2>
+          <p className="settings-description">
+            Items excluded from KAM appear here. Include them to show them again in library views.
+          </p>
+          <div className="settings-exclusions-toolbar">
+            <button
+              type="button"
+              onClick={handleRefreshExclusions}
+              disabled={exclusionsLoading}
+            >
+              {exclusionsLoading ? 'Refreshing…' : 'Refresh exclusions'}
+            </button>
+          </div>
+          {exclusionsLoading ? (
+            <div className="settings-exclusions-empty" role="status">
+              Loading exclusions…
+            </div>
+          ) : exclusionRows.length === 0 ? (
+            <div className="settings-exclusions-empty">
+              No items are currently excluded.
+            </div>
+          ) : (
+            <ul className="settings-exclusions-list">
+              {exclusionRows.map((row) => {
+                const key = `${row.library}:::${row.ratingKey}`;
+                const buttonBusy = includingSet.has(key);
+                return (
+                  <li key={key} className="settings-exclusion-row">
+                    <div className="settings-exclusion-meta">
+                      <div className="settings-exclusion-title">{row.displayTitle}</div>
+                      <div className="settings-exclusion-details">
+                        <span className="settings-exclusion-type">{row.typeLabel}</span>
+                        <span aria-hidden="true">•</span>
+                        <span>{row.library}</span>
+                        {row.year ? (
+                          <>
+                            <span aria-hidden="true">•</span>
+                            <span>{row.year}</span>
+                          </>
+                        ) : null}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn-secondary settings-exclusion-include"
+                      onClick={() => handleIncludeExclusion(row)}
+                      disabled={buttonBusy || exclusionsLoading}
+                    >
+                      {buttonBusy ? 'Including…' : 'Include'}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </section>
 
         {status ? (

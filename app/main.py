@@ -26,6 +26,7 @@ app.add_middleware(
 from .routers import (
     assets,
     collections,
+    exclusions,
     fileproxy,
     imports,
     items,
@@ -40,6 +41,7 @@ from .routers import (
 app.include_router(libraries.router)
 app.include_router(items.router)
 app.include_router(collections.router)
+app.include_router(exclusions.router)
 app.include_router(upload.router)
 app.include_router(tv.router)
 app.include_router(movie.router)

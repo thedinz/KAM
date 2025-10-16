@@ -39,6 +39,9 @@ const ThemeContext = createContext({
   settingsDirty: false,
   libraryMappingsDirty: false,
   hasUnsavedChanges: false,
+  exclusions: [],
+  exclusionsLoading: false,
+  exclusionsError: null,
   applyTheme: () => {},
   updateSettings: () => {},
   saveSettings: async () => ({ theme: 'dark', plexUrl: '', plexToken: '' }),
@@ -53,6 +56,10 @@ const ThemeContext = createContext({
   getLibraryMapping: () => null,
   revertLibraryMapping: () => {},
   revertLibraryMappings: () => {},
+  refreshExclusions: async () => [],
+  excludeItem: async () => ({}),
+  includeItem: async () => {},
+  isItemExcluded: () => false,
 });
 
 const normalizeTheme = (value) => (value === 'light' ? 'light' : 'dark');
@@ -131,6 +138,71 @@ const sanitizeSettings = (raw = {}) => {
   };
 };
 
+const normalizeExclusionType = (value) => {
+  if (value == null) return null;
+  const text = String(value).trim().toLowerCase();
+  if (!text) return null;
+  if (['series', 'tv', 'tv show', 'television'].includes(text)) return 'show';
+  if (text.startsWith('collection')) return 'collection';
+  if (text === 'movie' || text === 'show' || text === 'collection') return text;
+  return null;
+};
+
+const normalizeExclusionText = (value) => {
+  if (value == null) return '';
+  const text = String(value).trim();
+  return text;
+};
+
+const normalizeExclusionYear = (value) => {
+  if (value == null) return null;
+  const num = Number(value);
+  if (!Number.isFinite(num)) return null;
+  const intVal = Math.trunc(num);
+  if (intVal <= 0) return null;
+  return intVal;
+};
+
+const sanitizeExclusionEntry = (entry) => {
+  if (!entry || typeof entry !== 'object') return null;
+  const library = normalizeExclusionText(entry.library);
+  const ratingKey = normalizeExclusionText(entry.ratingKey);
+  const type = normalizeExclusionType(entry.type);
+  if (!library || !ratingKey || !type) return null;
+  const title = normalizeExclusionText(entry.title);
+  const year = normalizeExclusionYear(entry.year);
+  const excludedAt = normalizeExclusionText(entry.excludedAt);
+  const result = {
+    library,
+    ratingKey,
+    type,
+  };
+  if (title) result.title = title;
+  if (year) result.year = year;
+  if (excludedAt) result.excludedAt = excludedAt;
+  return result;
+};
+
+const sanitizeExclusions = (raw) => {
+  if (!raw) return [];
+  const entries = Array.isArray(raw) ? raw : [];
+  const sanitized = entries
+    .map((entry) => sanitizeExclusionEntry(entry))
+    .filter(Boolean);
+  sanitized.sort((a, b) => {
+    const libraryCompare = a.library.localeCompare(b.library);
+    if (libraryCompare !== 0) return libraryCompare;
+    const typeCompare = a.type.localeCompare(b.type);
+    if (typeCompare !== 0) return typeCompare;
+    const titleA = a.title || '';
+    const titleB = b.title || '';
+    const titleCompare = titleA.localeCompare(titleB);
+    if (titleCompare !== 0) return titleCompare;
+    return a.ratingKey.localeCompare(b.ratingKey);
+  });
+  return sanitized;
+};
+
 export function ThemeProvider({ children }) {
   const [settings, setSettings] = useState(() => sanitizeSettings());
   const [savedSettings, setSavedSettings] = useState(() => sanitizeSettings());
@@ -140,7 +212,17 @@ export function ThemeProvider({ children }) {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
+  const [exclusions, setExclusions] = useState(() => sanitizeExclusions());
+  const [exclusionsLoading, setExclusionsLoading] = useState(false);
+  const [exclusionsError, setExclusionsError] = useState(null);
   const isMountedRef = useRef(true);
+
+  const getExclusionKey = useCallback((libraryName, ratingKeyValue) => {
+    const libraryText = normalizeExclusionText(libraryName);
+    const ratingKeyText = normalizeExclusionText(ratingKeyValue);
+    if (!libraryText || !ratingKeyText) return '';
+    return `${libraryText}:::${ratingKeyText}`;
+  }, []);
 
   const applyLibraryMappingUpdates = useCallback((libraryNames, updates) => {
     const names = Array.isArray(libraryNames) ? libraryNames : [libraryNames];
@@ -199,6 +281,137 @@ export function ThemeProvider({ children }) {
       isMountedRef.current = false;
     };
   }, []);
+
+  const refreshExclusions = useCallback(async () => {
+    if (isMountedRef.current) {
+      setExclusionsLoading(true);
+      setExclusionsError(null);
+    }
+    try {
+      const response = await fetch('/api/exclusions');
+      const data = await safeJson(response);
+      if (!response.ok) {
+        throw new Error(responseErrorMessage(response, data));
+      }
+      const next = sanitizeExclusions(data);
+      if (isMountedRef.current) {
+        setExclusions(next);
+      }
+      return next;
+    } catch (err) {
+      const message = err?.message || 'Failed to load exclusions';
+      if (isMountedRef.current) {
+        setExclusions([]);
+        setExclusionsError(message);
+      }
+      throw new Error(message);
+    } finally {
+      if (isMountedRef.current) {
+        setExclusionsLoading(false);
+      }
+    }
+  }, []);
+
+  const excludeItem = useCallback(
+    async (payload) => {
+      const base = payload && typeof payload === 'object' ? payload : {};
+      const libraryName = normalizeExclusionText(base.library);
+      const ratingKeyValue = normalizeExclusionText(base.ratingKey);
+      const typeValue = normalizeExclusionType(base.type);
+      if (!libraryName || !ratingKeyValue || !typeValue) {
+        throw new Error('Library, rating key, and type are required to exclude an item.');
+      }
+      const body = {
+        library: libraryName,
+        ratingKey: ratingKeyValue,
+        type: typeValue,
+      };
+      const titleValue = normalizeExclusionText(base.title);
+      if (titleValue) {
+        body.title = titleValue;
+      }
+      const yearValue = normalizeExclusionYear(base.year);
+      if (yearValue) {
+        body.year = yearValue;
+      }
+
+      const response = await fetch('/api/exclusions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await safeJson(response);
+      if (!response.ok) {
+        throw new Error(responseErrorMessage(response, data));
+      }
+
+      const stored = sanitizeExclusionEntry(data) || {
+        library: libraryName,
+        ratingKey: ratingKeyValue,
+        type: typeValue,
+      };
+      if (isMountedRef.current) {
+        setExclusions((prev) => {
+          const list = Array.isArray(prev) ? [...prev] : [];
+          const key = getExclusionKey(libraryName, ratingKeyValue);
+          const index = list.findIndex(
+            (entry) => getExclusionKey(entry.library, entry.ratingKey) === key
+          );
+          if (index >= 0) {
+            list[index] = stored;
+          } else {
+            list.push(stored);
+          }
+          return sanitizeExclusions(list);
+        });
+        setExclusionsError(null);
+      }
+
+      return stored;
+    },
+    [getExclusionKey]
+  );
+
+  const includeItem = useCallback(
+    async (libraryName, ratingKeyValue) => {
+      const libraryText = normalizeExclusionText(libraryName);
+      const ratingKeyText = normalizeExclusionText(ratingKeyValue);
+      if (!libraryText || !ratingKeyText) {
+        throw new Error('Library and rating key are required to include an item.');
+      }
+      const url = `/api/exclusions/${encodeURIComponent(libraryText)}/${encodeURIComponent(
+        ratingKeyText
+      )}`;
+      const response = await fetch(url, { method: 'DELETE' });
+      const data = await safeJson(response);
+      if (!response.ok) {
+        throw new Error(responseErrorMessage(response, data));
+      }
+      if (isMountedRef.current) {
+        setExclusions((prev) => {
+          const list = Array.isArray(prev) ? prev : [];
+          const key = getExclusionKey(libraryText, ratingKeyText);
+          const next = list.filter(
+            (entry) => getExclusionKey(entry.library, entry.ratingKey) !== key
+          );
+          return sanitizeExclusions(next);
+        });
+        setExclusionsError(null);
+      }
+    },
+    [getExclusionKey]
+  );
+
+  const isItemExcluded = useCallback(
+    (libraryName, ratingKeyValue) => {
+      const key = getExclusionKey(libraryName, ratingKeyValue);
+      if (!key) return false;
+      return exclusions.some(
+        (entry) => getExclusionKey(entry.library, entry.ratingKey) === key
+      );
+    },
+    [exclusions, getExclusionKey]
+  );
 
   useEffect(() => {
     if (typeof document === 'undefined') return;
@@ -337,6 +550,10 @@ export function ThemeProvider({ children }) {
   useEffect(() => {
     refreshLibraries().catch(() => {});
   }, [refreshLibraries]);
+
+  useEffect(() => {
+    refreshExclusions().catch(() => {});
+  }, [refreshExclusions]);
 
   const revertSettings = useCallback(() => {
     if (!isMountedRef.current) return;
@@ -478,6 +695,9 @@ export function ThemeProvider({ children }) {
       settingsDirty,
       libraryMappingsDirty,
       hasUnsavedChanges,
+      exclusions,
+      exclusionsLoading,
+      exclusionsError,
       applyTheme,
       updateSettings,
       saveSettings,
@@ -492,6 +712,10 @@ export function ThemeProvider({ children }) {
       getLibraryMapping,
       revertLibraryMapping,
       revertLibraryMappings,
+      refreshExclusions,
+      excludeItem,
+      includeItem,
+      isItemExcluded,
     }),
     [
       settings,
@@ -505,6 +729,9 @@ export function ThemeProvider({ children }) {
       settingsDirty,
       libraryMappingsDirty,
       hasUnsavedChanges,
+      exclusions,
+      exclusionsLoading,
+      exclusionsError,
       applyTheme,
       updateSettings,
       saveSettings,
@@ -519,6 +746,10 @@ export function ThemeProvider({ children }) {
       getLibraryMapping,
       revertLibraryMapping,
       revertLibraryMappings,
+      refreshExclusions,
+      excludeItem,
+      includeItem,
+      isItemExcluded,
     ]
   );
 
