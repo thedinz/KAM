@@ -13,14 +13,47 @@ logger = logging.getLogger(__name__)
 
 _LOCK = threading.Lock()
 
-_DEF_BASE = (
-    os.environ.get("KAM_STATE_ROOT")
-    or os.environ.get("KAM_CONFIG_ROOT")
-    or "/data"
-)
-_STORAGE_PATH = os.environ.get("KAM_EXCLUSIONS_PATH") or os.path.join(
-    _DEF_BASE, "exclusions.json"
-)
+
+def _iter_default_base_candidates() -> List[str]:
+    """Return a prioritized list of storage roots to consider."""
+
+    raw_candidates = (
+        os.environ.get("KAM_STATE_ROOT"),
+        os.environ.get("KAM_CONFIG_ROOT"),
+        "/config",
+        "/data",
+    )
+    candidates: List[str] = []
+    for value in raw_candidates:
+        if not value:
+            continue
+        normalized = str(value).strip()
+        if normalized:
+            candidates.append(normalized)
+    if not candidates:
+        candidates.append("/config")
+    return candidates
+
+
+def _resolve_initial_storage_path() -> str:
+    """Determine the initial exclusions storage path with backwards compatibility."""
+
+    env_override = os.environ.get("KAM_EXCLUSIONS_PATH")
+    if env_override and env_override.strip():
+        return env_override
+
+    candidates = _iter_default_base_candidates()
+    filename = "exclusions.json"
+
+    for base in candidates:
+        candidate_path = os.path.join(base, filename)
+        if os.path.isfile(candidate_path):
+            return candidate_path
+
+    return os.path.join(candidates[0], filename)
+
+
+_STORAGE_PATH = _resolve_initial_storage_path()
 
 _VALID_TYPES = {"movie", "show", "collection"}
 
