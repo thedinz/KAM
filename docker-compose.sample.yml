@@ -9,4 +9,5 @@ services:
     env_file:
       - .env
     volumes:
+      - /mnt/user/appdata/kam:/config:rw
       - /mnt/user/media/assets:/assets:rw
