@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, Query
 from math import ceil
 from typing import Optional, List, Dict, Any, Tuple
 from ..services.plex import get_plex
-from ..services import folder_overrides
+from ..services import exclusions, folder_overrides
 from ..services import plex_settings
 from ..services import library_mappings as library_mappings_service
 from ..services.assets import sanitize_name
@@ -275,6 +275,7 @@ def collection(
         "backgroundUrl": background_local,
         "backgroundUrlLocal": background_local,
         "backgroundUrlPlex": background_plex,
+        "excluded": exclusions.is_excluded(library, str(ratingKey)),
     }
 
 

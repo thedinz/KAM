@@ -6,7 +6,7 @@ import requests
 import xml.etree.ElementTree as ET
 from urllib.parse import quote
 
-from ..services import folder_overrides
+from ..services import exclusions, folder_overrides
 from ..services import plex_settings
 from ..services.resolve import resolve_existing_dir_or_422
 from ..services.sanitize import kometa_sanitize_folder
@@ -207,4 +207,5 @@ def get_show(library: str = Query(...), ratingKey: str = Query(...)):
         "plexPosterUrl": plex_poster_url,
         "plexBackgroundUrl": plex_background_url,
         "seasons": seasons_out,
+        "excluded": exclusions.is_excluded(library, ratingKey),
     }

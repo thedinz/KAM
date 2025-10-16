@@ -20,6 +20,7 @@ describe('SettingsPage', () => {
   it('renders plex libraries and enables bulk actions after selection', () => {
     const mockSave = vi.fn().mockResolvedValue({});
     const mockRefresh = vi.fn().mockResolvedValue([]);
+    const mockRefreshExclusions = vi.fn().mockResolvedValue([]);
     useTheme.mockReturnValue({
       theme: 'dark',
       savedTheme: 'dark',
@@ -49,6 +50,13 @@ describe('SettingsPage', () => {
       revertSettings: vi.fn(),
       refreshLibraries: mockRefresh,
       setLibraryMappings: vi.fn(),
+      exclusions: [],
+      exclusionsLoading: false,
+      exclusionsError: null,
+      refreshExclusions: mockRefreshExclusions,
+      includeItem: vi.fn(),
+      excludeItem: vi.fn(),
+      isItemExcluded: vi.fn(() => false),
     });
 
     render(
@@ -98,6 +106,13 @@ describe('SettingsPage', () => {
       revertSettings: vi.fn(),
       refreshLibraries: vi.fn(),
       setLibraryMappings: vi.fn(),
+      exclusions: [],
+      exclusionsLoading: false,
+      exclusionsError: null,
+      refreshExclusions: vi.fn(),
+      includeItem: vi.fn(),
+      excludeItem: vi.fn(),
+      isItemExcluded: vi.fn(() => false),
     });
 
     render(
@@ -111,6 +126,7 @@ describe('SettingsPage', () => {
 
   it('invokes refreshLibraries and reports success when refreshing', async () => {
     const mockRefresh = vi.fn().mockResolvedValue([]);
+    const mockRefreshExclusions = vi.fn().mockResolvedValue([]);
     useTheme.mockReturnValue({
       theme: 'dark',
       savedTheme: 'dark',
@@ -133,6 +149,13 @@ describe('SettingsPage', () => {
       revertSettings: vi.fn(),
       refreshLibraries: mockRefresh,
       setLibraryMappings: vi.fn(),
+      exclusions: [],
+      exclusionsLoading: false,
+      exclusionsError: null,
+      refreshExclusions: mockRefreshExclusions,
+      includeItem: vi.fn(),
+      excludeItem: vi.fn(),
+      isItemExcluded: vi.fn(() => false),
     });
 
     render(
@@ -150,6 +173,7 @@ describe('SettingsPage', () => {
 
   it('prevents refreshing libraries when Plex credentials are missing', async () => {
     const mockRefresh = vi.fn();
+    const mockRefreshExclusions = vi.fn();
     useTheme.mockReturnValue({
       theme: 'dark',
       savedTheme: 'dark',
@@ -174,6 +198,13 @@ describe('SettingsPage', () => {
       revertSettings: vi.fn(),
       refreshLibraries: mockRefresh,
       setLibraryMappings: vi.fn(),
+      exclusions: [],
+      exclusionsLoading: false,
+      exclusionsError: null,
+      refreshExclusions: mockRefreshExclusions,
+      includeItem: vi.fn(),
+      excludeItem: vi.fn(),
+      isItemExcluded: vi.fn(() => false),
     });
 
     render(
@@ -218,6 +249,13 @@ describe('SettingsPage', () => {
       revertSettings: vi.fn(),
       refreshLibraries: vi.fn(),
       setLibraryMappings: vi.fn(),
+      exclusions: [],
+      exclusionsLoading: false,
+      exclusionsError: null,
+      refreshExclusions: vi.fn(),
+      includeItem: vi.fn(),
+      excludeItem: vi.fn(),
+      isItemExcluded: vi.fn(() => false),
     });
 
     render(
