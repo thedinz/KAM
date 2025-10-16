@@ -194,6 +194,7 @@ def list_asset_folders(
                     "name": child.name,
                     "isDir": child.is_dir(),
                     "path": rel_path,
+                    "absolutePath": str(child),
                 })
         else:
             for child in sorted(current.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower())):
@@ -202,6 +203,7 @@ def list_asset_folders(
                     "name": child.name,
                     "isDir": child.is_dir(),
                     "path": rel_path,
+                    "absolutePath": str(child),
                 })
     except PermissionError:
         raise HTTPException(status_code=403, detail="Permission denied")
@@ -210,7 +212,9 @@ def list_asset_folders(
 
     return {
         "library": library,
+        "root": str(root),
         "parent": parent_rel,
+        "parentAbsolute": str(current),
         "items": items,
     }
 

@@ -1,14 +1,42 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+const normalizeFsPath = (value) => {
+  if (value == null) return '';
+  const text = String(value).trim();
+  if (!text) return '';
+  return text.replace(/\\+/g, '/');
+};
+
+const isAbsoluteFsPath = (value) => {
+  const text = normalizeFsPath(value);
+  if (!text) return false;
+  return /^(?:[a-zA-Z]:\/|\/\/|\/)/.test(text);
+};
+
+const joinFsPath = (base, child) => {
+  const childPath = normalizeFsPath(child);
+  if (!childPath) return normalizeFsPath(base);
+  if (isAbsoluteFsPath(childPath)) return childPath;
+  const basePath = normalizeFsPath(base);
+  if (!basePath) return childPath;
+  const trimmedBase = basePath.replace(/\/+$/, '');
+  const trimmedChild = childPath.replace(/^\/+/, '');
+  return trimmedBase ? `${trimmedBase}/${trimmedChild}` : trimmedChild;
+};
+
 function normalizeFolderEntry(entry) {
   if (!entry) return null;
   const name = entry.name || entry.folderName || entry.label || entry.title;
   if (!name) return null;
   const path = entry.path ?? entry.folderPath ?? '';
+  const absoluteCandidate =
+    entry.absolutePath ?? entry.absolute_path ?? entry.fullPath ?? entry.absolute ?? '';
+  const absolutePath = normalizeFsPath(absoluteCandidate);
   const hasChildren = entry.hasChildren !== false && entry.isDir !== false;
   return {
     name: String(name),
     path: path === '' ? '' : String(path),
+    absolutePath,
     hasChildren,
   };
 }
@@ -64,6 +92,8 @@ function FolderFinderModal({
   const isSettingsMode = context === 'settings';
   const normalizedInitialAsset = normalizeText(initialAssetPath);
   const normalizedInitialCollections = normalizeText(initialCollectionsPath);
+  const normalizedInitialAssetAbsolute = normalizeFsPath(initialAssetPath);
+  const normalizedInitialCollectionsAbsolute = normalizeFsPath(initialCollectionsPath);
   const effectiveLibrary = useMemo(() => {
     if (isSettingsMode) {
       const provided = normalizeText(library);
@@ -88,12 +118,16 @@ function FolderFinderModal({
   const [isSearching, setIsSearching] = useState(false);
   const [assigning, setAssigning] = useState(false);
   const [currentFolder, setCurrentFolder] = useState('');
+  const [rootPath, setRootPath] = useState('');
+  const [currentAbsolute, setCurrentAbsolute] = useState('');
   const debounceRef = useRef();
   const isAtRootRef = useRef(false);
 
   useEffect(() => {
     if (!isOpen) {
       setCurrentFolder('');
+      setRootPath('');
+      setCurrentAbsolute('');
       return;
     }
     setSearchInput('');
@@ -192,9 +226,22 @@ function FolderFinderModal({
           : [];
         const normalized = list.map(normalizeFolderEntry).filter(Boolean);
         setResults(normalized);
+        let effectiveRoot = normalizeFsPath(data?.root);
+        setRootPath((prev) => {
+          if (effectiveRoot) {
+            return effectiveRoot;
+          }
+          effectiveRoot = prev || '';
+          return prev || '';
+        });
         const parentPath = typeof data?.parent === 'string' ? data.parent : path ?? '';
+        const parentAbsoluteRaw =
+          data?.parentAbsolute ??
+          (parentPath ? joinFsPath(effectiveRoot, parentPath) : effectiveRoot);
+        const normalizedParentAbsolute = normalizeFsPath(parentAbsoluteRaw);
         isAtRootRef.current = !parentPath;
         setCurrentPath(parentPath || '');
+        setCurrentAbsolute(normalizedParentAbsolute);
       } catch (err) {
         setResults([]);
         setError(err.message || 'Failed to load folders');
@@ -266,6 +313,15 @@ function FolderFinderModal({
 
   const displayCurrentFolder = currentFolder ? currentFolder : '';
 
+  const resolveEntryAbsolute = (entry) => {
+    if (!entry) return '';
+    const explicit = normalizeFsPath(entry.absolutePath);
+    if (explicit) return explicit;
+    const relative = normalizeFsPath(entry.path);
+    if (!relative) return '';
+    return joinFsPath(rootPath, relative);
+  };
+
   const handleSelect = (entry) => {
     if (isSettingsMode) {
       if (target === 'collections') {
@@ -295,10 +351,11 @@ function FolderFinderModal({
   };
 
   const resolvedAssetPath =
-    assetSelection?.path ||
-    normalizedInitialAsset ||
-    (isSettingsMode ? normalizeText(currentPath) : '');
-  const resolvedCollectionsPath = collectionsSelection?.path || normalizedInitialCollections;
+    resolveEntryAbsolute(assetSelection) ||
+    normalizedInitialAssetAbsolute ||
+    (isSettingsMode ? normalizeFsPath(currentAbsolute) : '');
+  const resolvedCollectionsPath =
+    resolveEntryAbsolute(collectionsSelection) || normalizedInitialCollectionsAbsolute;
   const requireAsset = settingsIntent !== 'collections';
   const requireCollections = settingsIntent === 'collections';
   const canConfirmSettings =
@@ -334,11 +391,15 @@ function FolderFinderModal({
       const payload = {};
       if (requireAsset) {
         payload.assetPath = resolvedAssetPath;
-      } else if (assetSelection?.path) {
-        payload.assetPath = assetSelection.path;
+      } else {
+        const optionalAsset = resolveEntryAbsolute(assetSelection);
+        if (optionalAsset) {
+          payload.assetPath = optionalAsset;
+        }
       }
-      if (collectionsSelection?.path) {
-        payload.collectionsPath = collectionsSelection.path;
+      const collectionsAbsolute = resolveEntryAbsolute(collectionsSelection);
+      if (collectionsAbsolute) {
+        payload.collectionsPath = collectionsAbsolute;
       } else if (requireCollections && resolvedCollectionsPath) {
         payload.collectionsPath = resolvedCollectionsPath;
       }

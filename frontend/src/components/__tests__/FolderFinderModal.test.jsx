@@ -8,10 +8,17 @@ describe('FolderFinderModal - settings mode', () => {
       ok: true,
       json: () =>
         Promise.resolve({
+          root: '/assets',
           parent: '',
+          parentAbsolute: '/assets',
           items: [
-            { name: 'Assets', path: 'Assets', isDir: true },
-            { name: 'Collections', path: 'Collections', isDir: true },
+            { name: 'Assets', path: 'Assets', absolutePath: '/assets/Assets', isDir: true },
+            {
+              name: 'Collections',
+              path: 'Collections',
+              absolutePath: '/assets/Collections',
+              isDir: true,
+            },
           ],
         }),
     });
@@ -45,7 +52,7 @@ describe('FolderFinderModal - settings mode', () => {
 
     await waitFor(() => {
       expect(onSettingsConfirm).toHaveBeenCalledWith(
-        { assetPath: 'Assets' },
+        { assetPath: '/assets/Assets' },
         expect.objectContaining({ assetSelection: expect.any(Object) })
       );
     });
@@ -56,11 +63,17 @@ describe('FolderFinderModal - settings mode', () => {
 
     const payloads = {
       '': {
+        root: '/assets',
         parent: '',
-        items: [{ name: 'Kids TV', path: 'Kids TV', isDir: true }],
+        parentAbsolute: '/assets',
+        items: [
+          { name: 'Kids TV', path: 'Kids TV', absolutePath: '/assets/Kids TV', isDir: true },
+        ],
       },
       'Kids TV': {
+        root: '/assets',
         parent: 'Kids TV',
+        parentAbsolute: '/assets/Kids TV',
         items: [],
       },
     };
@@ -110,7 +123,7 @@ describe('FolderFinderModal - settings mode', () => {
 
     await waitFor(() => {
       expect(onSettingsConfirm).toHaveBeenCalledWith(
-        { assetPath: 'Kids TV' },
+        { assetPath: '/assets/Kids TV' },
         expect.objectContaining({ assetSelection: null, collectionsSelection: null })
       );
     });
@@ -147,7 +160,7 @@ describe('FolderFinderModal - settings mode', () => {
 
     await waitFor(() => {
       expect(onSettingsConfirm).toHaveBeenCalledWith(
-        { assetPath: 'Assets', collectionsPath: 'Collections' },
+        { assetPath: '/assets/Assets', collectionsPath: '/assets/Collections' },
         expect.objectContaining({
           assetSelection: expect.any(Object),
           collectionsSelection: expect.any(Object),
@@ -164,26 +177,57 @@ describe('FolderFinderModal - settings mode', () => {
       });
 
     const payloads = {
-      '': { parent: '', items: [
-        { name: 'Movies', path: 'Movies', isDir: true },
-        { name: 'LooseAssets', path: 'LooseAssets', isDir: true },
-      ] },
-      '/assets/Movies/Featured': {
-        parent: 'Movies/Featured',
+      '': {
+        root: '/assets',
+        parent: '',
+        parentAbsolute: '/assets',
         items: [
-          { name: 'Posters', path: 'Movies/Featured/Posters', isDir: true },
+          { name: 'Movies', path: 'Movies', absolutePath: '/assets/Movies', isDir: true },
+          {
+            name: 'LooseAssets',
+            path: 'LooseAssets',
+            absolutePath: '/assets/LooseAssets',
+            isDir: true,
+          },
+        ],
+      },
+      '/assets/Movies/Featured': {
+        root: '/assets',
+        parent: 'Movies/Featured',
+        parentAbsolute: '/assets/Movies/Featured',
+        items: [
+          {
+            name: 'Posters',
+            path: 'Movies/Featured/Posters',
+            absolutePath: '/assets/Movies/Featured/Posters',
+            isDir: true,
+          },
         ],
       },
       'Movies/Featured': {
+        root: '/assets',
         parent: 'Movies/Featured',
+        parentAbsolute: '/assets/Movies/Featured',
         items: [
-          { name: 'Posters', path: 'Movies/Featured/Posters', isDir: true },
+          {
+            name: 'Posters',
+            path: 'Movies/Featured/Posters',
+            absolutePath: '/assets/Movies/Featured/Posters',
+            isDir: true,
+          },
         ],
       },
       Movies: {
+        root: '/assets',
         parent: 'Movies',
+        parentAbsolute: '/assets/Movies',
         items: [
-          { name: 'Featured', path: 'Movies/Featured', isDir: true },
+          {
+            name: 'Featured',
+            path: 'Movies/Featured',
+            absolutePath: '/assets/Movies/Featured',
+            isDir: true,
+          },
         ],
       },
     };
