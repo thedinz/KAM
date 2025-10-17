@@ -1,9 +1,15 @@
 import importlib
 import json
+import sys
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
+
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 
 
 @pytest.fixture
@@ -23,6 +29,9 @@ def overrides_env(tmp_path, monkeypatch):
     loose_dir = assets_root / "LooseAssets"
     loose_dir.mkdir()
     (loose_dir / "Clips").mkdir()
+
+    documentaries_dir = assets_root / "Documentaries"
+    documentaries_folder = documentaries_dir / "Nature Wonders"
 
     overrides_path = tmp_path / "overrides.json"
 
@@ -59,6 +68,9 @@ def overrides_env(tmp_path, monkeypatch):
         movies_dir=movies_dir,
         collections_dir=collections_dir,
         loose_dir=loose_dir,
+        documentaries_dir=documentaries_dir,
+        documentaries_folder=documentaries_folder,
+        settings_module=settings_module,
     )
 
 
@@ -92,6 +104,38 @@ def test_assign_folder_endpoint_persists_override(overrides_env):
     assert result["posterExists"] is True
     assert result["backgroundExists"] is True
     assert fo.get_override("Movies", "9") == overrides_env.movie_folder.name
+
+
+def test_assign_folder_creates_library_mapping_when_missing(overrides_env):
+    router = overrides_env.assets_router
+    settings_module = overrides_env.settings_module
+
+    overrides_env.documentaries_folder.mkdir(parents=True)
+
+    settings_module.save_settings(
+        {
+            "libraryMappings": [
+                {
+                    "library": "Movies",
+                    "assetPath": str(overrides_env.movies_dir),
+                    "collectionsPath": str(overrides_env.collections_dir),
+                }
+            ]
+        }
+    )
+
+    payload = router.AssignFolderPayload(
+        library="Documentaries",
+        ratingKey="55",
+        folderName=overrides_env.documentaries_folder.name,
+    )
+    router.assign_folder(payload)
+
+    stored = settings_module.load_settings()
+    mappings = stored.get("libraryMappings", [])
+    doc_entries = [entry for entry in mappings if entry.get("library") == "Documentaries"]
+    assert doc_entries
+    assert doc_entries[0]["assetPath"] == str(overrides_env.documentaries_dir)
 
 
 def test_list_asset_folders(overrides_env):

@@ -9,6 +9,7 @@ from pydantic import BaseModel
 
 from ..services import folder_overrides
 from ..services import library_mappings as library_mappings_service
+from ..services import settings as settings_service
 from ..services.resolve import ASSETS_ROOT, resolve_existing_dir_or_422
 
 router = APIRouter()
@@ -18,6 +19,67 @@ class AssignFolderPayload(BaseModel):
     library: str
     ratingKey: str
     folderName: str
+
+
+def _guess_library_root(library: str, folder_dir: Path) -> Path | None:
+    library_name = (library or "").strip()
+    if not library_name:
+        return None
+
+    library_lower = library_name.casefold()
+
+    try:
+        if folder_dir.name.casefold() == library_lower:
+            return folder_dir
+    except ValueError:
+        return None
+
+    for ancestor in folder_dir.parents:
+        if ancestor.name.casefold() == library_lower:
+            return ancestor
+
+    parent = folder_dir.parent
+    if parent != folder_dir:
+        return parent
+    return None
+
+
+def _ensure_library_mapping(library: str, folder_dir: Path) -> None:
+    if not library or not folder_dir:
+        return
+
+    if library_mappings_service.get_library_entry(library):
+        return
+
+    root = _guess_library_root(library, folder_dir)
+    if not root:
+        return
+
+    normalized = library_mappings_service.normalize_path(str(root))
+    if not normalized:
+        return
+
+    current_mappings = library_mappings_service.load_library_mappings()
+    updated: list[dict] = []
+    library_key = str(library).strip()
+    library_lower = library_key.casefold()
+    replaced = False
+
+    for entry in current_mappings:
+        name = str(entry.get("library") or "").strip()
+        if name.casefold() == library_lower:
+            next_entry = dict(entry)
+            next_entry["library"] = name or library_key
+            next_entry["assetPath"] = normalized
+            updated.append(next_entry)
+            replaced = True
+        else:
+            updated.append(dict(entry))
+
+    if not replaced:
+        updated.append({"library": library_key, "assetPath": normalized})
+
+    settings_service.save_library_mappings(updated)
 
 
 def _library_root(
@@ -226,6 +288,8 @@ def assign_folder(payload: AssignFolderPayload):
     folder_overrides.set_override(payload.library, payload.ratingKey, canonical_folder)
 
     folder_dir = Path(canonical_path)
+    _ensure_library_mapping(payload.library, folder_dir)
+
     poster_exists = (folder_dir / "poster.jpg").is_file()
     background_exists = (folder_dir / "background.jpg").is_file()
 
