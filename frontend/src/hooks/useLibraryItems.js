@@ -21,6 +21,8 @@ export function useLibraryItems({ initialLibrary } = {}) {
     savedPlexUrl = '',
     savedPlexToken = '',
     savedLibraryMappings = [],
+    exclusions = [],
+    isItemExcluded,
   } = useTheme();
   const hasSavedPlexCredentials = Boolean(savedPlexUrl && savedPlexToken);
   const savedCredentialsKey = `${savedPlexUrl}::${savedPlexToken}`;
@@ -44,7 +46,7 @@ export function useLibraryItems({ initialLibrary } = {}) {
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
   const [notReadyCount, setNotReadyCount] = useState(0);
-  const [items, setItems] = useState([]);
+  const [rawItems, setRawItems] = useState([]);
   const [query, setQuery] = useState('');
   const [notReadyOnly, setNotReadyOnlyState] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -139,13 +141,13 @@ export function useLibraryItems({ initialLibrary } = {}) {
           const message = responseErrorMessage(response, data);
           throw new Error(message);
         }
-        setItems(Array.isArray(data?.items) ? data.items : []);
+        setRawItems(Array.isArray(data?.items) ? data.items : []);
         setTotalPages(data?.total_pages || 1);
         setTotalCount(data?.total_count || (Array.isArray(data?.items) ? data.items.length : 0));
         setNotReadyCount(data?.not_ready_count || 0);
       } catch (err) {
         if (err.name === 'AbortError') return;
-        setItems([]);
+        setRawItems([]);
         setTotalPages(1);
         setTotalCount(0);
         setNotReadyCount(0);
@@ -189,6 +191,42 @@ export function useLibraryItems({ initialLibrary } = {}) {
   const reload = useCallback(() => {
     loadItems();
   }, [loadItems]);
+
+  const exclusionsKey = useMemo(() => {
+    if (!Array.isArray(exclusions) || exclusions.length === 0) return '';
+    return exclusions
+      .map((entry) => {
+        if (!entry || typeof entry !== 'object') return '';
+        const libraryName = entry.library != null ? String(entry.library).trim() : '';
+        const typeName = entry.type != null ? String(entry.type).trim() : '';
+        const ratingKeyValue = entry.ratingKey != null ? String(entry.ratingKey).trim() : '';
+        if (!libraryName || !ratingKeyValue) return '';
+        return `${libraryName}:::${typeName}:::${ratingKeyValue}`;
+      })
+      .filter(Boolean)
+      .sort()
+      .join('|');
+  }, [exclusions]);
+
+  const previousExclusionsKeyRef = useRef(exclusionsKey);
+  const handledInitialExclusionsRef = useRef(false);
+
+  useEffect(() => {
+    const previousKey = previousExclusionsKeyRef.current;
+    if (!handledInitialExclusionsRef.current) {
+      handledInitialExclusionsRef.current = true;
+      previousExclusionsKeyRef.current = exclusionsKey;
+      return;
+    }
+    if (previousKey === exclusionsKey) {
+      return;
+    }
+    previousExclusionsKeyRef.current = exclusionsKey;
+    if (!library) {
+      return;
+    }
+    reload();
+  }, [exclusionsKey, reload, library]);
 
   useEffect(() => {
     const previousKey = previousCredentialsKeyRef.current;
@@ -313,7 +351,7 @@ export function useLibraryItems({ initialLibrary } = {}) {
   );
 
   const updateItem = useCallback((ratingKey, updates) => {
-    setItems((prev) =>
+    setRawItems((prev) =>
       prev.map((item) => {
         const key = item?.ratingKey ?? item?.key ?? item?.id;
         if (key == null) return item;
@@ -322,6 +360,52 @@ export function useLibraryItems({ initialLibrary } = {}) {
       })
     );
   }, []);
+
+  const filteredItems = useMemo(() => {
+    if (!Array.isArray(rawItems)) return [];
+    if (typeof isItemExcluded !== 'function') {
+      return rawItems;
+    }
+    if (!Array.isArray(exclusions) || exclusions.length === 0) {
+      return rawItems;
+    }
+    const libraryFallback = typeof library === 'string' ? library.trim() : '';
+    const toText = (value) => (value == null ? '' : String(value).trim());
+    return rawItems.filter((item) => {
+      const ratingKeyRaw = item?.ratingKey ?? item?.key ?? item?.id;
+      if (ratingKeyRaw == null) return true;
+      const ratingKey = toText(ratingKeyRaw);
+      if (!ratingKey) return true;
+      const candidates = [];
+      const possibleLibraries = [
+        item?.library,
+        item?.libraryName,
+        item?.library_name,
+        item?.sourceLibrary,
+        item?.source_library,
+        item?.source,
+        item?.parentLibrary,
+        item?.parent_library,
+        item?.librarySectionTitle,
+        item?.collectionLibrary,
+        item?.collection_library,
+      ];
+      possibleLibraries.forEach((value) => {
+        const text = toText(value);
+        if (text) {
+          candidates.push(text);
+        }
+      });
+      if (libraryFallback) {
+        candidates.push(libraryFallback);
+      }
+      if (!candidates.length) {
+        return true;
+      }
+      const uniqueLibraries = Array.from(new Set(candidates.map((name) => toText(name)).filter(Boolean)));
+      return !uniqueLibraries.some((name) => isItemExcluded(name, ratingKey));
+    });
+  }, [rawItems, library, exclusions, isItemExcluded]);
 
   return useMemo(
     () => ({
@@ -333,7 +417,7 @@ export function useLibraryItems({ initialLibrary } = {}) {
       totalPages,
       totalCount,
       notReadyCount,
-      items,
+      items: filteredItems,
       query,
       setQuery: changeQuery,
       notReadyOnly,
@@ -356,7 +440,7 @@ export function useLibraryItems({ initialLibrary } = {}) {
       totalPages,
       totalCount,
       notReadyCount,
-      items,
+      filteredItems,
       query,
       changeQuery,
       notReadyOnly,
