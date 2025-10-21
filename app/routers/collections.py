@@ -353,6 +353,12 @@ def collections(
                     ) = _local_poster_for_title(title, collections_base)
                     asset_ready = folder_exists
 
+                if rk is not None and library_name and exclusions.is_excluded(
+                    library_name, str(rk)
+                ):
+                    # Skip collections that have been explicitly excluded.
+                    continue
+
                 item = {
                     "ratingKey": rk,
                     "library": library_name,
