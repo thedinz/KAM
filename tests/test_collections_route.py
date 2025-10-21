@@ -2,6 +2,7 @@ import importlib
 import sys
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Optional
 
 import pytest
 
@@ -12,9 +13,20 @@ if str(ROOT) not in sys.path:
 
 
 class _DummyCollection:
-    def __init__(self, title: str, rating_key: int):
+    def __init__(
+        self,
+        title: str,
+        rating_key: int,
+        *,
+        library: Optional[str] = None,
+        year: Optional[int] = None,
+    ):
         self.title = title
         self.ratingKey = rating_key
+        if library is not None:
+            self.librarySectionTitle = library
+        if year is not None:
+            self.year = year
 
 
 class _DummySection:
@@ -37,6 +49,18 @@ class _DummyLibrary:
 class _DummyPlex:
     def __init__(self, sections):
         self.library = _DummyLibrary(sections)
+        self._items = {}
+        for section in sections:
+            for coll in section.collections():
+                try:
+                    key = int(coll.ratingKey)
+                except Exception:
+                    key = coll.ratingKey
+                self._items[key] = coll
+
+    def fetchItem(self, rating_key):
+        key = int(rating_key)
+        return self._items[key]
 
 
 @pytest.fixture
@@ -123,6 +147,7 @@ def collections_env(tmp_path, monkeypatch):
         override_folder=override_folder,
         collections_root=movies_section_root,
         exclusions=exclusions_module,
+        collection=collections_router.collection,
     )
 
 
@@ -311,6 +336,26 @@ def test_collections_route_omits_excluded_items(collections_env):
     assert data["total_count"] == 3
     # Not-ready counts should still reflect the remaining entries.
     assert data["not_ready_count"] == 1
+
+
+def test_collections_route_omits_collections_alias_entries(collections_env):
+    collections_env.exclusions.add_exclusion("Collections", "1", "collection")
+
+    data = collections_env.call()
+    titles = [item["title"] for item in data["items"]]
+
+    assert "My Cool Collection" not in titles
+
+
+def test_collection_detail_uses_source_library_for_exclusions(collections_env):
+    collections_env.exclusions.add_exclusion("Collections", "1", "collection")
+
+    detail = collections_env.collection(
+        library="Collections", ratingKey=1, sourceLibrary="Movies"
+    )
+
+    assert detail["excluded"] is True
+    assert detail["sourceLibrary"] == "Movies"
 
 
 def test_collections_route_handles_nested_collections_root(collections_env_with_nested_root):

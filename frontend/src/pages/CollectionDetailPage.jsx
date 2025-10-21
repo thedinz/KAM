@@ -116,16 +116,22 @@ function CollectionDetailPage() {
   const folderExists = Boolean(detail?.folderExists);
   const folderName = detail?.folderName || '';
   const effectiveRatingKey = detail?.ratingKey != null ? String(detail.ratingKey) : ratingKey;
+  const detailSourceLibrary = detail?.sourceLibrary ? String(detail.sourceLibrary) : '';
+  const exclusionLibrary = useMemo(() => {
+    if (detailSourceLibrary) return detailSourceLibrary;
+    if (sourceLibrary) return sourceLibrary;
+    return library;
+  }, [detailSourceLibrary, sourceLibrary, library]);
 
   const isExcluded = useMemo(() => {
     if (detail?.excluded != null) {
       return Boolean(detail.excluded);
     }
-    if (!library || !effectiveRatingKey) {
+    if (!exclusionLibrary || !effectiveRatingKey) {
       return false;
     }
-    return isItemExcluded(library, effectiveRatingKey);
-  }, [detail, isItemExcluded, library, effectiveRatingKey]);
+    return isItemExcluded(exclusionLibrary, effectiveRatingKey);
+  }, [detail, isItemExcluded, exclusionLibrary, effectiveRatingKey]);
 
   const exclusionBusy = exclusionPending || exclusionsLoading;
 
@@ -259,12 +265,12 @@ function CollectionDetailPage() {
   );
 
   const handleExclude = useCallback(async () => {
-    if (!library || !effectiveRatingKey) return;
+    if (!exclusionLibrary || !effectiveRatingKey) return;
     setExclusionPending(true);
     setStatusMessage('Excluding item…');
     try {
       await excludeItem({
-        library,
+        library: exclusionLibrary,
         ratingKey: effectiveRatingKey,
         type: 'collection',
         title: detail?.title || headerTitle,
@@ -278,14 +284,14 @@ function CollectionDetailPage() {
     } finally {
       setExclusionPending(false);
     }
-  }, [library, effectiveRatingKey, excludeItem, detail, headerTitle]);
+  }, [exclusionLibrary, effectiveRatingKey, excludeItem, detail, headerTitle]);
 
   const handleInclude = useCallback(async () => {
-    if (!library || !effectiveRatingKey) return;
+    if (!exclusionLibrary || !effectiveRatingKey) return;
     setExclusionPending(true);
     setStatusMessage('Including item…');
     try {
-      await includeItem(library, effectiveRatingKey);
+      await includeItem(exclusionLibrary, effectiveRatingKey);
       setDetail((prev) => (prev ? { ...prev, excluded: false } : prev));
       setStatusMessage('Item included again.');
     } catch (err) {
@@ -294,7 +300,7 @@ function CollectionDetailPage() {
     } finally {
       setExclusionPending(false);
     }
-  }, [library, effectiveRatingKey, includeItem]);
+  }, [exclusionLibrary, effectiveRatingKey, includeItem]);
 
   const backLink = library ? `/libraries?lib=${encodeURIComponent(library)}` : '/libraries';
   const folderDisplay = folderName || 'Not assigned';
@@ -316,7 +322,7 @@ function CollectionDetailPage() {
             isExcluded ? 'detail-action-button--include' : 'detail-action-button--exclude'
           }`}
           onClick={isExcluded ? handleInclude : handleExclude}
-          disabled={exclusionBusy || !library || !effectiveRatingKey}
+          disabled={exclusionBusy || !exclusionLibrary || !effectiveRatingKey}
         >
           {exclusionBusy
             ? isExcluded
