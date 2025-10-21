@@ -94,6 +94,10 @@ def collections_env(tmp_path, monkeypatch):
     folder_overrides = importlib.reload(importlib.import_module("app.services.folder_overrides"))
     folder_overrides.set_storage_path(str(overrides_path))
 
+    exclusions_module = importlib.reload(importlib.import_module("app.services.exclusions"))
+    exclusions_path = tmp_path / "exclusions.json"
+    exclusions_module.set_storage_path(str(exclusions_path))
+
     collections_router = importlib.reload(importlib.import_module("app.routers.collections"))
 
     sections = [_DummySection(
@@ -118,6 +122,7 @@ def collections_env(tmp_path, monkeypatch):
         folder_overrides=folder_overrides,
         override_folder=override_folder,
         collections_root=movies_section_root,
+        exclusions=exclusions_module,
     )
 
 
@@ -169,6 +174,10 @@ def collections_env_with_nested_root(tmp_path, monkeypatch):
     folder_overrides = importlib.reload(importlib.import_module("app.services.folder_overrides"))
     folder_overrides.set_storage_path(str(overrides_path))
 
+    exclusions_module = importlib.reload(importlib.import_module("app.services.exclusions"))
+    exclusions_path = tmp_path / "exclusions.json"
+    exclusions_module.set_storage_path(str(exclusions_path))
+
     collections_router = importlib.reload(importlib.import_module("app.routers.collections"))
 
     sections = [_DummySection(
@@ -193,6 +202,7 @@ def collections_env_with_nested_root(tmp_path, monkeypatch):
         folder_overrides=folder_overrides,
         override_folder=override_folder,
         collections_root=nested_root,
+        exclusions=exclusions_module,
     )
 
 
@@ -239,6 +249,10 @@ def collections_env_without_mapping(tmp_path, monkeypatch):
     folder_overrides = importlib.reload(importlib.import_module("app.services.folder_overrides"))
     folder_overrides.set_storage_path(str(overrides_path))
 
+    exclusions_module = importlib.reload(importlib.import_module("app.services.exclusions"))
+    exclusions_path = tmp_path / "exclusions.json"
+    exclusions_module.set_storage_path(str(exclusions_path))
+
     collections_router = importlib.reload(importlib.import_module("app.routers.collections"))
 
     sections = [_DummySection(
@@ -258,7 +272,7 @@ def collections_env_without_mapping(tmp_path, monkeypatch):
         params.update(kwargs)
         return collections_router.collections(**params)
 
-    return SimpleNamespace(call=_call)
+    return SimpleNamespace(call=_call, exclusions=exclusions_module)
 
 
 def test_collections_route_marks_asset_readiness(collections_env):
@@ -285,6 +299,18 @@ def test_collections_route_marks_asset_readiness(collections_env):
     assert yearless["folderName"] == "Franchise Collection"
     assert sanitized["folderName"] == "Mission Impossible Collection"
     assert sanitized["library"] == "Movies"
+
+
+def test_collections_route_omits_excluded_items(collections_env):
+    collections_env.exclusions.add_exclusion("Movies", "1", "collection")
+
+    data = collections_env.call()
+    titles = [item["title"] for item in data["items"]]
+
+    assert "My Cool Collection" not in titles
+    assert data["total_count"] == 3
+    # Not-ready counts should still reflect the remaining entries.
+    assert data["not_ready_count"] == 1
 
 
 def test_collections_route_handles_nested_collections_root(collections_env_with_nested_root):
