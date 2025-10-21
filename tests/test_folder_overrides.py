@@ -12,6 +12,47 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 
+def _reload_overrides_module():
+    return importlib.reload(importlib.import_module("app.services.folder_overrides"))
+
+
+def test_default_storage_path_prefers_existing_file(tmp_path, monkeypatch):
+    state_dir = tmp_path / "state"
+    state_dir.mkdir()
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    existing = config_dir / "folder_overrides.json"
+    existing.write_text("{}", encoding="utf-8")
+
+    monkeypatch.delenv("KAM_FOLDER_OVERRIDES_PATH", raising=False)
+    monkeypatch.setenv("KAM_STATE_ROOT", str(state_dir))
+    monkeypatch.setenv("KAM_CONFIG_ROOT", str(config_dir))
+
+    module = _reload_overrides_module()
+    assert module._get_storage_path() == existing
+
+
+def test_default_storage_path_defaults_to_first_candidate(tmp_path, monkeypatch):
+    state_dir = tmp_path / "state"
+    state_dir.mkdir()
+
+    monkeypatch.delenv("KAM_FOLDER_OVERRIDES_PATH", raising=False)
+    monkeypatch.setenv("KAM_STATE_ROOT", str(state_dir))
+    monkeypatch.delenv("KAM_CONFIG_ROOT", raising=False)
+
+    module = _reload_overrides_module()
+    assert module._get_storage_path() == state_dir / "folder_overrides.json"
+
+
+def test_default_storage_path_falls_back_to_config(monkeypatch):
+    monkeypatch.delenv("KAM_FOLDER_OVERRIDES_PATH", raising=False)
+    monkeypatch.delenv("KAM_STATE_ROOT", raising=False)
+    monkeypatch.delenv("KAM_CONFIG_ROOT", raising=False)
+
+    module = _reload_overrides_module()
+    assert str(module._get_storage_path()) == "/config/folder_overrides.json"
+
+
 @pytest.fixture
 def overrides_env(tmp_path, monkeypatch):
     assets_root = tmp_path / "assets"

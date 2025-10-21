@@ -14,14 +14,50 @@ logger = logging.getLogger(__name__)
 
 _LOCK = threading.Lock()
 
-_DEF_BASE = (
-    os.environ.get("KAM_STATE_ROOT")
-    or os.environ.get("KAM_CONFIG_ROOT")
-    or "/data"
-)
-_STORAGE_PATH = os.environ.get("KAM_FOLDER_OVERRIDES_PATH") or os.path.join(
-    _DEF_BASE, "folder_overrides.json"
-)
+
+def _iter_default_base_candidates() -> list[str]:
+    """Return a prioritized list of directories for storing overrides."""
+
+    raw_candidates = (
+        os.environ.get("KAM_STATE_ROOT"),
+        os.environ.get("KAM_CONFIG_ROOT"),
+        "/config",
+        "/data",
+    )
+
+    candidates: list[str] = []
+    for value in raw_candidates:
+        if not value:
+            continue
+        normalized = str(value).strip()
+        if normalized:
+            candidates.append(normalized)
+
+    if not candidates:
+        candidates.append("/config")
+
+    return candidates
+
+
+def _resolve_initial_storage_path() -> str:
+    """Determine the initial storage path, preferring existing files."""
+
+    env_override = os.environ.get("KAM_FOLDER_OVERRIDES_PATH")
+    if env_override and env_override.strip():
+        return env_override
+
+    filename = "folder_overrides.json"
+    candidates = _iter_default_base_candidates()
+
+    for base in candidates:
+        candidate_path = os.path.join(base, filename)
+        if os.path.isfile(candidate_path):
+            return candidate_path
+
+    return os.path.join(candidates[0], filename)
+
+
+_STORAGE_PATH = _resolve_initial_storage_path()
 
 
 def set_storage_path(path: str) -> None:
