@@ -30,6 +30,48 @@ BACKGROUND_FILENAMES = (
     "art.jpg", "art.png", "art.webp", "fanart.jpg", "fanart.png"
 )
 
+
+def _candidate_exclusion_libraries(library: str | None) -> List[str]:
+    """Yield possible library names for exclusion lookups."""
+
+    candidates: List[str] = []
+    primary = (library or "").strip()
+
+    if primary:
+        candidates.append(primary)
+
+    # ``Collections`` used to be stored as the library name when excluding
+    # collection items from the Collections view. Continue checking that alias
+    # for backwards compatibility with existing exclusions.
+    if "Collections" not in candidates:
+        candidates.append("Collections")
+
+    # Preserve the original order for deterministic behaviour while removing
+    # duplicates.
+    deduped: List[str] = []
+    for name in candidates:
+        if name and name not in deduped:
+            deduped.append(name)
+
+    return deduped
+
+
+def _is_collection_excluded(library: str | None, rating_key: Any) -> bool:
+    """Return ``True`` if the given collection should be excluded."""
+
+    if rating_key in (None, ""):
+        return False
+
+    rating_text = str(rating_key).strip()
+    if not rating_text:
+        return False
+
+    for candidate in _candidate_exclusion_libraries(library):
+        if exclusions.is_excluded(candidate, rating_text):
+            return True
+
+    return False
+
 def _first_existing_poster(dir_path: Path) -> Path | None:
     """Return the first existing poster file in the given directory."""
     for name in LOCAL_FILENAMES:
@@ -206,6 +248,7 @@ def collection(
     year = getattr(item, "year", None)
 
     actual_library = sourceLibrary or source or getattr(item, "librarySectionTitle", None) or None
+    exclusion_library = actual_library or library
     collections_base = _collections_root_for_library(actual_library)
 
     poster_plex = None
@@ -275,7 +318,7 @@ def collection(
         "backgroundUrl": background_local,
         "backgroundUrlLocal": background_local,
         "backgroundUrlPlex": background_plex,
-        "excluded": exclusions.is_excluded(library, str(ratingKey)),
+        "excluded": _is_collection_excluded(exclusion_library, ratingKey),
     }
 
 
@@ -353,9 +396,7 @@ def collections(
                     ) = _local_poster_for_title(title, collections_base)
                     asset_ready = folder_exists
 
-                if rk is not None and library_name and exclusions.is_excluded(
-                    library_name, str(rk)
-                ):
+                if _is_collection_excluded(library_name, rk):
                     # Skip collections that have been explicitly excluded.
                     continue
 
