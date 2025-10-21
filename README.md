@@ -13,13 +13,15 @@ KAM is a small web app that makes Kometa/Plex artwork management painless. It le
 
 ## ⚠️ Important constraints
 
-> **At the current moment the app does NOT allow you to user a myriad of different asset directories, for now you need to pair 1 library with 1 directory. Example Kids Movies with `/assets/Kids Movies`. Similarly all collections must reside in 1 `Collections` directory.**
+> **KAM maps each Plex library to a single assets directory inside the container (e.g., Kids Movies → `/assets/Kids Movies`).**
+>
+> **Collections default to a shared `/assets/Collections` directory, but you can override that per library or even per Plex collection section from the Settings UI.**
 
 What this means in practice:
 
 * Pick **one** assets root for a given library and stick with it.
 * If you have multiple libraries, each should have its **own** mapped directory or its own container.
-* Put **all Collections** in a single `Collections` directory under one assets root.
+* Use the default shared `Collections` directory unless you opt into per-library/section overrides (see **Settings → Libraries**).
 
 ---
 
@@ -87,8 +89,17 @@ KAM only cares about the **internal** path (e.g., `/assets`). You choose what ho
       background.jpg
 ```
 
-> ✅ **Season posters** are stored as flat files **in the series folder** (`Season01.jpg`, `Season02.jpg`, …).  
+> ✅ **Season posters** are stored as flat files **in the series folder** (`Season01.jpg`, `Season02.jpg`, …).
 > ❌ No `Season 01/` subfolders are used by KAM.
+
+### Collection directory overrides
+
+By default, every Plex library shares the same `/assets/Collections` directory. If you organize collections in multiple roots, open **Settings → Libraries** and edit a library’s **Collection directories** list. Behind the scenes, each library supports a `collectionSections` array so you can:
+
+* Point a whole library at a different collections path.
+* Target a specific Plex collection section and bind it to its own directory.
+
+Overrides inherit the normal sanitization rules, and the folder finder offers suggestions for any directories KAM sees under `/assets`.
 
 ---
 
@@ -118,6 +129,7 @@ docker run -d \
   --name kam \
   -p 7171:8000 \
   -v /mnt/user/appdata/kam:/config \
+  -v /mnt/user/appdata/kam-data:/data \
   -v /mnt/user/media/assets:/assets \
   ghcr.io/thedinz/kam:latest
 ```
@@ -125,6 +137,7 @@ docker run -d \
 Open: `http://<your-host>:7171/`
 
 > If your assets live elsewhere, just change the host side of `-v` (e.g., `-v /mystuff:/assets`).
+> Mount `/data` (or set `KAM_STATE_ROOT`, `KAM_CONFIG_ROOT`, or `KAM_FOLDER_OVERRIDES_PATH`) to keep folder assignments stored in `folder_overrides.json` between container rebuilds.
 
 ### 3) Docker Compose
 
@@ -137,6 +150,7 @@ services:
       - "7171:8000"
     volumes:
       - /mnt/user/appdata/kam:/config
+      - /mnt/user/appdata/kam-data:/data
       - /mnt/user/media/assets:/assets
     restart: unless-stopped
 ```
@@ -146,6 +160,8 @@ Bring it up:
 ```bash
 docker compose up -d
 ```
+Persist `/data` (or point `KAM_STATE_ROOT`, `KAM_CONFIG_ROOT`, or `KAM_FOLDER_OVERRIDES_PATH` at a mounted host directory) so folder overrides survive container recreations.
+
 Edit the .env file to configure runtime basics.
 
 Sample .env
@@ -159,8 +175,13 @@ PORT=8000
 # Root path for collection posters
 COLLECTIONS_ROOT=/assets/Collections
 
+# Plex server certificate handling (set to "false" for self-signed HTTPS)
+PLEX_VERIFY_SSL=true
+
 # Plex credentials and library mappings are now configured through the web UI.
 ```
+
+Set `PLEX_VERIFY_SSL=false` if your Plex server uses a self-signed certificate and you need KAM to skip TLS verification when contacting Plex.
 
 ---
 
@@ -170,6 +191,8 @@ KAM stores UI settings—including Plex credentials, library mappings, and exclu
 preferences—in `/config/settings.json` inside the container. Bind-mount `/config` to a
 directory on the host (for example, `/mnt/user/appdata/kam`) to persist these values
 across image updates, container recreation, and Unraid upgrades.
+
+Per-item folder assignments live in `folder_overrides.json`. By default that file is written to `/data`, so mount `/data` (or set `KAM_STATE_ROOT`, `KAM_CONFIG_ROOT`, or `KAM_FOLDER_OVERRIDES_PATH` to point somewhere persisted) to keep your folder pairings intact.
 
 > Upgrades from previous versions automatically reuse an existing
 > `/data/settings.json` file if it is present, so your saved settings are retained while
@@ -195,7 +218,7 @@ from another browser tab.
 
 Kometa Asset Manager can now be found in the Unraid app store. Mount both your Kometa
 asset directory **and** a persistent config directory (e.g., `/mnt/user/appdata/kam ->
-/config`), edit the template variables, and GO!
+/config`), plus a persistent state directory for folder overrides (e.g., `/mnt/user/appdata/kam-data -> /data`), edit the template variables, and GO!
 
 ---
 
@@ -256,7 +279,7 @@ KAM follows Kometa’s layout and **does not** invent proprietary paths.
 Because of the “1 library ↔ 1 directory” constraint,
 
 Keep all library roots **under one** top-level directory and mount that top-level to `/assets`.
-(Still follow the “1 library ↔ 1 directory” rule inside that root and keep a single `Collections/`.)
+Collections can share a single `/assets/Collections` directory, or you can map specific Plex libraries/sections to alternate collection directories using the **Settings → Libraries** overrides.
 
 ---
 
@@ -335,14 +358,14 @@ docker stop kam && docker rm kam
 
 **Collections missing**
 
-* Ensure there is a **single** `Collections/` directory under one assets root, and you’re pointing KAM at that root when managing collections.
+* Ensure KAM can reach the collections directory you configured—either the shared `/assets/Collections` folder or any override set under **Settings → Libraries**.
 
 ---
 
 ## FAQ
 
-**Q: Can I use multiple asset roots at the same time?**  
-A: Not currently. **One library ↔ one directory**, and all collections live in **one** `Collections/` folder.
+**Q: Can I use multiple asset roots at the same time?**
+A: Not currently. **One library ↔ one directory.** Collections default to a shared `/assets/Collections` folder, but you can assign per-library/section overrides from **Settings → Libraries** if you maintain multiple collections directories.
 
 **Q: Can I map the assets directory to any host path?**  
 A: Yes. Bind-mount any host folder to the container’s internal assets path (examples use `/assets`).  
