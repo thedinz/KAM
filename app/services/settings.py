@@ -17,6 +17,7 @@ _DEFAULT_SETTINGS: Dict[str, Any] = {
     "theme": "dark",
     "plexUrl": "",
     "plexToken": "",
+    "authPassword": "",
     "libraryMappings": [],
 }
 
@@ -121,7 +122,7 @@ def _sanitize_payload(data: Dict[str, Any] | None) -> Dict[str, Any]:
         return {}
 
     sanitized: Dict[str, Any] = {}
-    for key in ("theme", "plexUrl", "plexToken"):
+    for key in ("theme", "plexUrl", "plexToken", "authPassword"):
         if key in data:
             sanitized[key] = data[key]
 

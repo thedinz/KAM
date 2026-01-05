@@ -9,6 +9,8 @@ from typing import Optional
 
 from fastapi import Request
 
+from . import settings as settings_service
+
 _PASSWORD_ENV = "KAM_AUTH_PASSWORD"
 _COOKIE_NAME_ENV = "KAM_AUTH_COOKIE"
 _TOKEN_TTL_ENV = "KAM_AUTH_TOKEN_TTL_SECONDS"
@@ -21,9 +23,25 @@ _LOCK = threading.Lock()
 _SESSIONS: dict[str, float] = {}
 
 
+def _resolve_password() -> str:
+    env_password = os.getenv(_PASSWORD_ENV)
+    if env_password and env_password.strip():
+        return env_password.strip()
+    try:
+        data = settings_service.load_settings()
+    except Exception:
+        return ""
+    value = data.get("authPassword", "")
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value.strip()
+    return str(value).strip()
+
+
 def is_enabled() -> bool:
-    password = os.getenv(_PASSWORD_ENV)
-    return bool(password and password.strip())
+    password = _resolve_password()
+    return bool(password)
 
 
 def cookie_name() -> str:
@@ -54,7 +72,7 @@ def cookie_secure(request: Request) -> bool:
 def verify_password(candidate: Optional[str]) -> bool:
     if not candidate:
         return False
-    expected = os.getenv(_PASSWORD_ENV, "")
+    expected = _resolve_password()
     if not expected:
         return False
     return secrets.compare_digest(candidate, expected)
