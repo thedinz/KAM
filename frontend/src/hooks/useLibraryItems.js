@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { useAuth } from './AuthProvider.jsx';
 import { useTheme } from '../theme/ThemeProvider.jsx';
 
 import { responseErrorMessage, safeJson } from '../utils/api.js';
@@ -17,6 +18,7 @@ async function fetchJson(url, options) {
 }
 
 export function useLibraryItems({ initialLibrary } = {}) {
+  const { enabled: authEnabled, authenticated, loading: authLoading } = useAuth();
   const {
     savedPlexUrl = '',
     savedPlexToken = '',
@@ -24,6 +26,7 @@ export function useLibraryItems({ initialLibrary } = {}) {
     exclusions = [],
     isItemExcluded,
   } = useTheme();
+  const canFetch = !authLoading && (!authEnabled || authenticated);
   const hasSavedPlexCredentials = Boolean(savedPlexUrl && savedPlexToken);
   const savedCredentialsKey = `${savedPlexUrl}::${savedPlexToken}`;
   const savedLibraryMappingsKey = useMemo(() => {
@@ -56,6 +59,7 @@ export function useLibraryItems({ initialLibrary } = {}) {
   const initialLibraryRef = useRef(initialLibrary);
 
   const fetchLibraries = useCallback(async () => {
+    if (!canFetch) return;
     try {
       setError(null);
       const data = await fetchJson('/api/libraries');
@@ -87,18 +91,20 @@ export function useLibraryItems({ initialLibrary } = {}) {
     } catch (err) {
       setError(err.message || 'Failed to fetch libraries');
     }
-  }, [library]);
+  }, [canFetch, library]);
 
   useEffect(() => {
+    if (!canFetch) return;
     fetchLibraries();
-  }, [fetchLibraries]);
+  }, [canFetch, fetchLibraries]);
 
   useEffect(() => {
+    if (!canFetch) return;
     if (!hasSavedPlexCredentials) {
       return;
     }
     fetchLibraries();
-  }, [fetchLibraries, hasSavedPlexCredentials, savedLibraryMappingsKey]);
+  }, [canFetch, fetchLibraries, hasSavedPlexCredentials, savedLibraryMappingsKey]);
 
   const previousCredentialsKeyRef = useRef(savedCredentialsKey);
   const previousHasCredentialsRef = useRef(hasSavedPlexCredentials);
@@ -107,7 +113,7 @@ export function useLibraryItems({ initialLibrary } = {}) {
   const loadItems = useCallback(
     async ({ targetLibrary, targetPage, searchTerm, notReadyOnly: overrideNotReadyOnly } = {}) => {
       const lib = targetLibrary ?? library;
-      if (!lib) return;
+      if (!canFetch || !lib) return;
       const desiredPage = targetPage ?? page;
       const q = searchTerm ?? query;
       const notReady = overrideNotReadyOnly ?? notReadyOnly;
@@ -156,13 +162,13 @@ export function useLibraryItems({ initialLibrary } = {}) {
         setLoading(false);
       }
     },
-    [library, page, query, notReadyOnly]
+    [canFetch, library, page, query, notReadyOnly]
   );
 
   useEffect(() => {
-    if (!library) return;
+    if (!canFetch || !library) return;
     loadItems();
-  }, [library, page, query, loadItems]);
+  }, [canFetch, library, page, query, loadItems]);
 
   useEffect(() => () => fetchAbort.current?.abort(), []);
 
