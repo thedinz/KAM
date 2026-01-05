@@ -33,9 +33,9 @@ function RequireAuth() {
 
 function App() {
   return (
-    <ThemeProvider>
-      <BrowserRouter>
-        <AuthProvider>
+    <AuthProvider>
+      <ThemeProvider>
+        <BrowserRouter>
           <LibraryItemsProvider>
             <Routes>
               <Route path="/login" element={<LoginPage />} />
@@ -52,9 +52,9 @@ function App() {
               <Route path="*" element={<Navigate to="/libraries" replace />} />
             </Routes>
           </LibraryItemsProvider>
-        </AuthProvider>
-      </BrowserRouter>
-    </ThemeProvider>
+        </BrowserRouter>
+      </ThemeProvider>
+    </AuthProvider>
   );
 }
 
