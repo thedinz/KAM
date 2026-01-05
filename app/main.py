@@ -3,12 +3,14 @@ import logging
 import os
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
 from .logging_config import configure_logging
+from .services import auth as auth_service
 
 configure_logging()
 logger = logging.getLogger(__name__)
@@ -25,6 +27,7 @@ app.add_middleware(
 
 from .routers import (
     assets,
+    auth,
     collections,
     exclusions,
     fileproxy,
@@ -49,6 +52,7 @@ app.include_router(settings.router)
 app.include_router(imports.router)
 app.include_router(fileproxy.router)
 app.include_router(assets.router)
+app.include_router(auth.router)
 app.include_router(ui.router)
 
 WEB_DIR = Path(__file__).resolve().parent / "web"
@@ -69,6 +73,28 @@ async def movie_details_page(library: str, ratingKey: str):
 async def libraries_page():
     """Serve the main SPA shell when navigating to /libraries."""
     return FileResponse(SPA_INDEX)
+
+
+@app.middleware("http")
+async def enforce_auth(request: Request, call_next):
+    if not auth_service.is_enabled():
+        return await call_next(request)
+
+    path = request.url.path
+    exempt_prefixes = ("/spa-assets", "/assets", "/auth/")
+    exempt_exact = {"/login", "/favicon.ico"}
+
+    if path in exempt_exact or path.startswith(exempt_prefixes):
+        return await call_next(request)
+
+    token = request.cookies.get(auth_service.cookie_name())
+    if token and auth_service.validate_session(token):
+        return await call_next(request)
+
+    accept = request.headers.get("accept", "")
+    if request.method == "GET" and "text/html" in accept:
+        return RedirectResponse(url="/login")
+    return JSONResponse(status_code=401, content={"detail": "Unauthorized"})
 
 # ---- SAFE assets mount (env-driven) ----
 # Prefer explicit envs if you set them; otherwise infer from COLLECTIONS_ROOT.
