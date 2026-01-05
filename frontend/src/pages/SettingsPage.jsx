@@ -1,6 +1,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import FolderFinderModal from '../components/FolderFinderModal.jsx';
+import { useAuth } from '../hooks/AuthProvider.jsx';
 import { useTheme } from '../theme/ThemeProvider.jsx';
 import {
   areLibraryMappingsEqual,
@@ -33,6 +34,8 @@ const normalizeText = (value) => {
 };
 
 function SettingsPage() {
+  const navigate = useNavigate();
+  const { refresh: refreshAuth } = useAuth();
   const {
     theme,
     savedTheme,
@@ -782,13 +785,18 @@ function SettingsPage() {
     setStatus(null);
     try {
       await saveSettings();
+      const authState = await refreshAuth();
+      if (authState?.enabled && !authState?.authenticated) {
+        navigate('/login', { replace: true });
+        return;
+      }
       setStatus({ type: 'success', message: 'Settings saved successfully.' });
     } catch (err) {
       const message = err?.message || 'Failed to save settings.';
       revertSettings();
       setStatus({ type: 'error', message });
     }
-  }, [isDirty, saveSettings, revertSettings, setStatus]);
+  }, [isDirty, navigate, refreshAuth, saveSettings, revertSettings, setStatus]);
 
   const handleSubmit = async (event) => {
     event.preventDefault();

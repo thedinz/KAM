@@ -14,19 +14,24 @@ export function AuthProvider({ children }) {
       const response = await fetch('/auth/status', { credentials: 'same-origin' });
       if (!response.ok) {
         if (response.status === 404) {
-          setAuthState({ enabled: false, authenticated: true, loading: false });
-          return;
+          const nextState = { enabled: false, authenticated: true, loading: false };
+          setAuthState(nextState);
+          return nextState;
         }
         throw new Error('Unable to check auth status');
       }
       const data = await response.json();
-      setAuthState({
+      const nextState = {
         enabled: Boolean(data.enabled),
         authenticated: Boolean(data.authenticated),
         loading: false,
-      });
+      };
+      setAuthState(nextState);
+      return nextState;
     } catch (error) {
-      setAuthState({ enabled: false, authenticated: true, loading: false });
+      const nextState = { enabled: false, authenticated: true, loading: false };
+      setAuthState(nextState);
+      return nextState;
     }
   }, []);
 
