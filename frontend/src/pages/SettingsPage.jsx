@@ -38,6 +38,7 @@ function SettingsPage() {
     savedTheme,
     plexUrl,
     plexToken,
+    authPassword,
     savedSettings,
     libraryMappings,
     savedLibraryMappings,
@@ -77,9 +78,13 @@ function SettingsPage() {
 
   const savedPlexUrl = savedSettings?.plexUrl || '';
   const savedPlexToken = savedSettings?.plexToken || '';
+  const savedAuthPassword = savedSettings?.authPassword || '';
+  const effectiveAuthPassword = authPassword ?? '';
   const normalizedPlexUrl = normalizeText(plexUrl);
   const normalizedPlexToken = normalizeText(plexToken);
+  const normalizedAuthPassword = normalizeText(effectiveAuthPassword);
   const hasPlexCredentials = Boolean(normalizedPlexUrl && normalizedPlexToken);
+  const hasAuthPassword = Boolean(normalizedAuthPassword);
 
   useEffect(() => {
     if (error) {
@@ -399,7 +404,8 @@ function SettingsPage() {
     const settingsChanged =
       theme !== savedTheme ||
       plexUrl !== savedPlexUrl ||
-      plexToken !== savedPlexToken;
+      plexToken !== savedPlexToken ||
+      effectiveAuthPassword !== savedAuthPassword;
     return settingsChanged || mappingsDirty;
   }, [
     hasUnsavedChanges,
@@ -409,6 +415,8 @@ function SettingsPage() {
     savedPlexUrl,
     plexToken,
     savedPlexToken,
+    effectiveAuthPassword,
+    savedAuthPassword,
     mappingsDirty,
   ]);
 
@@ -429,6 +437,11 @@ function SettingsPage() {
 
   const handlePlexTokenChange = (event) => {
     updateSettings({ plexToken: event.target.value });
+    setStatus(null);
+  };
+
+  const handleAuthPasswordChange = (event) => {
+    updateSettings({ authPassword: event.target.value });
     setStatus(null);
   };
 
@@ -848,6 +861,32 @@ function SettingsPage() {
                 <span>Light</span>
               </label>
             </fieldset>
+            <div className="settings-section">
+              <h3>Login</h3>
+              <p className="settings-description">
+                Set a password to require a login before accessing KAM. Leave this blank to disable the
+                login screen.
+              </p>
+              <label className="settings-input">
+                <span>Login password</span>
+                <input
+                  type="password"
+                  name="authPassword"
+                  value={effectiveAuthPassword}
+                  onChange={handleAuthPasswordChange}
+                  placeholder={
+                    savedAuthPassword ? 'Saved password (leave blank to clear)' : 'Enter a password'
+                  }
+                  autoComplete="new-password"
+                  disabled={busy}
+                />
+              </label>
+              <p className="settings-help">
+                {hasAuthPassword
+                  ? 'Login is currently enabled. Save changes to update the password.'
+                  : 'Login is currently disabled.'}
+              </p>
+            </div>
             <div className="settings-section">
               <h3>Plex</h3>
               <p className="settings-description">
