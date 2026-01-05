@@ -1,6 +1,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import FolderFinderModal from '../components/FolderFinderModal.jsx';
+import { useAuth } from '../hooks/AuthProvider.jsx';
 import { useTheme } from '../theme/ThemeProvider.jsx';
 import {
   areLibraryMappingsEqual,
@@ -33,11 +34,14 @@ const normalizeText = (value) => {
 };
 
 function SettingsPage() {
+  const navigate = useNavigate();
+  const { refresh: refreshAuth } = useAuth();
   const {
     theme,
     savedTheme,
     plexUrl,
     plexToken,
+    authPassword,
     savedSettings,
     libraryMappings,
     savedLibraryMappings,
@@ -77,9 +81,13 @@ function SettingsPage() {
 
   const savedPlexUrl = savedSettings?.plexUrl || '';
   const savedPlexToken = savedSettings?.plexToken || '';
+  const savedAuthPassword = savedSettings?.authPassword || '';
+  const effectiveAuthPassword = authPassword ?? '';
   const normalizedPlexUrl = normalizeText(plexUrl);
   const normalizedPlexToken = normalizeText(plexToken);
+  const normalizedAuthPassword = normalizeText(effectiveAuthPassword);
   const hasPlexCredentials = Boolean(normalizedPlexUrl && normalizedPlexToken);
+  const hasAuthPassword = Boolean(normalizedAuthPassword);
 
   useEffect(() => {
     if (error) {
@@ -399,7 +407,8 @@ function SettingsPage() {
     const settingsChanged =
       theme !== savedTheme ||
       plexUrl !== savedPlexUrl ||
-      plexToken !== savedPlexToken;
+      plexToken !== savedPlexToken ||
+      effectiveAuthPassword !== savedAuthPassword;
     return settingsChanged || mappingsDirty;
   }, [
     hasUnsavedChanges,
@@ -409,6 +418,8 @@ function SettingsPage() {
     savedPlexUrl,
     plexToken,
     savedPlexToken,
+    effectiveAuthPassword,
+    savedAuthPassword,
     mappingsDirty,
   ]);
 
@@ -429,6 +440,11 @@ function SettingsPage() {
 
   const handlePlexTokenChange = (event) => {
     updateSettings({ plexToken: event.target.value });
+    setStatus(null);
+  };
+
+  const handleAuthPasswordChange = (event) => {
+    updateSettings({ authPassword: event.target.value });
     setStatus(null);
   };
 
@@ -769,13 +785,18 @@ function SettingsPage() {
     setStatus(null);
     try {
       await saveSettings();
+      const authState = await refreshAuth();
+      if (authState?.enabled && !authState?.authenticated) {
+        navigate('/login', { replace: true });
+        return;
+      }
       setStatus({ type: 'success', message: 'Settings saved successfully.' });
     } catch (err) {
       const message = err?.message || 'Failed to save settings.';
       revertSettings();
       setStatus({ type: 'error', message });
     }
-  }, [isDirty, saveSettings, revertSettings, setStatus]);
+  }, [isDirty, navigate, refreshAuth, saveSettings, revertSettings, setStatus]);
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -848,6 +869,32 @@ function SettingsPage() {
                 <span>Light</span>
               </label>
             </fieldset>
+            <div className="settings-section">
+              <h3>Login</h3>
+              <p className="settings-description">
+                Set a password to require a login before accessing KAM. Leave this blank to disable the
+                login screen.
+              </p>
+              <label className="settings-input">
+                <span>Login password</span>
+                <input
+                  type="password"
+                  name="authPassword"
+                  value={effectiveAuthPassword}
+                  onChange={handleAuthPasswordChange}
+                  placeholder={
+                    savedAuthPassword ? 'Saved password (leave blank to clear)' : 'Enter a password'
+                  }
+                  autoComplete="new-password"
+                  disabled={busy}
+                />
+              </label>
+              <p className="settings-help">
+                {hasAuthPassword
+                  ? 'Login is currently enabled. Save changes to update the password.'
+                  : 'Login is currently disabled.'}
+              </p>
+            </div>
             <div className="settings-section">
               <h3>Plex</h3>
               <p className="settings-description">

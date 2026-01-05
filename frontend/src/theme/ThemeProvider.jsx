@@ -14,20 +14,24 @@ const ThemeContext = createContext({
     theme: 'dark',
     plexUrl: '',
     plexToken: '',
+    authPassword: '',
     libraryMappings: [],
   },
   savedSettings: {
     theme: 'dark',
     plexUrl: '',
     plexToken: '',
+    authPassword: '',
     libraryMappings: [],
   },
   theme: 'dark',
   savedTheme: 'dark',
   plexUrl: '',
   plexToken: '',
+  authPassword: '',
   savedPlexUrl: '',
   savedPlexToken: '',
+  savedAuthPassword: '',
   libraryMappings: [],
   savedLibraryMappings: [],
   libraries: [],
@@ -119,6 +123,7 @@ const sanitizeSettings = (raw = {}) => {
   const themeValue = normalizeTheme(raw.theme);
   const plexUrlValue = raw.plexUrl;
   const plexTokenValue = raw.plexToken;
+  const authPasswordValue = raw.authPassword;
 
   return {
     theme: themeValue,
@@ -133,6 +138,12 @@ const sanitizeSettings = (raw = {}) => {
         ? plexTokenValue.trim()
         : plexTokenValue
         ? String(plexTokenValue)
+        : '',
+    authPassword:
+      typeof authPasswordValue === 'string'
+        ? authPasswordValue.trim()
+        : authPasswordValue
+        ? String(authPasswordValue)
         : '',
     libraryMappings: sanitizeLibraryMappings(raw.libraryMappings),
   };
@@ -579,7 +590,8 @@ export function ThemeProvider({ children }) {
     () =>
       settings.theme !== savedSettings.theme ||
       settings.plexUrl !== savedSettings.plexUrl ||
-      settings.plexToken !== savedSettings.plexToken,
+      settings.plexToken !== savedSettings.plexToken ||
+      settings.authPassword !== savedSettings.authPassword,
     [settings, savedSettings]
   );
 
@@ -682,8 +694,10 @@ export function ThemeProvider({ children }) {
       savedTheme: savedSettings.theme,
       plexUrl: settings.plexUrl,
       plexToken: settings.plexToken,
+      authPassword: settings.authPassword,
       savedPlexUrl: savedSettings.plexUrl,
       savedPlexToken: savedSettings.plexToken,
+      savedAuthPassword: savedSettings.authPassword,
       libraryMappings: settings.libraryMappings,
       savedLibraryMappings: savedSettings.libraryMappings,
       libraries,

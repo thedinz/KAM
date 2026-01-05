@@ -88,6 +88,7 @@ class SettingsPayload(BaseModel):
     theme: Literal["light", "dark"]
     plexUrl: str = Field(default="")
     plexToken: str = Field(default="")
+    authPassword: str = Field(default="")
     libraryMappings: List[LibraryMappingPayload] = Field(default_factory=list)
 
     @field_validator("libraryMappings", mode="after")
@@ -118,6 +119,15 @@ class SettingsPayload(BaseModel):
     @field_validator("plexToken", mode="before")
     @classmethod
     def _validate_plex_token(cls, value: str | None) -> str:
+        if value in (None, ""):
+            return ""
+        if not isinstance(value, str):
+            value = str(value)
+        return value.strip()
+
+    @field_validator("authPassword", mode="before")
+    @classmethod
+    def _validate_auth_password(cls, value: str | None) -> str:
         if value in (None, ""):
             return ""
         if not isinstance(value, str):
@@ -159,5 +169,4 @@ def update_library_mappings(payload: LibraryMappingsUpdatePayload) -> List[Libra
     )
     mappings = stored.get("libraryMappings", [])
     return [LibraryMappingPayload(**item) for item in mappings]
-
 

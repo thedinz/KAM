@@ -1089,6 +1089,12 @@ main {
   font-size: 15px;
 }
 
+.settings-help {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
 .settings-form fieldset {
   margin: 0;
   padding: 0;
