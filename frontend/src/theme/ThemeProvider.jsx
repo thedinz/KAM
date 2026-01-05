@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { useAuth } from '../hooks/AuthProvider.jsx';
 import { responseErrorMessage, safeJson } from '../utils/api.js';
 import {
   areLibraryMappingsEqual,
@@ -215,6 +216,7 @@ const sanitizeExclusions = (raw) => {
 };
 
 export function ThemeProvider({ children }) {
+  const { enabled: authEnabled, authenticated, loading: authLoading } = useAuth();
   const [settings, setSettings] = useState(() => sanitizeSettings());
   const [savedSettings, setSavedSettings] = useState(() => sanitizeSettings());
   const [libraries, setLibraries] = useState([]);
@@ -227,6 +229,7 @@ export function ThemeProvider({ children }) {
   const [exclusionsLoading, setExclusionsLoading] = useState(false);
   const [exclusionsError, setExclusionsError] = useState(null);
   const isMountedRef = useRef(true);
+  const canFetch = !authLoading && (!authEnabled || authenticated);
 
   const getExclusionKey = useCallback((libraryName, ratingKeyValue) => {
     const libraryText = normalizeExclusionText(libraryName);
@@ -555,16 +558,19 @@ export function ThemeProvider({ children }) {
   );
 
   useEffect(() => {
+    if (!canFetch) return;
     refreshSettings().catch(() => {});
-  }, [refreshSettings]);
+  }, [canFetch, refreshSettings]);
 
   useEffect(() => {
+    if (!canFetch) return;
     refreshLibraries().catch(() => {});
-  }, [refreshLibraries]);
+  }, [canFetch, refreshLibraries]);
 
   useEffect(() => {
+    if (!canFetch) return;
     refreshExclusions().catch(() => {});
-  }, [refreshExclusions]);
+  }, [canFetch, refreshExclusions]);
 
   const revertSettings = useCallback(() => {
     if (!isMountedRef.current) return;
