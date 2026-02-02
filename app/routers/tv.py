@@ -8,6 +8,7 @@ from urllib.parse import quote
 
 from ..services import exclusions, folder_overrides
 from ..services import plex_settings
+from ..services.plex_assets import build_plex_asset_url, build_plex_proxy_url
 from ..services.resolve import resolve_existing_dir_or_422
 from ..services.sanitize import kometa_sanitize_folder
 
@@ -124,16 +125,16 @@ def _fileproxy_abs_path(library: str, folder: str, filename: str, bust: int = 0)
     return f"/fileproxy?path=/assets/{lib_enc}/{fol_enc}/{fn_enc}{t}"
 
 def _plex_thumb_url(thumb: Optional[str], rk: Optional[str]) -> Optional[str]:
-    path = thumb or (f"/library/metadata/{rk}/thumb" if rk else None)
-    if not path: return None
-    plex_url, plex_token = _require_plex()
-    return f"{plex_url}{path}?X-Plex-Token={plex_token}"
+    return build_plex_asset_url(thumb, rk, "thumb")
 
 def _plex_art_url(art: Optional[str], rk: Optional[str]) -> Optional[str]:
-    path = art or (f"/library/metadata/{rk}/art" if rk else None)
-    if not path: return None
-    plex_url, plex_token = _require_plex()
-    return f"{plex_url}{path}?X-Plex-Token={plex_token}"
+    return build_plex_asset_url(art, rk, "art")
+
+def _plex_thumb_proxy_url(thumb: Optional[str], rk: Optional[str]) -> Optional[str]:
+    return build_plex_proxy_url(thumb, rk, "thumb")
+
+def _plex_art_proxy_url(art: Optional[str], rk: Optional[str]) -> Optional[str]:
+    return build_plex_proxy_url(art, rk, "art")
 
 @router.get("/api/show")
 def get_show(library: str = Query(...), ratingKey: str = Query(...)):
@@ -170,14 +171,14 @@ def get_show(library: str = Query(...), ratingKey: str = Query(...)):
     if _local_exists(poster_local):
         poster_url = _fileproxy_abs_path(library, folder, "poster.jpg", _mtime(poster_local))
     else:
-        poster_url = _plex_thumb_url(thumb, ratingKey)
+        poster_url = _plex_thumb_proxy_url(thumb, ratingKey)
     plex_poster_url = _plex_thumb_url(thumb, ratingKey)
 
     bg_local = os.path.join(series_dir_fs, "background.jpg")
     if _local_exists(bg_local):
         background_url = _fileproxy_abs_path(library, folder, "background.jpg", _mtime(bg_local))
     else:
-        background_url = _plex_art_url(art, ratingKey)
+        background_url = _plex_art_proxy_url(art, ratingKey)
     plex_background_url = _plex_art_url(art, ratingKey)
 
     seasons_out: List[Dict[str, Any]] = []
@@ -188,7 +189,7 @@ def get_show(library: str = Query(...), ratingKey: str = Query(...)):
         if _local_exists(sea_local):
             sea_url = _fileproxy_abs_path(library, folder, sea_name, _mtime(sea_local))
         else:
-            sea_url = _plex_thumb_url(s.get("thumb"), s.get("ratingKey"))
+            sea_url = _plex_thumb_proxy_url(s.get("thumb"), s.get("ratingKey"))
         seasons_out.append({
             "index": idx,
             "title": s["title"],
