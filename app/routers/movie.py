@@ -5,6 +5,7 @@ from urllib.parse import quote
 
 from ..services import exclusions, folder_overrides
 from ..services import plex_settings
+from ..services.plex_assets import build_plex_asset_url, build_plex_proxy_url
 from ..services import library_mappings as library_mappings_service
 from ..services.plex import get_plex
 from ..services.assets import folder_name_for
@@ -130,6 +131,9 @@ def movie(library: str = Query(...), ratingKey: int = Query(...)):
 
     plex_url, plex_token = _plex_url_parts()
 
+    poster_proxy = build_plex_proxy_url(None, str(ratingKey), "thumb")
+    background_proxy = build_plex_proxy_url(None, str(ratingKey), "art")
+
     return {
         "library": library,
         "title": title,
@@ -139,10 +143,12 @@ def movie(library: str = Query(...), ratingKey: int = Query(...)):
         "folderExists": folder_exists,
         "posterExists": poster_exists,
         "backgroundExists": background_exists,
-        "posterUrl": poster_url_local,
+        "posterUrl": poster_url_local or poster_proxy,
         "posterUrlPlex": f"{plex_url}/library/metadata/{int(ratingKey)}/thumb?X-Plex-Token={plex_token}",
-        "backgroundUrl": background_url_local,
+        "plexPosterUrl": build_plex_asset_url(None, str(ratingKey), "thumb"),
+        "backgroundUrl": background_url_local or background_proxy,
         "backgroundUrlPlex": f"{plex_url}/library/metadata/{int(ratingKey)}/art?X-Plex-Token={plex_token}",
+        "plexBackgroundUrl": build_plex_asset_url(None, str(ratingKey), "art"),
         "excluded": exclusions.is_excluded(library, str(ratingKey)),
     }
 

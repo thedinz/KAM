@@ -4,6 +4,7 @@ from typing import Optional, List, Dict, Any, Tuple
 from ..services.plex import get_plex
 from ..services import exclusions, folder_overrides
 from ..services import plex_settings
+from ..services.plex_assets import build_plex_proxy_url
 from ..services import library_mappings as library_mappings_service
 from ..services.assets import sanitize_name
 from ..services.resolve import find_existing_dir_in_base
@@ -253,10 +254,14 @@ def collection(
 
     poster_plex = None
     background_plex = None
+    poster_proxy = None
+    background_proxy = None
     cfg = plex_settings.get_plex_config()
     if cfg.url and cfg.token:
         poster_plex = f"{cfg.url}/library/metadata/{int(ratingKey)}/thumb?X-Plex-Token={cfg.token}"
         background_plex = f"{cfg.url}/library/metadata/{int(ratingKey)}/art?X-Plex-Token={cfg.token}"
+        poster_proxy = build_plex_proxy_url(None, str(ratingKey), "thumb")
+        background_proxy = build_plex_proxy_url(None, str(ratingKey), "art")
 
     override_folder = folder_overrides.get_override(actual_library or library, str(ratingKey))
     folder_name = override_folder or sanitize_name(title)
@@ -312,10 +317,10 @@ def collection(
         "folderExists": folder_exists,
         "posterExists": poster_exists,
         "backgroundExists": background_exists,
-        "posterUrl": poster_local,
+        "posterUrl": poster_local or poster_proxy,
         "posterUrlLocal": poster_local,
         "posterUrlPlex": poster_plex,
-        "backgroundUrl": background_local,
+        "backgroundUrl": background_local or background_proxy,
         "backgroundUrlLocal": background_local,
         "backgroundUrlPlex": background_plex,
         "excluded": _is_collection_excluded(exclusion_library, ratingKey),
@@ -360,8 +365,10 @@ def collections(
 
                 # Plex art
                 poster_plex = None
+                poster_proxy = None
                 if plex_url and plex_token:
                     poster_plex = f"{plex_url}/library/metadata/{rk}/thumb?X-Plex-Token={plex_token}"
+                    poster_proxy = build_plex_proxy_url(None, str(rk), "thumb")
 
                 library_name = name
                 collections_base = _collections_root_for_library(library_name)
@@ -408,7 +415,7 @@ def collections(
                     "folderName": folder_used or (sanitize_name(title) if title else ""),
                     "assetReady": asset_ready,
                     # ✅ prefer local for the primary image
-                    "posterUrl": poster_local or poster_plex,
+                    "posterUrl": poster_local or poster_proxy or poster_plex,
                     # also expose both explicitly
                     "posterUrlLocal": poster_local,
                     "posterUrlPlex": poster_plex,
