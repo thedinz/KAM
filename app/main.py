@@ -35,6 +35,7 @@ from .routers import (
     items,
     libraries,
     movie,
+    plex_proxy,
     settings,
     tv,
     upload,
@@ -51,6 +52,7 @@ app.include_router(movie.router)
 app.include_router(settings.router)
 app.include_router(imports.router)
 app.include_router(fileproxy.router)
+app.include_router(plex_proxy.router)
 app.include_router(assets.router)
 app.include_router(auth.router)
 app.include_router(ui.router)
