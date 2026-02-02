@@ -8,6 +8,7 @@ from urllib.parse import quote
 
 from ..services import exclusions, folder_overrides
 from ..services import plex_settings
+from ..services.plex_assets import build_plex_asset_url, build_plex_proxy_url
 from ..services.resolve import resolve_existing_dir_or_422
 
 router = APIRouter()
@@ -138,22 +139,12 @@ def _fileproxy_poster_url(poster_path: str) -> str:
         url = f"{url}&t={ts}" if "?" in url else f"{url}?t={ts}"
     return url
 
-def _plex_poster_url(rating_key: Optional[str], thumb: Optional[str]) -> str:
-    plex_url, plex_token = _require_plex()
-    path = thumb or (f"/library/metadata/{rating_key}/thumb" if rating_key else None)
-    if not path:
-        return "/fallback.png"
+def _plex_poster_url(rating_key: Optional[str], thumb: Optional[str]) -> Optional[str]:
+    return build_plex_asset_url(thumb, rating_key, "thumb")
 
-    if path.startswith("http://") or path.startswith("https://"):
-        base = path
-    else:
-        base = f"{plex_url}{path}"
 
-    if "X-Plex-Token=" in base:
-        return base
-
-    separator = "&" if "?" in base else "?"
-    return f"{base}{separator}X-Plex-Token={plex_token}"
+def _plex_poster_proxy_url(rating_key: Optional[str], thumb: Optional[str]) -> Optional[str]:
+    return build_plex_proxy_url(thumb, rating_key, "thumb")
 
 # ---------- API ----------
 
@@ -216,7 +207,8 @@ def list_items(
         local_poster = _local_poster_path(folder_path)
         poster_local = _fileproxy_poster_url(local_poster) if local_poster else None
         poster_plex = _plex_poster_url(it["ratingKey"], it["thumb"])
-        poster = poster_local or poster_plex
+        poster_proxy = _plex_poster_proxy_url(it["ratingKey"], it["thumb"])
+        poster = poster_local or poster_proxy or poster_plex
         enriched.append({
             "ratingKey": it["ratingKey"],
             "title": it["title"],
