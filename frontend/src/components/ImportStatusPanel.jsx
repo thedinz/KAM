@@ -12,7 +12,15 @@ function formatFailure(entry) {
   return text || 'Unknown issue';
 }
 
-function ImportStatusPanel({ active, percent, label, errors }) {
+function ImportStatusPanel({
+  active,
+  percent,
+  label,
+  errors,
+  errorHeading = 'Import Errors',
+  errorNoun = 'import error',
+  modalId = 'importErrorsDialog',
+}) {
   const formattedErrors = useMemo(() => {
     if (!Array.isArray(errors)) return [];
     return errors
@@ -28,7 +36,7 @@ function ImportStatusPanel({ active, percent, label, errors }) {
 
   const [isModalOpen, setModalOpen] = useState(false);
   const closeButtonRef = useRef(null);
-  const modalId = 'importErrorsDialog';
+  const headingId = `${modalId}Heading`;
 
   const closeModal = useCallback(() => {
     setModalOpen(false);
@@ -75,8 +83,10 @@ function ImportStatusPanel({ active, percent, label, errors }) {
 
   const errorCountLabel = useMemo(() => {
     const count = formattedErrors.length;
-    return `${count} import error${count === 1 ? '' : 's'}`;
-  }, [formattedErrors.length]);
+    const noun = errorNoun || 'import error';
+    const label = count === 1 ? noun : `${noun}s`;
+    return `${count} ${label}`;
+  }, [formattedErrors.length, errorNoun]);
 
   return (
     <div className={classes.join(' ')} aria-live="polite">
@@ -104,12 +114,12 @@ function ImportStatusPanel({ active, percent, label, errors }) {
             className="dialog-panel error-dlg"
             role="dialog"
             aria-modal="true"
-            aria-labelledby="importErrorsHeading"
+            aria-labelledby={headingId}
             id={modalId}
           >
             <div className="dialog-body">
               <div className="dialog-heading">
-                <h2 id="importErrorsHeading">Import Errors</h2>
+                <h2 id={headingId}>{errorHeading}</h2>
                 <button
                   type="button"
                   className="dialog-close"
