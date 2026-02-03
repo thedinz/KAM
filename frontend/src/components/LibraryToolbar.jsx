@@ -7,6 +7,9 @@ function LibraryToolbar({
   onImportAll,
   importDisabled,
   importTitle,
+  onScanMapping,
+  scanDisabled,
+  scanTitle,
   page,
   totalPages,
   onFirst,
@@ -65,6 +68,12 @@ function LibraryToolbar({
       <button type="button" onClick={onImportAll} disabled={importDisabled} title={importTitle}>
         Import Assets
       </button>
+
+      {onScanMapping ? (
+        <button type="button" onClick={onScanMapping} disabled={scanDisabled} title={scanTitle}>
+          Scan Mapping
+        </button>
+      ) : null}
 
       {showNotReadyButton ? (
         <button
