@@ -28,12 +28,12 @@ def _tokenize_title(s: str) -> tuple[list[str], Optional[str]]:
 
     year: Optional[str] = None
 
-    # Drop trailing year tokens such as "(2023)" so alternate title suffixes
-    # compare on the meaningful words only.
-    while tokens and re.fullmatch(r"\d{4}", tokens[-1]):
-        if year is None:
-            year = tokens[-1]
-        tokens.pop()
+    # Drop a single trailing year token such as "(2023)" so alternate title
+    # suffixes compare on the meaningful words only. Avoid stripping numeric
+    # titles like "1408" entirely by only removing the year when there are
+    # other tokens present.
+    if len(tokens) > 1 and re.fullmatch(r"\d{4}", tokens[-1]):
+        year = tokens.pop()
 
     return tokens, year
 
@@ -80,6 +80,8 @@ def _best_match(candidates, want: str) -> Optional[str]:
 
     # relaxed: startswith normalized (helps with extra year suffixes, etc.)
     for original, normalized, year in normalized_candidates:
+        if not normalized:
+            continue
         if not (normalized.startswith(want_key) or want_key.startswith(normalized)):
             continue
         if want_year and year and year != want_year:
