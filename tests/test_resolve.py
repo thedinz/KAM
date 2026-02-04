@@ -133,3 +133,47 @@ def test_resolve_does_not_match_short_titles_to_longer_phrases(tmp_path, monkeyp
 
     with pytest.raises(FileNotFoundError):
         resolve_module.resolve_existing_dir_or_422(library, target)
+
+
+def test_resolve_preserves_numeric_titles(tmp_path, monkeypatch):
+    assets_root = tmp_path / "assets"
+    library = "Movies"
+    target = "1408 (2007)"
+    existing = "1408 (2007)"
+
+    library_path = assets_root / library
+    library_path.mkdir(parents=True)
+    (library_path / existing).mkdir()
+
+    monkeypatch.setenv("KAM_ASSETS_ROOT", str(assets_root))
+
+    settings_module = importlib.reload(importlib.import_module("app.services.settings"))
+    settings_module.set_settings_path(str(tmp_path / "settings.json"))
+    settings_module.save_library_mappings([])
+
+    resolve_module = _reload_with_assets_root(str(assets_root))
+
+    resolved = resolve_module.resolve_existing_dir_or_422(library, target)
+    assert os.path.basename(resolved) == existing
+
+
+def test_resolve_does_not_cross_match_numeric_titles(tmp_path, monkeypatch):
+    assets_root = tmp_path / "assets"
+    library = "Movies"
+    target = "Ballerina (2015)"
+    existing = "1408"
+
+    library_path = assets_root / library
+    library_path.mkdir(parents=True)
+    (library_path / existing).mkdir()
+
+    monkeypatch.setenv("KAM_ASSETS_ROOT", str(assets_root))
+
+    settings_module = importlib.reload(importlib.import_module("app.services.settings"))
+    settings_module.set_settings_path(str(tmp_path / "settings.json"))
+    settings_module.save_library_mappings([])
+
+    resolve_module = _reload_with_assets_root(str(assets_root))
+
+    with pytest.raises(FileNotFoundError):
+        resolve_module.resolve_existing_dir_or_422(library, target)
