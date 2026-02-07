@@ -290,18 +290,61 @@ function LibraryPage() {
     showScanStatus({ active: true, percent: 0, label: 'Step 1/3: Scanning asset folders…', errors: [] });
 
     try {
-      const folderResponse = await fetch(`/api/asset-folders?library=${encodeURIComponent(lib)}`);
-      const folderData = await safeJson(folderResponse);
-      if (!folderResponse.ok) {
-        throw new Error(responseErrorMessage(folderResponse, folderData));
-      }
-      const folderNames = Array.isArray(folderData?.items)
-        ? folderData.items
-            .filter((entry) => entry?.isDir)
-            .map((entry) => String(entry?.name || '').trim())
-            .filter(Boolean)
-        : [];
-      const folderSet = new Set(folderNames.map((name) => name.toLowerCase()));
+      const STOPWORDS = new Set(['the', 'a', 'an', 'movie', 'film']);
+      const normalizeTitle = (value) => {
+        if (!value) return { key: '', year: null };
+        const normalized = String(value).normalize('NFKC').replace(/[\u0000-\u001f]/g, '');
+        const tokens = normalized
+          .toLowerCase()
+          .split(/[^0-9a-z]+/)
+          .filter(Boolean)
+          .filter((token) => !STOPWORDS.has(token));
+        let year = null;
+        if (tokens.length > 1 && /^\d{4}$/.test(tokens[tokens.length - 1])) {
+          year = tokens.pop();
+        }
+        return { key: tokens.join(''), year };
+      };
+      const buildFolderIndex = (names) =>
+        names
+          .map((name) => ({ name, ...normalizeTitle(name) }))
+          .filter((entry) => entry.key);
+      const matchesFolder = (candidate, index) => {
+        const { key, year } = normalizeTitle(candidate);
+        if (!key) return false;
+        for (const entry of index) {
+          if (entry.key !== key) continue;
+          if (year && entry.year && entry.year !== year) continue;
+          return true;
+        }
+        for (const entry of index) {
+          if (!entry.key) continue;
+          if (!(entry.key.startsWith(key) || key.startsWith(entry.key))) continue;
+          if (year && entry.year && entry.year !== year) continue;
+          return true;
+        }
+        return false;
+      };
+      const fetchFolderNames = async (targetLibrary, { optional } = {}) => {
+        const response = await fetch(`/api/asset-folders?library=${encodeURIComponent(targetLibrary)}`);
+        const data = await safeJson(response);
+        if (!response.ok) {
+          if (optional && response.status === 404) {
+            return [];
+          }
+          throw new Error(responseErrorMessage(response, data));
+        }
+        return Array.isArray(data?.items)
+          ? data.items
+              .filter((entry) => entry?.isDir)
+              .map((entry) => String(entry?.name || '').trim())
+              .filter(Boolean)
+          : [];
+      };
+      const folderNames = await fetchFolderNames(lib);
+      const collectionNames =
+        lib.toLowerCase() === 'collections' ? [] : await fetchFolderNames('Collections', { optional: true });
+      const folderIndex = buildFolderIndex([...folderNames, ...collectionNames]);
 
       showScanStatus({ active: true, percent: 33, label: 'Step 2/3: Scanning Plex library…', errors: [] });
       const { items: allItems = [] } = await fetchAllForLibrary(lib, '', { notReadyOnly: false });
@@ -325,7 +368,7 @@ function LibraryPage() {
         if (!candidates.size) {
           return true;
         }
-        return !Array.from(candidates).some((candidate) => folderSet.has(candidate.toLowerCase()));
+        return !Array.from(candidates).some((candidate) => matchesFolder(candidate, folderIndex));
       });
 
       const unmatchedEntries = unmatched.map((item) => ({
