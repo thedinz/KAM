@@ -387,6 +387,69 @@ a.btn:focus,
   margin: 16px;
 }
 
+.mapping-page {
+  padding: 16px;
+}
+
+.mapping-header-actions {
+  display: inline-flex;
+  gap: 8px;
+}
+
+.mapping-subtitle,
+.mapping-meta {
+  margin: 0 0 8px;
+  color: var(--muted);
+}
+
+.mapping-error {
+  color: #ff8b8b;
+}
+
+.mapping-table {
+  margin-top: 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.mapping-row {
+  display: grid;
+  grid-template-columns: minmax(220px, 2fr) minmax(240px, 2fr) minmax(120px, 1fr);
+  gap: 8px;
+  align-items: center;
+  padding: 10px 12px;
+  border-top: 1px solid var(--border);
+}
+
+.mapping-row:first-child {
+  border-top: 0;
+}
+
+.mapping-row-header {
+  background: color-mix(in oklab, var(--card) 85%, var(--border));
+  font-weight: 600;
+}
+
+.mapping-title {
+  font-weight: 600;
+}
+
+.mapping-folder-btn {
+  width: 100%;
+  text-align: left;
+}
+
+.mapping-status-ok {
+  color: #4ad27a;
+  font-weight: 600;
+}
+
+.mapping-status-miss {
+  color: #ff8b8b;
+  font-weight: 600;
+}
+
 main {
   min-height: 0;
 }
