@@ -93,6 +93,7 @@ function LibraryPage() {
   const [importState, setImportState] = useState({ active: false, percent: 0, label: '', errors: [] });
   const hideTimerRef = useRef();
   const [isImporting, setIsImporting] = useState(false);
+  const unresolvedCount = Number(notReadyCount) || 0;
 
   const showStatus = useCallback(({ percent = 0, label = '', errors = [], active = true }) => {
     clearTimeout(hideTimerRef.current);
@@ -142,6 +143,15 @@ function LibraryPage() {
     if (!library) return;
     const lib = library.trim();
     if (!lib) return;
+    if (unresolvedCount > 0) {
+      showStatus({
+        active: true,
+        percent: 0,
+        label: `Import blocked. Resolve or exclude ${unresolvedCount} not-ready item${unresolvedCount === 1 ? '' : 's'} first.`,
+        errors: [],
+      });
+      return;
+    }
     setIsImporting(true);
     const lower = lib.toLowerCase();
     const isCollections = lower === 'collections';
@@ -262,7 +272,7 @@ function LibraryPage() {
     } finally {
       setIsImporting(false);
     }
-  }, [library, fetchAllForLibrary, query, notReadyOnly, reload, showStatus, hideStatus]);
+  }, [library, fetchAllForLibrary, query, notReadyOnly, reload, showStatus, hideStatus, unresolvedCount]);
 
   const handleScanMapping = useCallback(() => {
     if (!library) return;
@@ -277,11 +287,13 @@ function LibraryPage() {
   }, [totalCount]);
 
   const normalizedLibrary = (library || '').trim();
-  const importTooltip = normalizedLibrary
-    ? normalizedLibrary.toLowerCase() === 'collections'
-      ? 'Import all collection posters/backgrounds from Plex into Kometa asset folders'
-      : 'Import all posters/backgrounds (and TV seasons) from Plex into Kometa asset folders'
-    : 'Choose a library first.';
+  const importTooltip = !normalizedLibrary
+    ? 'Choose a library first.'
+    : unresolvedCount > 0
+      ? `Resolve or exclude ${unresolvedCount} not-ready item${unresolvedCount === 1 ? '' : 's'} before importing.`
+      : normalizedLibrary.toLowerCase() === 'collections'
+        ? 'Import all collection posters/backgrounds from Plex into Kometa asset folders'
+        : 'Import all posters/backgrounds (and TV seasons) from Plex into Kometa asset folders';
 
   const notReadyButtonDisabled = !library || (Number(notReadyCount) || 0) <= 0;
   const scanDisabled = !library || loading;
@@ -300,7 +312,7 @@ function LibraryPage() {
           searchValue={searchInput}
           onSearchChange={handleSearchChange}
           onImportAll={handleImportAll}
-          importDisabled={!library || isImporting || loading}
+          importDisabled={!library || isImporting || loading || unresolvedCount > 0}
           importTitle={importTooltip}
           onScanMapping={handleScanMapping}
           scanDisabled={scanDisabled}
