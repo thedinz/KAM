@@ -10,30 +10,50 @@ from . import library_mappings as library_mappings_service
 ASSETS_ROOT = os.environ.get("KAM_ASSETS_ROOT", "/assets")
 
 _ILLEGAL_CTRL = re.compile(r"[\u0000-\u001F]")
+_YEAR_SUFFIX_RE = re.compile(
+    r"^(?P<title>.*?)(?:\s*[\(\[\{]\s*(?P<bracket_year>(?:18|19|20|21)\d{2})\s*[\)\]\}]|\s+(?P<bare_year>(?:18|19|20|21)\d{2}))\s*$"
+)
 
 _STOPWORDS = {"the", "a", "an", "movie", "film"}
 
 
+def _extract_trailing_year(s: str) -> tuple[str, Optional[str]]:
+    """Split a folder/title into title text and a trailing release year."""
+
+    text = unicodedata.normalize("NFKC", str(s or ""))
+    text = _ILLEGAL_CTRL.sub("", text).strip()
+    if not text:
+        return "", None
+
+    match = _YEAR_SUFFIX_RE.match(text)
+    if not match:
+        return text, None
+
+    title = (match.group("title") or "").strip()
+    year = match.group("bracket_year") or match.group("bare_year")
+    if not title or not re.search(r"[0-9A-Za-z]", title):
+        return text, None
+    return title, year
+
+
 def _tokenize_title(s: str) -> tuple[list[str], Optional[str]]:
-    """Return normalized tokens and an optional trailing year."""
+    """Return normalized title tokens and an optional trailing year."""
     if not s:
         return [], None
 
-    normalized = unicodedata.normalize("NFKC", str(s))
-    normalized = _ILLEGAL_CTRL.sub("", normalized)
-    normalized = normalized.casefold()
+    title_part, year = _extract_trailing_year(s)
+    normalized = title_part.casefold()
 
-    tokens = [tok for tok in re.split(r"[^0-9a-z]+", normalized) if tok]
-    tokens = [tok for tok in tokens if tok not in _STOPWORDS]
+    raw_tokens = [tok for tok in re.split(r"[^0-9a-z]+", normalized) if tok]
+    filtered_tokens = [tok for tok in raw_tokens if tok not in _STOPWORDS]
 
-    year: Optional[str] = None
-
-    # Drop a single trailing year token such as "(2023)" so alternate title
-    # suffixes compare on the meaningful words only. Avoid stripping numeric
-    # titles like "1408" entirely by only removing the year when there are
-    # other tokens present.
-    if len(tokens) > 1 and re.fullmatch(r"\d{4}", tokens[-1]):
-        year = tokens.pop()
+    # Stop words help compare titles like "The Super Mario Bros. Movie" with
+    # "Super Mario Bros. (2023)", but they should never erase the whole title
+    # or leave only a sequel number behind.
+    if filtered_tokens and not all(tok.isdigit() for tok in filtered_tokens):
+        tokens = filtered_tokens
+    else:
+        tokens = raw_tokens
 
     return tokens, year
 
@@ -48,55 +68,83 @@ def _normalize(s: str) -> str:
     return "".join(tokens)
 
 
+def _comparison_parts(s: str) -> tuple[str, Optional[str], tuple[str, ...]]:
+    tokens, year = _tokenize_title(s)
+    return "".join(tokens), year, tuple(tokens)
+
+
 def _normalize_with_year(s: str) -> tuple[str, Optional[str]]:
     """Return the normalized comparison key and trailing year (if any)."""
 
-    tokens, year = _tokenize_title(s)
-    return "".join(tokens), year
+    normalized, year, _ = _comparison_parts(s)
+    return normalized, year
+
+
+def _sequel_tokens(tokens: tuple[str, ...]) -> tuple[str, ...]:
+    """Return numeric title tokens such as the 2 in a sequel title."""
+
+    return tuple(tok for tok in tokens if tok.isdigit())
+
+
+def _sequel_tokens_compatible(
+    want_tokens: tuple[str, ...], candidate_tokens: tuple[str, ...]
+) -> bool:
+    return _sequel_tokens(want_tokens) == _sequel_tokens(candidate_tokens)
+
+
+def _year_compatible(want_year: Optional[str], candidate_year: Optional[str]) -> bool:
+    if want_year:
+        return candidate_year == want_year
+    return True
+
 
 def _best_match(candidates, want: str) -> Optional[str]:
-    """Return the candidate whose normalized name equals the normalized target."""
-    want_key, want_year = _normalize_with_year(want)
+    """Return the safest existing folder match for a normalized target."""
+    want_key, want_year, want_tokens = _comparison_parts(want)
     if not want_key:
         return None
 
     normalized_candidates = [
-        (c, *_normalize_with_year(c)) for c in candidates if c
+        (c, *_comparison_parts(c)) for c in candidates if c
     ]
 
-    # 1) Exact normalized+year match first to prevent cross-year collisions.
-    if want_year:
-        for original, normalized, year in normalized_candidates:
-            if normalized == want_key and year and year == want_year:
-                return original
+    def usable(year: Optional[str], tokens: tuple[str, ...]) -> bool:
+        return _year_compatible(want_year, year) and _sequel_tokens_compatible(
+            want_tokens, tokens
+        )
 
-    # 2) Exact normalized match with compatible years.
-    for original, normalized, year in normalized_candidates:
-        if normalized != want_key:
-            continue
-        if want_year and year and year != want_year:
-            continue
-        return original
+    # 1) Exact normalized match, but only when the year and sequel markers are
+    # compatible. If a year-scoped Plex item cannot find the same year on disk,
+    # leave it unmatched instead of borrowing a sibling movie's folder.
+    exact_matches = [
+        original
+        for original, normalized, year, tokens in normalized_candidates
+        if normalized == want_key and usable(year, tokens)
+    ]
+    if len(exact_matches) == 1:
+        return exact_matches[0]
+    if len(exact_matches) > 1:
+        return None
 
-    # relaxed: startswith normalized (helps with extra year suffixes, etc.)
-    for original, normalized, year in normalized_candidates:
-        if not normalized:
-            continue
-        if not (normalized.startswith(want_key) or want_key.startswith(normalized)):
-            continue
-        if want_year and year and year != want_year:
-            continue
-        return original
+    # 2) Relaxed prefix match for legitimate suffixes such as "Extended
+    # Edition", still requiring compatible years and sequel numbers.
+    relaxed_matches = [
+        original
+        for original, normalized, year, tokens in normalized_candidates
+        if normalized
+        and (normalized.startswith(want_key) or want_key.startswith(normalized))
+        and usable(year, tokens)
+    ]
+    if len(relaxed_matches) == 1:
+        return relaxed_matches[0]
+    if len(relaxed_matches) > 1:
+        return None
 
-    # fallback: closest fuzzy match when the similarity is very high
-    best_score = 0.0
-    best_candidate = None
-    best_base_ratio = 0.0
-    best_lengths: tuple[int, int] = (0, 0)
-    for original, normalized, year in normalized_candidates:
-        if not normalized:
-            continue
-        if want_year and year and year != want_year:
+    # 3) Fallback: closest fuzzy match when the similarity is very high and
+    # there is a clear winner.
+    scored_matches: list[tuple[float, str, float, tuple[int, int]]] = []
+    for original, normalized, year, tokens in normalized_candidates:
+        if not normalized or not usable(year, tokens):
             continue
         matcher = SequenceMatcher(a=normalized, b=want_key)
         base_ratio = matcher.ratio()
@@ -117,33 +165,40 @@ def _best_match(candidates, want: str) -> Optional[str]:
             if shorter:
                 score = max(score, window_match.size / len(shorter))
 
-        if score > best_score:
-            best_score = score
-            best_candidate = original
-            best_base_ratio = base_ratio
-            best_lengths = (len_norm, len_want)
+        scored_matches.append((score, original, base_ratio, (len_norm, len_want)))
 
-    # require a conservative minimum similarity to avoid unrelated matches
-    if best_candidate and best_score >= 0.86:
-        len_norm, len_want = best_lengths
-        shorter = min(len_norm, len_want)
-        longer = max(len_norm, len_want)
+    scored_matches.sort(key=lambda item: item[0], reverse=True)
+    if not scored_matches:
+        return None
 
-        # Disallow fuzzy matches for extremely short titles or wildly
-        # different-length strings so "It" does not match
-        # "In association with Marvel".
-        if shorter < 4:
-            return None
-        if longer and shorter and (longer / shorter) > 2.5:
-            return None
+    best_score, best_candidate, best_base_ratio, best_lengths = scored_matches[0]
+    if best_score < 0.86:
+        return None
 
-        # Also require the overall ratio to be reasonably close; this ensures
-        # we only accept near-identical titles.
-        if best_base_ratio < 0.7:
-            return None
+    # Similar candidates mean the resolver is guessing. Surface the item as
+    # unmatched so the user can pair it manually.
+    if len(scored_matches) > 1 and scored_matches[1][0] >= best_score - 0.03:
+        return None
 
-        return best_candidate
-    return None
+    len_norm, len_want = best_lengths
+    shorter = min(len_norm, len_want)
+    longer = max(len_norm, len_want)
+
+    # Disallow fuzzy matches for extremely short titles or wildly
+    # different-length strings so "It" does not match
+    # "In association with Marvel".
+    if shorter < 4:
+        return None
+    if longer and shorter and (longer / shorter) > 2.5:
+        return None
+
+    # Also require the overall ratio to be reasonably close; this ensures
+    # we only accept near-identical titles.
+    if best_base_ratio < 0.7:
+        return None
+
+    return best_candidate
+
 
 def _candidate_bases(library: str) -> Iterable[str]:
     """Yield possible asset roots for *library* in priority order."""
