@@ -4,6 +4,7 @@ const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [authState, setAuthState] = useState({
+    mode: 'builtin',
     enabled: false,
     authenticated: true,
     loading: true,
@@ -14,7 +15,12 @@ export function AuthProvider({ children }) {
       const response = await fetch('/auth/status', { credentials: 'same-origin' });
       if (!response.ok) {
         if (response.status === 404) {
-          const nextState = { enabled: false, authenticated: true, loading: false };
+          const nextState = {
+            mode: 'builtin',
+            enabled: false,
+            authenticated: true,
+            loading: false,
+          };
           setAuthState(nextState);
           return nextState;
         }
@@ -22,6 +28,7 @@ export function AuthProvider({ children }) {
       }
       const data = await response.json();
       const nextState = {
+        mode: data.mode === 'reverse_proxy' ? 'reverse_proxy' : 'builtin',
         enabled: Boolean(data.enabled),
         authenticated: Boolean(data.authenticated),
         loading: false,
@@ -29,7 +36,12 @@ export function AuthProvider({ children }) {
       setAuthState(nextState);
       return nextState;
     } catch (error) {
-      const nextState = { enabled: false, authenticated: true, loading: false };
+      const nextState = {
+        mode: 'builtin',
+        enabled: false,
+        authenticated: true,
+        loading: false,
+      };
       setAuthState(nextState);
       return nextState;
     }
@@ -53,12 +65,17 @@ export function AuthProvider({ children }) {
       throw new Error(message);
     }
 
-    setAuthState({ enabled: true, authenticated: true, loading: false });
+    setAuthState({ mode: 'builtin', enabled: true, authenticated: true, loading: false });
   }, []);
 
   const logout = useCallback(async () => {
     await fetch('/auth/logout', { method: 'POST', credentials: 'same-origin' });
-    setAuthState({ enabled: true, authenticated: false, loading: false });
+    setAuthState((prev) => ({
+      mode: prev.mode,
+      enabled: prev.enabled,
+      authenticated: prev.mode === 'reverse_proxy' ? true : false,
+      loading: false,
+    }));
   }, []);
 
   const value = useMemo(
