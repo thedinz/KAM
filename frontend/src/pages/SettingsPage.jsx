@@ -41,6 +41,7 @@ function SettingsPage() {
     savedTheme,
     plexUrl,
     plexToken,
+    authMode,
     authPassword,
     savedSettings,
     libraryMappings,
@@ -81,13 +82,16 @@ function SettingsPage() {
 
   const savedPlexUrl = savedSettings?.plexUrl || '';
   const savedPlexToken = savedSettings?.plexToken || '';
+  const savedAuthMode = savedSettings?.authMode || 'builtin';
   const savedAuthPassword = savedSettings?.authPassword || '';
+  const effectiveAuthMode = authMode === 'reverse_proxy' ? 'reverse_proxy' : 'builtin';
   const effectiveAuthPassword = authPassword ?? '';
   const normalizedPlexUrl = normalizeText(plexUrl);
   const normalizedPlexToken = normalizeText(plexToken);
   const normalizedAuthPassword = normalizeText(effectiveAuthPassword);
   const hasPlexCredentials = Boolean(normalizedPlexUrl && normalizedPlexToken);
   const hasAuthPassword = Boolean(normalizedAuthPassword);
+  const reverseProxyAuth = effectiveAuthMode === 'reverse_proxy';
 
   useEffect(() => {
     if (error) {
@@ -408,6 +412,7 @@ function SettingsPage() {
       theme !== savedTheme ||
       plexUrl !== savedPlexUrl ||
       plexToken !== savedPlexToken ||
+      effectiveAuthMode !== savedAuthMode ||
       effectiveAuthPassword !== savedAuthPassword;
     return settingsChanged || mappingsDirty;
   }, [
@@ -418,6 +423,8 @@ function SettingsPage() {
     savedPlexUrl,
     plexToken,
     savedPlexToken,
+    effectiveAuthMode,
+    savedAuthMode,
     effectiveAuthPassword,
     savedAuthPassword,
     mappingsDirty,
@@ -440,6 +447,11 @@ function SettingsPage() {
 
   const handlePlexTokenChange = (event) => {
     updateSettings({ plexToken: event.target.value });
+    setStatus(null);
+  };
+
+  const handleAuthModeChange = (event) => {
+    updateSettings({ authMode: event.target.value });
     setStatus(null);
   };
 
@@ -872,25 +884,55 @@ function SettingsPage() {
             <div className="settings-section">
               <h3>Login</h3>
               <p className="settings-description">
-                Set a password to require a login before accessing KAM. Leave this blank to disable the
-                login screen.
+                Choose whether KAM uses its own login screen or trusts authentication from a reverse
+                proxy.
               </p>
-              <label className="settings-input">
-                <span>Login password</span>
-                <input
-                  type="password"
-                  name="authPassword"
-                  value={effectiveAuthPassword}
-                  onChange={handleAuthPasswordChange}
-                  placeholder={
-                    savedAuthPassword ? 'Saved password (leave blank to clear)' : 'Enter a password'
-                  }
-                  autoComplete="new-password"
-                  disabled={busy}
-                />
-              </label>
+              <div className="settings-auth-mode" role="group" aria-label="Authentication mode">
+                <label className="settings-radio">
+                  <input
+                    type="radio"
+                    name="authMode"
+                    value="builtin"
+                    checked={effectiveAuthMode === 'builtin'}
+                    onChange={handleAuthModeChange}
+                    disabled={busy}
+                  />
+                  <span>Built-in auth</span>
+                </label>
+                <label className="settings-radio">
+                  <input
+                    type="radio"
+                    name="authMode"
+                    value="reverse_proxy"
+                    checked={effectiveAuthMode === 'reverse_proxy'}
+                    onChange={handleAuthModeChange}
+                    disabled={busy}
+                  />
+                  <span>Reverse proxy auth</span>
+                </label>
+              </div>
+              {!reverseProxyAuth ? (
+                <label className="settings-input">
+                  <span>Login password</span>
+                  <input
+                    type="password"
+                    name="authPassword"
+                    value={effectiveAuthPassword}
+                    onChange={handleAuthPasswordChange}
+                    placeholder={
+                      savedAuthPassword
+                        ? 'Saved password (leave blank to clear)'
+                        : 'Enter a password'
+                    }
+                    autoComplete="new-password"
+                    disabled={busy}
+                  />
+                </label>
+              ) : null}
               <p className="settings-help">
-                {hasAuthPassword
+                {reverseProxyAuth
+                  ? 'KAM will skip built-in login and trust the upstream proxy.'
+                  : hasAuthPassword
                   ? 'Login is currently enabled. Save changes to update the password.'
                   : 'Login is currently disabled.'}
               </p>
