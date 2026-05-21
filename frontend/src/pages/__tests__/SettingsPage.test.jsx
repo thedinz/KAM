@@ -185,7 +185,7 @@ describe('SettingsPage', () => {
     expect(updateSettings).toHaveBeenCalledWith({ authMode: 'reverse_proxy' });
   });
 
-  it('disables the password field in reverse proxy authentication mode', () => {
+  it('hides the password field in reverse proxy authentication mode', () => {
     useTheme.mockReturnValue({
       theme: 'dark',
       savedTheme: 'dark',
@@ -231,7 +231,7 @@ describe('SettingsPage', () => {
     );
 
     expect(screen.getByRole('radio', { name: 'Reverse proxy auth' })).toBeChecked();
-    expect(screen.getByLabelText('Login password')).toBeDisabled();
+    expect(screen.queryByLabelText('Login password')).not.toBeInTheDocument();
     expect(screen.getByText('KAM will skip built-in login and trust the upstream proxy.')).toBeInTheDocument();
   });
 
