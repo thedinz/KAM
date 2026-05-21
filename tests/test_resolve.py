@@ -177,3 +177,92 @@ def test_resolve_does_not_cross_match_numeric_titles(tmp_path, monkeypatch):
 
     with pytest.raises(FileNotFoundError):
         resolve_module.resolve_existing_dir_or_422(library, target)
+
+
+def test_resolve_matches_sequel_to_same_year_folder(tmp_path, monkeypatch):
+    assets_root = tmp_path / "assets"
+    library = "Movies"
+    original = "Movie (2009)"
+    sequel = "Movie 2 (2015)"
+
+    library_path = assets_root / library
+    library_path.mkdir(parents=True)
+    (library_path / original).mkdir()
+    (library_path / sequel).mkdir()
+
+    monkeypatch.setenv("KAM_ASSETS_ROOT", str(assets_root))
+
+    settings_module = importlib.reload(importlib.import_module("app.services.settings"))
+    settings_module.set_settings_path(str(tmp_path / "settings.json"))
+    settings_module.save_library_mappings([])
+
+    resolve_module = _reload_with_assets_root(str(assets_root))
+
+    resolved = resolve_module.resolve_existing_dir_or_422(library, sequel)
+    assert os.path.basename(resolved) == sequel
+
+
+def test_resolve_does_not_match_sequel_to_original_year(tmp_path, monkeypatch):
+    assets_root = tmp_path / "assets"
+    library = "Movies"
+    target = "Movie 2 (2015)"
+    existing = "Movie (2009)"
+
+    library_path = assets_root / library
+    library_path.mkdir(parents=True)
+    (library_path / existing).mkdir()
+
+    monkeypatch.setenv("KAM_ASSETS_ROOT", str(assets_root))
+
+    settings_module = importlib.reload(importlib.import_module("app.services.settings"))
+    settings_module.set_settings_path(str(tmp_path / "settings.json"))
+    settings_module.save_library_mappings([])
+
+    resolve_module = _reload_with_assets_root(str(assets_root))
+
+    with pytest.raises(FileNotFoundError):
+        resolve_module.resolve_existing_dir_or_422(library, target)
+
+
+def test_resolve_does_not_match_original_to_sequel_year(tmp_path, monkeypatch):
+    assets_root = tmp_path / "assets"
+    library = "Movies"
+    target = "Movie (2009)"
+    existing = "Movie 2 (2015)"
+
+    library_path = assets_root / library
+    library_path.mkdir(parents=True)
+    (library_path / existing).mkdir()
+
+    monkeypatch.setenv("KAM_ASSETS_ROOT", str(assets_root))
+
+    settings_module = importlib.reload(importlib.import_module("app.services.settings"))
+    settings_module.set_settings_path(str(tmp_path / "settings.json"))
+    settings_module.save_library_mappings([])
+
+    resolve_module = _reload_with_assets_root(str(assets_root))
+
+    with pytest.raises(FileNotFoundError):
+        resolve_module.resolve_existing_dir_or_422(library, target)
+
+
+def test_resolve_does_not_match_year_scoped_movie_to_yearless_folder(tmp_path, monkeypatch):
+    assets_root = tmp_path / "assets"
+    library = "Movies"
+    target = "Movie 2 (2015)"
+    existing = "Movie 2"
+
+    library_path = assets_root / library
+    library_path.mkdir(parents=True)
+    (library_path / existing).mkdir()
+
+    monkeypatch.setenv("KAM_ASSETS_ROOT", str(assets_root))
+
+    settings_module = importlib.reload(importlib.import_module("app.services.settings"))
+    settings_module.set_settings_path(str(tmp_path / "settings.json"))
+    settings_module.save_library_mappings([])
+
+    resolve_module = _reload_with_assets_root(str(assets_root))
+
+    with pytest.raises(FileNotFoundError):
+        resolve_module.resolve_existing_dir_or_422(library, target)

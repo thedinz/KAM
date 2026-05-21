@@ -89,17 +89,24 @@ def _to_int(x) -> Optional[int]:
 # ---------- Local folder & poster helpers ----------
 
 def _try_existing_asset_folder(
-    library: str, title: Optional[str], year: Optional[int]
+    library: str,
+    title: Optional[str],
+    year: Optional[int],
+    item_type: Optional[str] = None,
 ) -> Tuple[Optional[str], Optional[str]]:
     """
     Use your resolver to find an actual, existing Kometa folder.
-    Try 'Title (Year)' first, then 'Title'. Never create anything.
+    Movies with a Plex year only try 'Title (Year)' automatically. If that
+    cannot be resolved, leave them unmatched instead of guessing from 'Title'.
     """
     if not title:
         return None, None
     candidates: List[str] = []
-    if year: candidates.append(f"{title} ({year})")
-    candidates.append(title)
+    if year:
+        candidates.append(f"{title} ({year})")
+    if not (year and (item_type or "").casefold() == "movie"):
+        candidates.append(title)
+    candidates = list(dict.fromkeys(candidates))
     for cand in candidates:
         try:
             full = resolve_existing_dir_or_422(library, cand)
@@ -193,7 +200,7 @@ def list_items(
         folder_name, folder_path = _resolve_override_folder(library, override)
         if not folder_path:
             auto_name, auto_path = _try_existing_asset_folder(
-                library, it["title"], it["year"]
+                library, it["title"], it["year"], it["type"]
             )
             if auto_name:
                 folder_name = folder_name or auto_name
