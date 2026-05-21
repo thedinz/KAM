@@ -15,6 +15,7 @@ const ThemeContext = createContext({
     theme: 'dark',
     plexUrl: '',
     plexToken: '',
+    authMode: 'builtin',
     authPassword: '',
     libraryMappings: [],
   },
@@ -22,6 +23,7 @@ const ThemeContext = createContext({
     theme: 'dark',
     plexUrl: '',
     plexToken: '',
+    authMode: 'builtin',
     authPassword: '',
     libraryMappings: [],
   },
@@ -29,9 +31,11 @@ const ThemeContext = createContext({
   savedTheme: 'dark',
   plexUrl: '',
   plexToken: '',
+  authMode: 'builtin',
   authPassword: '',
   savedPlexUrl: '',
   savedPlexToken: '',
+  savedAuthMode: 'builtin',
   savedAuthPassword: '',
   libraryMappings: [],
   savedLibraryMappings: [],
@@ -68,6 +72,10 @@ const ThemeContext = createContext({
 });
 
 const normalizeTheme = (value) => (value === 'light' ? 'light' : 'dark');
+const normalizeAuthMode = (value) => {
+  const text = value == null ? '' : String(value).trim().toLowerCase().replace('-', '_');
+  return text === 'reverse_proxy' || text === 'proxy' ? 'reverse_proxy' : 'builtin';
+};
 
 const sanitizeLibrariesList = (raw) => {
   if (!raw) return [];
@@ -124,6 +132,7 @@ const sanitizeSettings = (raw = {}) => {
   const themeValue = normalizeTheme(raw.theme);
   const plexUrlValue = raw.plexUrl;
   const plexTokenValue = raw.plexToken;
+  const authModeValue = normalizeAuthMode(raw.authMode);
   const authPasswordValue = raw.authPassword;
 
   return {
@@ -140,6 +149,7 @@ const sanitizeSettings = (raw = {}) => {
         : plexTokenValue
         ? String(plexTokenValue)
         : '',
+    authMode: authModeValue,
     authPassword:
       typeof authPasswordValue === 'string'
         ? authPasswordValue.trim()
@@ -597,6 +607,7 @@ export function ThemeProvider({ children }) {
       settings.theme !== savedSettings.theme ||
       settings.plexUrl !== savedSettings.plexUrl ||
       settings.plexToken !== savedSettings.plexToken ||
+      settings.authMode !== savedSettings.authMode ||
       settings.authPassword !== savedSettings.authPassword,
     [settings, savedSettings]
   );
@@ -700,9 +711,11 @@ export function ThemeProvider({ children }) {
       savedTheme: savedSettings.theme,
       plexUrl: settings.plexUrl,
       plexToken: settings.plexToken,
+      authMode: settings.authMode,
       authPassword: settings.authPassword,
       savedPlexUrl: savedSettings.plexUrl,
       savedPlexToken: savedSettings.plexToken,
+      savedAuthMode: savedSettings.authMode,
       savedAuthPassword: savedSettings.authPassword,
       libraryMappings: settings.libraryMappings,
       savedLibraryMappings: savedSettings.libraryMappings,
