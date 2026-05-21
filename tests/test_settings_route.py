@@ -34,6 +34,8 @@ def test_get_settings_returns_defaults_when_missing_file(settings_modules):
         "theme": "dark",
         "plexUrl": "",
         "plexToken": "",
+        "authMode": "builtin",
+        "authPassword": "",
         "libraryMappings": [],
     }
 
@@ -66,6 +68,8 @@ def test_get_settings_returns_stored_values(settings_modules):
         "theme": "dark",
         "plexUrl": "http://plex.example:32400",
         "plexToken": "initial-token",
+        "authMode": "builtin",
+        "authPassword": "",
         "libraryMappings": [
             {
                 "library": "Movies",
@@ -108,6 +112,8 @@ def test_put_settings_updates_file(settings_modules):
         "theme": "light",
         "plexUrl": "http://plex.changed",
         "plexToken": "updated-token",
+        "authMode": "builtin",
+        "authPassword": "",
         "libraryMappings": [
             {
                 "library": "Movies",
@@ -129,6 +135,8 @@ def test_put_settings_updates_file(settings_modules):
         "theme": "light",
         "plexUrl": "http://plex.changed",
         "plexToken": "updated-token",
+        "authMode": "builtin",
+        "authPassword": "",
         "libraryMappings": [
             {
                 "library": "Movies",
@@ -148,6 +156,8 @@ def test_put_settings_updates_file(settings_modules):
         "theme": "light",
         "plexUrl": "http://plex.changed",
         "plexToken": "updated-token",
+        "authMode": "builtin",
+        "authPassword": "",
         "libraryMappings": [
             {
                 "library": "Movies",
@@ -175,6 +185,31 @@ def test_put_settings_rejects_invalid_plex_url(settings_modules):
 
     with pytest.raises(ValidationError):
         router.SettingsPayload(theme="dark", plexUrl="not-a-url")
+
+
+def test_put_settings_accepts_reverse_proxy_auth_mode(settings_modules):
+    router, service, path, _ = settings_modules
+
+    payload = router.SettingsPayload(
+        theme="dark",
+        authMode="reverse-proxy",
+        authPassword="  keep-existing-secret  ",
+    )
+
+    resp = router.update_settings(payload)
+
+    assert resp.authMode == "reverse_proxy"
+    assert resp.authPassword == "keep-existing-secret"
+    stored = json.loads(path.read_text(encoding="utf-8"))
+    assert stored["authMode"] == "reverse_proxy"
+    assert service.load_settings()["authMode"] == "reverse_proxy"
+
+
+def test_put_settings_rejects_invalid_auth_mode(settings_modules):
+    router, _, _, _ = settings_modules
+
+    with pytest.raises(ValidationError):
+        router.SettingsPayload(theme="dark", authMode="external")
 
 
 def test_put_settings_rejects_invalid_library_mapping(settings_modules):

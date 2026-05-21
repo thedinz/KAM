@@ -12,15 +12,42 @@ from fastapi import Request
 from . import settings as settings_service
 
 _PASSWORD_ENV = "KAM_AUTH_PASSWORD"
+_AUTH_MODE_ENV = "KAM_AUTH_MODE"
 _COOKIE_NAME_ENV = "KAM_AUTH_COOKIE"
 _TOKEN_TTL_ENV = "KAM_AUTH_TOKEN_TTL_SECONDS"
 _COOKIE_SECURE_ENV = "KAM_AUTH_COOKIE_SECURE"
 
+_AUTH_MODE_BUILTIN = "builtin"
+_AUTH_MODE_REVERSE_PROXY = "reverse_proxy"
 _DEFAULT_COOKIE_NAME = "kam_auth"
 _DEFAULT_TTL_SECONDS = 60 * 60 * 24 * 7
 
 _LOCK = threading.Lock()
 _SESSIONS: dict[str, float] = {}
+
+
+def _normalize_mode(value: object) -> str:
+    if value is None:
+        return _AUTH_MODE_BUILTIN
+    text = str(value).strip().lower().replace("-", "_")
+    if text in {"reverse_proxy", "proxy"}:
+        return _AUTH_MODE_REVERSE_PROXY
+    return _AUTH_MODE_BUILTIN
+
+
+def auth_mode() -> str:
+    env_mode = os.getenv(_AUTH_MODE_ENV)
+    if env_mode and env_mode.strip():
+        return _normalize_mode(env_mode)
+    try:
+        data = settings_service.load_settings()
+    except Exception:
+        return _AUTH_MODE_BUILTIN
+    return _normalize_mode(data.get("authMode"))
+
+
+def is_reverse_proxy_mode() -> bool:
+    return auth_mode() == _AUTH_MODE_REVERSE_PROXY
 
 
 def _resolve_password() -> str:
@@ -40,6 +67,8 @@ def _resolve_password() -> str:
 
 
 def is_enabled() -> bool:
+    if is_reverse_proxy_mode():
+        return False
     password = _resolve_password()
     return bool(password)
 
@@ -70,7 +99,7 @@ def cookie_secure(request: Request) -> bool:
 
 
 def verify_password(candidate: Optional[str]) -> bool:
-    if not candidate:
+    if not candidate or not is_enabled():
         return False
     expected = _resolve_password()
     if not expected:
