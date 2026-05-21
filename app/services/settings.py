@@ -17,6 +17,7 @@ _DEFAULT_SETTINGS: Dict[str, Any] = {
     "theme": "dark",
     "plexUrl": "",
     "plexToken": "",
+    "authMode": "builtin",
     "authPassword": "",
     "libraryMappings": [],
 }
@@ -64,6 +65,15 @@ def _resolve_initial_storage_path() -> str:
 _STORAGE_PATH = _resolve_initial_storage_path()
 
 _LOCK = threading.Lock()
+
+
+def _normalize_auth_mode(value: Any) -> str:
+    if value in (None, ""):
+        return "builtin"
+    text = str(value).strip().lower().replace("-", "_")
+    if text in {"reverse_proxy", "proxy"}:
+        return "reverse_proxy"
+    return "builtin"
 
 
 def set_settings_path(path: str) -> None:
@@ -125,6 +135,9 @@ def _sanitize_payload(data: Dict[str, Any] | None) -> Dict[str, Any]:
     for key in ("theme", "plexUrl", "plexToken", "authPassword"):
         if key in data:
             sanitized[key] = data[key]
+
+    if "authMode" in data:
+        sanitized["authMode"] = _normalize_auth_mode(data.get("authMode"))
 
     if "libraryMappings" in data:
         sanitized["libraryMappings"] = library_mappings.sanitize_library_mappings(

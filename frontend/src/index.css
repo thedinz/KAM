@@ -1213,6 +1213,12 @@ main {
   gap: 8px;
 }
 
+.settings-auth-mode {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
 .settings-radio {
   display: inline-flex;
   align-items: center;
@@ -1230,6 +1236,11 @@ main {
 }
 
 .settings-form fieldset[disabled] .settings-radio {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.settings-radio:has(input:disabled) {
   opacity: 0.5;
   cursor: not-allowed;
 }

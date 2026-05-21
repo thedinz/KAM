@@ -88,6 +88,7 @@ class SettingsPayload(BaseModel):
     theme: Literal["light", "dark"]
     plexUrl: str = Field(default="")
     plexToken: str = Field(default="")
+    authMode: Literal["builtin", "reverse_proxy"] = Field(default="builtin")
     authPassword: str = Field(default="")
     libraryMappings: List[LibraryMappingPayload] = Field(default_factory=list)
 
@@ -124,6 +125,20 @@ class SettingsPayload(BaseModel):
         if not isinstance(value, str):
             value = str(value)
         return value.strip()
+
+    @field_validator("authMode", mode="before")
+    @classmethod
+    def _validate_auth_mode(cls, value: str | None) -> str:
+        if value in (None, ""):
+            return "builtin"
+        if not isinstance(value, str):
+            value = str(value)
+        normalized = value.strip().lower().replace("-", "_")
+        if normalized in {"builtin", "built_in", "built-in"}:
+            return "builtin"
+        if normalized in {"reverse_proxy", "reverse-proxy", "proxy"}:
+            return "reverse_proxy"
+        raise ValueError("Invalid authentication mode")
 
     @field_validator("authPassword", mode="before")
     @classmethod
@@ -169,4 +184,3 @@ def update_library_mappings(payload: LibraryMappingsUpdatePayload) -> List[Libra
     )
     mappings = stored.get("libraryMappings", [])
     return [LibraryMappingPayload(**item) for item in mappings]
-
