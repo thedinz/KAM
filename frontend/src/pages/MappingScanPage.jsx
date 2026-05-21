@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import FolderFinderModal from '../components/FolderFinderModal.jsx';
 import ImportStatusPanel from '../components/ImportStatusPanel.jsx';
 import { useLibraryItemsContext } from '../hooks/LibraryItemsProvider.jsx';
-import { runLibraryMappingScan } from '../utils/mappingScan.js';
+import { assignMatchedFolders, runLibraryMappingScan } from '../utils/mappingScan.js';
 
 function storageKeyForLibrary(library) {
   return `kam.mappingScan.${String(library || '').trim().toLowerCase()}`;
@@ -16,6 +16,7 @@ function MappingScanPage() {
     library,
     setLibrary,
     reload,
+    refreshNotReadyCount,
     fetchAllForLibrary,
     updateItem,
   } = useLibraryItemsContext();
@@ -62,9 +63,39 @@ function MappingScanPage() {
           setScanState({ active: true, percent, label: label || '', errors: [] });
         },
       });
-      setRows(result.entries);
+      const assignmentResult = await assignMatchedFolders({
+        library: selectedLibrary,
+        entries: result.entries,
+        onProgress: ({ label }) => {
+          setScanState({ active: true, percent: 100, label: label || '', errors: [] });
+        },
+      });
+      const nextResult = { ...result, entries: assignmentResult.entries };
+      const unmatchedCountNext = nextResult.entries.filter((entry) => !entry.matched).length;
+      const assignmentErrors = assignmentResult.errors || [];
+      const appliedText = assignmentResult.assignedCount
+        ? ` Applied ${assignmentResult.assignedCount.toLocaleString()} folder assignment${
+            assignmentResult.assignedCount === 1 ? '' : 's'
+          }.`
+        : '';
+      const errorText = assignmentErrors.length
+        ? ` ${assignmentErrors.length.toLocaleString()} assignment${
+            assignmentErrors.length === 1 ? '' : 's'
+          } failed.`
+        : '';
+      setRows(nextResult.entries);
       setLastScannedAt(result.scannedAt);
-      localStorage.setItem(storageKeyForLibrary(selectedLibrary), JSON.stringify(result));
+      localStorage.setItem(storageKeyForLibrary(selectedLibrary), JSON.stringify(nextResult));
+      setScanState({
+        active: true,
+        percent: 100,
+        label: `Scan complete. ${unmatchedCountNext.toLocaleString()} unmatched item${
+          unmatchedCountNext === 1 ? '' : 's'
+        }.${appliedText}${errorText}`,
+        errors: assignmentErrors,
+      });
+      await reload();
+      await refreshNotReadyCount(selectedLibrary);
     } catch (err) {
       const message = err?.message || String(err);
       setScanError(message);
@@ -72,7 +103,7 @@ function MappingScanPage() {
     } finally {
       setIsScanning(false);
     }
-  }, [selectedLibrary, fetchAllForLibrary]);
+  }, [selectedLibrary, fetchAllForLibrary, reload, refreshNotReadyCount]);
 
   useEffect(() => {
     if (!selectedLibrary || rows.length) return;
@@ -114,8 +145,9 @@ function MappingScanPage() {
       );
       closeFolderModal();
       await reload();
+      await refreshNotReadyCount(selectedLibrary);
     },
-    [folderModalItem, updateItem, rows, selectedLibrary, lastScannedAt, closeFolderModal, reload]
+    [folderModalItem, updateItem, rows, selectedLibrary, lastScannedAt, closeFolderModal, reload, refreshNotReadyCount]
   );
 
   if (!selectedLibrary) {
@@ -147,7 +179,15 @@ function MappingScanPage() {
           {selectedLibrary}: {rows.length.toLocaleString()} scanned • {unmatchedCount.toLocaleString()} unmatched
         </p>
         {lastScannedAt ? <p className="mapping-meta">Last scanned: {new Date(lastScannedAt).toLocaleString()}</p> : null}
-        <ImportStatusPanel active={scanState.active} percent={scanState.percent} label={scanState.label} errors={[]} />
+        <ImportStatusPanel
+          active={scanState.active}
+          percent={scanState.percent}
+          label={scanState.label}
+          errors={scanState.errors}
+          errorHeading="Mapping Errors"
+          errorNoun="mapping error"
+          modalId="mappingErrorsDialog"
+        />
         {scanError ? <p className="mapping-error">{scanError}</p> : null}
         <div className="mapping-table" role="table" aria-label="Mapping scan results">
           <div className="mapping-row mapping-row-header" role="row">
@@ -163,8 +203,17 @@ function MappingScanPage() {
                   {entry.matchedFolder || 'Not matched (click to set folder)'}
                 </button>
               </div>
-              <div role="cell" className={entry.matched ? 'mapping-status-ok' : 'mapping-status-miss'}>
-                {entry.matched ? '✅ Match' : '❌ Missing'}
+              <div
+                role="cell"
+                className={entry.assignmentError ? 'mapping-status-miss' : entry.matched ? 'mapping-status-ok' : 'mapping-status-miss'}
+              >
+                {entry.assignmentError
+                  ? `⚠ ${entry.assignmentError}`
+                  : entry.assigned
+                  ? '✅ Assigned'
+                  : entry.matched
+                  ? '✅ Match'
+                  : '❌ Missing'}
               </div>
             </div>
           ))}
