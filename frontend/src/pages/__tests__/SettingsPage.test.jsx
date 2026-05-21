@@ -8,6 +8,16 @@ vi.mock('../../theme/ThemeProvider.jsx', () => ({
   useTheme: vi.fn(),
 }));
 
+vi.mock('../../hooks/AuthProvider.jsx', () => ({
+  useAuth: () => ({
+    refresh: vi.fn().mockResolvedValue({
+      mode: 'builtin',
+      enabled: false,
+      authenticated: true,
+    }),
+  }),
+}));
+
 describe('SettingsPage', () => {
   afterEach(() => {
     vi.clearAllMocks();
@@ -122,6 +132,107 @@ describe('SettingsPage', () => {
     );
 
     expect(screen.getByRole('alert')).toHaveTextContent('Unable to load libraries');
+  });
+
+  it('lets users select reverse proxy authentication', () => {
+    const updateSettings = vi.fn();
+    useTheme.mockReturnValue({
+      theme: 'dark',
+      savedTheme: 'dark',
+      plexUrl: '',
+      plexToken: '',
+      authMode: 'builtin',
+      authPassword: 'secret',
+      savedSettings: {
+        plexUrl: '',
+        plexToken: '',
+        authMode: 'builtin',
+        authPassword: 'secret',
+      },
+      libraryMappings: [],
+      savedLibraryMappings: [],
+      libraries: [],
+      librariesLoading: false,
+      librariesError: null,
+      loading: false,
+      saving: false,
+      error: null,
+      libraryMappingsDirty: false,
+      hasUnsavedChanges: false,
+      applyTheme: vi.fn(),
+      updateSettings,
+      saveSettings: vi.fn(),
+      revertSettings: vi.fn(),
+      refreshLibraries: vi.fn(),
+      setLibraryMappings: vi.fn(),
+      exclusions: [],
+      exclusionsLoading: false,
+      exclusionsError: null,
+      refreshExclusions: vi.fn(),
+      includeItem: vi.fn(),
+      excludeItem: vi.fn(),
+      isItemExcluded: vi.fn(() => false),
+    });
+
+    render(
+      <MemoryRouter>
+        <SettingsPage />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByRole('radio', { name: 'Reverse proxy auth' }));
+
+    expect(updateSettings).toHaveBeenCalledWith({ authMode: 'reverse_proxy' });
+  });
+
+  it('disables the password field in reverse proxy authentication mode', () => {
+    useTheme.mockReturnValue({
+      theme: 'dark',
+      savedTheme: 'dark',
+      plexUrl: '',
+      plexToken: '',
+      authMode: 'reverse_proxy',
+      authPassword: 'stored-password',
+      savedSettings: {
+        plexUrl: '',
+        plexToken: '',
+        authMode: 'reverse_proxy',
+        authPassword: 'stored-password',
+      },
+      libraryMappings: [],
+      savedLibraryMappings: [],
+      libraries: [],
+      librariesLoading: false,
+      librariesError: null,
+      loading: false,
+      saving: false,
+      error: null,
+      libraryMappingsDirty: false,
+      hasUnsavedChanges: false,
+      applyTheme: vi.fn(),
+      updateSettings: vi.fn(),
+      saveSettings: vi.fn(),
+      revertSettings: vi.fn(),
+      refreshLibraries: vi.fn(),
+      setLibraryMappings: vi.fn(),
+      exclusions: [],
+      exclusionsLoading: false,
+      exclusionsError: null,
+      refreshExclusions: vi.fn(),
+      includeItem: vi.fn(),
+      excludeItem: vi.fn(),
+      isItemExcluded: vi.fn(() => false),
+    });
+
+    render(
+      <MemoryRouter>
+        <SettingsPage />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByRole('radio', { name: 'Reverse proxy auth' })).toBeChecked();
+    expect(screen.getByLabelText('Login password')).toBeDisabled();
+    expect(screen.getByText('KAM will skip built-in login and trust the upstream proxy.')).toBeInTheDocument();
   });
 
   it('invokes refreshLibraries and reports success when refreshing', async () => {
@@ -502,7 +613,7 @@ describe('SettingsPage', () => {
       </MemoryRouter>
     );
 
-    const saveButton = screen.getByRole('button', { name: /Save Changes/i });
+    const saveButton = screen.getAllByRole('button', { name: /Save Changes/i })[0];
     fireEvent.click(saveButton);
 
     expect(mockSave).toHaveBeenCalled();

@@ -14,11 +14,19 @@ class LoginPayload(BaseModel):
 
 @router.get("/auth/status")
 def auth_status(request: Request) -> dict:
+    mode = auth_service.auth_mode()
+    if auth_service.is_reverse_proxy_mode():
+        return {
+            "mode": mode,
+            "enabled": False,
+            "authenticated": True,
+        }
     if not auth_service.is_enabled():
-        return {"enabled": False, "authenticated": True}
+        return {"mode": mode, "enabled": False, "authenticated": True}
     token = request.cookies.get(auth_service.cookie_name())
     auth_service.clear_expired()
     return {
+        "mode": mode,
         "enabled": True,
         "authenticated": auth_service.validate_session(token),
     }
@@ -27,7 +35,7 @@ def auth_status(request: Request) -> dict:
 @router.post("/auth/login")
 def auth_login(payload: LoginPayload, request: Request, response: Response) -> dict:
     if not auth_service.is_enabled():
-        raise HTTPException(status_code=404, detail="Authentication not enabled")
+        raise HTTPException(status_code=404, detail="Built-in authentication not enabled")
     if not auth_service.verify_password(payload.password):
         raise HTTPException(status_code=401, detail="Invalid credentials")
     token = auth_service.create_session()
