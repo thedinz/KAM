@@ -911,20 +911,24 @@ function SettingsPage() {
                   <span>Reverse proxy auth</span>
                 </label>
               </div>
-              <label className="settings-input">
-                <span>Login password</span>
-                <input
-                  type="password"
-                  name="authPassword"
-                  value={effectiveAuthPassword}
-                  onChange={handleAuthPasswordChange}
-                  placeholder={
-                    savedAuthPassword ? 'Saved password (leave blank to clear)' : 'Enter a password'
-                  }
-                  autoComplete="new-password"
-                  disabled={busy || reverseProxyAuth}
-                />
-              </label>
+              {!reverseProxyAuth ? (
+                <label className="settings-input">
+                  <span>Login password</span>
+                  <input
+                    type="password"
+                    name="authPassword"
+                    value={effectiveAuthPassword}
+                    onChange={handleAuthPasswordChange}
+                    placeholder={
+                      savedAuthPassword
+                        ? 'Saved password (leave blank to clear)'
+                        : 'Enter a password'
+                    }
+                    autoComplete="new-password"
+                    disabled={busy}
+                  />
+                </label>
+              ) : null}
               <p className="settings-help">
                 {reverseProxyAuth
                   ? 'KAM will skip built-in login and trust the upstream proxy.'
