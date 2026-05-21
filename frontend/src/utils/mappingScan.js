@@ -43,6 +43,27 @@ function pickFolderMatch(candidate, index) {
   return '';
 }
 
+function buildMatchCandidates(item) {
+  const title = String(item?.title || item?.name || '(Untitled)').trim();
+  const folderName = String(item?.folderName || item?.folder || '').trim();
+  const year = item?.year != null ? String(item.year).trim() : '';
+  const type = String(item?.type || '').trim().toLowerCase();
+  const assetReady = item?.assetReady !== false;
+  const candidates = [];
+  if (folderName && (assetReady || !(year && type === 'movie') || normalizeTitle(folderName).year)) {
+    candidates.push({ value: folderName, source: 'currentFolder' });
+  }
+  if (title) {
+    if (year) {
+      candidates.push({ value: `${title} (${year})`, source: 'titleYear' });
+    }
+    if (!(year && type === 'movie')) {
+      candidates.push({ value: title, source: 'title' });
+    }
+  }
+  return candidates;
+}
+
 async function fetchFolderNames(targetLibrary, { optional = false } = {}) {
   const response = await fetch(`/api/asset-folders?library=${encodeURIComponent(targetLibrary)}`);
   const data = await safeJson(response);
@@ -60,6 +81,19 @@ async function fetchFolderNames(targetLibrary, { optional = false } = {}) {
     : [];
 }
 
+async function assignFolder({ library, ratingKey, folderName }) {
+  const response = await fetch('/api/items/assign-folder', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ library, ratingKey, folderName }),
+  });
+  const data = await safeJson(response);
+  if (!response.ok) {
+    throw new Error(responseErrorMessage(response, data));
+  }
+  return data || {};
+}
+
 export async function runLibraryMappingScan({ library, fetchAllForLibrary, onProgress }) {
   const lib = String(library || '').trim();
   if (!lib) {
@@ -68,9 +102,7 @@ export async function runLibraryMappingScan({ library, fetchAllForLibrary, onPro
 
   onProgress?.({ percent: 0, label: 'Step 1/3: Scanning asset folders…' });
   const folderNames = await fetchFolderNames(lib);
-  const collectionNames =
-    lib.toLowerCase() === 'collections' ? [] : await fetchFolderNames('Collections', { optional: true });
-  const folderIndex = buildFolderIndex([...folderNames, ...collectionNames]);
+  const folderIndex = buildFolderIndex(folderNames);
 
   onProgress?.({ percent: 33, label: 'Step 2/3: Scanning Plex library…' });
   const { items: allItems = [] } = await fetchAllForLibrary(lib, '', { notReadyOnly: false });
@@ -81,21 +113,15 @@ export async function runLibraryMappingScan({ library, fetchAllForLibrary, onPro
     const folderName = String(item?.folderName || item?.folder || '').trim();
     const year = item?.year != null ? String(item.year).trim() : '';
     const ratingKey = String(item?.ratingKey ?? item?.key ?? item?.id ?? '');
-    const candidates = [];
-    if (folderName) {
-      candidates.push(folderName);
-    }
-    if (title) {
-      candidates.push(title);
-      if (year) {
-        candidates.push(`${title} (${year})`);
-      }
-    }
+    const candidates = buildMatchCandidates(item);
+    const assetReady = item?.assetReady !== false;
     let matchedFolder = '';
+    let matchedFrom = '';
     for (const candidate of candidates) {
-      const match = pickFolderMatch(candidate, folderIndex);
+      const match = pickFolderMatch(candidate.value, folderIndex);
       if (match) {
         matchedFolder = match;
+        matchedFrom = candidate.source;
         break;
       }
     }
@@ -106,6 +132,8 @@ export async function runLibraryMappingScan({ library, fetchAllForLibrary, onPro
       currentFolder: folderName,
       matchedFolder,
       matched: Boolean(matchedFolder),
+      matchedFrom,
+      assetReady,
       type: item?.type || '',
       library: lib,
     };
@@ -125,3 +153,63 @@ export async function runLibraryMappingScan({ library, fetchAllForLibrary, onPro
   };
 }
 
+export async function assignMatchedFolders({ library, entries, onProgress }) {
+  const lib = String(library || '').trim();
+  if (!lib) {
+    throw new Error('Library is required');
+  }
+
+  const updatedEntries = Array.isArray(entries) ? entries.map((entry) => ({ ...entry })) : [];
+  const assignableIndexes = updatedEntries
+    .map((entry, index) => ({ entry, index }))
+    .filter(({ entry }) => entry?.matched && entry.assetReady === false && entry.ratingKey && entry.matchedFolder);
+  const errors = [];
+  let assignedCount = 0;
+
+  for (let i = 0; i < assignableIndexes.length; i += 1) {
+    const { entry, index } = assignableIndexes[i];
+    onProgress?.({
+      assigned: assignedCount,
+      total: assignableIndexes.length,
+      current: i + 1,
+      label: `Applying folder matches ${i + 1}/${assignableIndexes.length}…`,
+    });
+    try {
+      const data = await assignFolder({
+        library: lib,
+        ratingKey: String(entry.ratingKey),
+        folderName: entry.matchedFolder,
+      });
+      const folderName = data?.folderName || entry.matchedFolder;
+      updatedEntries[index] = {
+        ...entry,
+        assigned: true,
+        assignmentError: '',
+        assetReady: true,
+        currentFolder: folderName,
+        matchedFolder: folderName,
+        matched: true,
+      };
+      assignedCount += 1;
+    } catch (err) {
+      const message = err?.message || String(err);
+      updatedEntries[index] = {
+        ...entry,
+        assignmentError: message,
+      };
+      errors.push({
+        library: lib,
+        title: entry.title,
+        folder: entry.matchedFolder,
+        asset: 'Folder assignment',
+        message,
+      });
+    }
+  }
+
+  return {
+    entries: updatedEntries,
+    assignedCount,
+    errors,
+  };
+}
