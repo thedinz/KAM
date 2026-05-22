@@ -19,6 +19,7 @@ import {
   pushFailureEntry,
   summarizeImportResult,
 } from '../utils/importers.js';
+import { isCertainItemFolderMatch } from '../utils/mappingScan.js';
 
 const IMPORT_PREPARING_LABELS = [
   'Preparing import...',
@@ -219,9 +220,19 @@ function LibraryPage() {
     try {
       const { items: allItems = [] } = await fetchAllForLibrary(lib, query, { notReadyOnly });
       stopPreparingStatus();
-      const importable = allItems.filter((item) => item?.assetReady !== false);
+      const readyItems = allItems.filter((item) => item?.assetReady !== false);
       const skipped = allItems.filter((item) => item?.assetReady === false);
-      receipt.skipped = skipped.length;
+      const uncertain = isCollections
+        ? []
+        : readyItems.filter((item) => {
+            const folderName = item?.folderName || item?.folder || '';
+            return !isCertainItemFolderMatch(item, folderName);
+          });
+      const uncertainItems = new Set(uncertain);
+      const importable = uncertain.length
+        ? readyItems.filter((item) => !uncertainItems.has(item))
+        : readyItems;
+      receipt.skipped = skipped.length + uncertain.length;
 
       skipped.forEach((skip) => {
         const context = {
@@ -232,13 +243,22 @@ function LibraryPage() {
         pushFailureEntry(failures, context, 'Item', 'Skipped (asset folder missing)');
       });
 
+      uncertain.forEach((skip) => {
+        const context = {
+          library: lib,
+          title: skip?.title || skip?.name || '(Untitled)',
+          folder: skip?.folderName || skip?.folder || '',
+        };
+        pushFailureEntry(failures, context, 'Item', 'Skipped (folder match needs manual confirmation)');
+      });
+
       if (!importable.length) {
         if (failures.length) {
           const count = failures.length;
           showStatus({
             active: true,
             percent: 0,
-            label: `Import skipped. ${count} item${count === 1 ? '' : 's'} missing asset folders.`,
+            label: `Import skipped. ${count} item${count === 1 ? '' : 's'} need attention before bulk import.`,
             errors: failures.slice(),
             receipt: { ...receipt },
           });
@@ -251,8 +271,9 @@ function LibraryPage() {
 
       let processed = 0;
       const total = importable.length;
-      const skipSuffix = skipped.length
-        ? ` (skipping ${skipped.length} not-ready item${skipped.length === 1 ? '' : 's'})`
+      const skippedCount = skipped.length + uncertain.length;
+      const skipSuffix = skippedCount
+        ? ` (skipping ${skippedCount} item${skippedCount === 1 ? '' : 's'} needing attention)`
         : '';
 
       const updateProgress = () => {
