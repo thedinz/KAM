@@ -76,6 +76,7 @@ def _seasons(rk: str) -> List[Dict[str, Any]]:
                     "title": it.get("title") or f"Season {it.get('index')}",
                     "ratingKey": it.get("ratingKey"),
                     "thumb": it.get("thumb"),
+                    "art": it.get("art"),
                 })
         return sorted([s for s in out if s["index"] is not None], key=lambda x: x["index"])
     root = ET.fromstring(r.text)
@@ -86,6 +87,7 @@ def _seasons(rk: str) -> List[Dict[str, Any]]:
                 "title": node.attrib.get("title") or f"Season {node.attrib.get('index')}",
                 "ratingKey": node.attrib.get("ratingKey"),
                 "thumb": node.attrib.get("thumb"),
+                "art": node.attrib.get("art"),
             })
     return sorted([s for s in out if s["index"] is not None], key=lambda x: x["index"])
 
@@ -186,15 +188,25 @@ def get_show(library: str = Query(...), ratingKey: str = Query(...)):
         idx = s["index"]
         sea_name = f"Season{idx:02d}.jpg"
         sea_local = os.path.join(series_dir_fs, sea_name)
+        sea_bg_name = f"Season{idx:02d}_background.jpg"
+        sea_bg_local = os.path.join(series_dir_fs, sea_bg_name)
         if _local_exists(sea_local):
             sea_url = _fileproxy_abs_path(library, folder, sea_name, _mtime(sea_local))
         else:
             sea_url = _plex_thumb_proxy_url(s.get("thumb"), s.get("ratingKey"))
+        if _local_exists(sea_bg_local):
+            sea_bg_url = _fileproxy_abs_path(library, folder, sea_bg_name, _mtime(sea_bg_local))
+        else:
+            sea_bg_url = _plex_art_proxy_url(s.get("art"), s.get("ratingKey"))
         seasons_out.append({
             "index": idx,
             "title": s["title"],
             "posterUrl": sea_url,
             "plexPosterUrl": _plex_thumb_url(s.get("thumb"), s.get("ratingKey")),
+            "posterExists": _local_exists(sea_local),
+            "backgroundUrl": sea_bg_url,
+            "plexBackgroundUrl": _plex_art_url(s.get("art"), s.get("ratingKey")),
+            "backgroundExists": _local_exists(sea_bg_local),
             "ratingKey": s.get("ratingKey"),  # added for convenience
         })
 

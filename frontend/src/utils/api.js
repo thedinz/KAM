@@ -19,6 +19,7 @@ export function normalizeAssetResult(part, fallbackError = null) {
     path: (part && part.path) || null,
     src: (part && part.src) || null,
     error: (part && part.error) || fallbackError || null,
+    replaced: Boolean(part && part.replaced),
   };
 }
 
@@ -37,6 +38,7 @@ export function collectResultFailures(list, context, result) {
   const hasPoster = result.poster && typeof result.poster === 'object';
   const hasBackground = result.background && typeof result.background === 'object';
   const seasons = Array.isArray(result.seasons) ? result.seasons : [];
+  const seasonBackgrounds = Array.isArray(result.seasonBackgrounds) ? result.seasonBackgrounds : [];
   if (hasPoster && !result.poster.ok) {
     pushFailureEntry(list, context, 'Poster', result.poster.error || 'Failed to import poster');
   }
@@ -57,11 +59,26 @@ export function collectResultFailures(list, context, result) {
     }
     pushFailureEntry(list, context, label, (season && season.error) || 'Failed to import season poster');
   });
+  seasonBackgrounds.forEach((season) => {
+    if (season && season.ok) return;
+    const idx = season && season.index;
+    let label = 'Season Background';
+    if (idx !== undefined && idx !== null) {
+      const idxNum = Number(idx);
+      if (Number.isFinite(idxNum)) {
+        label = `Season ${String(idxNum).padStart(2, '0')} Background`;
+      } else {
+        label = `Season ${idx} Background`;
+      }
+    }
+    pushFailureEntry(list, context, label, (season && season.error) || 'Failed to import season background');
+  });
   if (!result.ok) {
     const hasSpecific =
       (hasPoster && result.poster && result.poster.error) ||
       (hasBackground && result.background && result.background.error) ||
-      seasons.some((season) => season && (!season.ok || season.error));
+      seasons.some((season) => season && (!season.ok || season.error)) ||
+      seasonBackgrounds.some((season) => season && (!season.ok || season.error));
     if (!hasSpecific && result.error) {
       pushFailureEntry(list, context, 'Import', result.error);
     }
