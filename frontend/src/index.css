@@ -406,6 +406,38 @@ a.btn:focus,
   color: #ff8b8b;
 }
 
+.mapping-results-filter {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.mapping-results-filter button {
+  min-height: 36px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--fg);
+  padding: 6px 12px;
+}
+
+.mapping-results-filter button.is-active {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #0b0b0f;
+}
+
+[data-theme='light'] .mapping-results-filter button.is-active {
+  color: #ffffff;
+}
+
+.mapping-results-filter button:not(.is-active):hover,
+.mapping-results-filter button:not(.is-active):focus-visible {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .mapping-table {
   margin-top: 16px;
   border: 1px solid var(--border);
@@ -433,6 +465,11 @@ a.btn:focus,
 
 .mapping-title {
   font-weight: 600;
+}
+
+.mapping-row-empty {
+  grid-template-columns: 1fr;
+  color: var(--muted);
 }
 
 .mapping-folder-btn {

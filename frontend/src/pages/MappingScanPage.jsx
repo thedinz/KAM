@@ -9,6 +9,12 @@ function storageKeyForLibrary(library) {
   return `kam.mappingScan.${String(library || '').trim().toLowerCase()}`;
 }
 
+function entryIsNotReady(entry) {
+  if (entry?.assetReady === false) return true;
+  if (entry?.assetReady === true) return false;
+  return !entry?.matched;
+}
+
 function MappingScanPage() {
   const { library: routeLibrary = '' } = useParams();
   const navigate = useNavigate();
@@ -29,6 +35,7 @@ function MappingScanPage() {
   const [isScanning, setIsScanning] = useState(false);
   const [folderModalOpen, setFolderModalOpen] = useState(false);
   const [folderModalItem, setFolderModalItem] = useState(null);
+  const [resultsFilter, setResultsFilter] = useState('all');
 
   useEffect(() => {
     if (selectedLibrary && selectedLibrary !== library) {
@@ -111,6 +118,18 @@ function MappingScanPage() {
   }, [selectedLibrary, rows.length, runScan]);
 
   const unmatchedCount = useMemo(() => rows.filter((entry) => !entry.matched).length, [rows]);
+  const notReadyCount = useMemo(() => rows.filter((entry) => entryIsNotReady(entry)).length, [rows]);
+  const mappedCount = rows.length - notReadyCount;
+  const filteredRows = useMemo(() => {
+    if (resultsFilter === 'mapped') {
+      return rows.filter((entry) => !entryIsNotReady(entry));
+    }
+    if (resultsFilter === 'not-ready') {
+      return rows.filter((entry) => entryIsNotReady(entry));
+    }
+    return rows;
+  }, [resultsFilter, rows]);
+  const emptyFilterLabel = resultsFilter === 'mapped' ? 'mapped' : 'not ready';
 
   const openFolderModal = useCallback((entry) => {
     setFolderModalItem(entry);
@@ -136,6 +155,9 @@ function MappingScanPage() {
           currentFolder: folderName,
           matchedFolder: folderName,
           matched: true,
+          assigned: true,
+          assignmentError: '',
+          assetReady: true,
         };
       });
       setRows(nextRows);
@@ -189,13 +211,39 @@ function MappingScanPage() {
           modalId="mappingErrorsDialog"
         />
         {scanError ? <p className="mapping-error">{scanError}</p> : null}
+        <div className="mapping-results-filter" role="group" aria-label="Filter mapping scan results">
+          <button
+            type="button"
+            className={resultsFilter === 'all' ? 'is-active' : ''}
+            aria-pressed={resultsFilter === 'all'}
+            onClick={() => setResultsFilter('all')}
+          >
+            All ({rows.length.toLocaleString()})
+          </button>
+          <button
+            type="button"
+            className={resultsFilter === 'mapped' ? 'is-active' : ''}
+            aria-pressed={resultsFilter === 'mapped'}
+            onClick={() => setResultsFilter('mapped')}
+          >
+            Mapped ({mappedCount.toLocaleString()})
+          </button>
+          <button
+            type="button"
+            className={resultsFilter === 'not-ready' ? 'is-active' : ''}
+            aria-pressed={resultsFilter === 'not-ready'}
+            onClick={() => setResultsFilter('not-ready')}
+          >
+            Not Ready ({notReadyCount.toLocaleString()})
+          </button>
+        </div>
         <div className="mapping-table" role="table" aria-label="Mapping scan results">
           <div className="mapping-row mapping-row-header" role="row">
             <div role="columnheader">Media</div>
             <div role="columnheader">Folder</div>
             <div role="columnheader">Status</div>
           </div>
-          {rows.map((entry) => (
+          {filteredRows.map((entry) => (
             <div className="mapping-row" key={`${entry.ratingKey}-${entry.title}`} role="row">
               <div className="mapping-title" role="cell">{entry.title}</div>
               <div role="cell">
@@ -217,6 +265,11 @@ function MappingScanPage() {
               </div>
             </div>
           ))}
+          {!filteredRows.length && resultsFilter !== 'all' ? (
+            <div className="mapping-row mapping-row-empty" role="row">
+              <div role="cell">No {emptyFilterLabel} results in this scan.</div>
+            </div>
+          ) : null}
         </div>
       </main>
       <FolderFinderModal
