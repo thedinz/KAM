@@ -17,6 +17,14 @@ import {
   summarizeImportResult,
 } from '../utils/importers.js';
 
+const IMPORT_PREPARING_LABELS = [
+  'Preparing import...',
+  'Preparing import... This can take a minute for larger libraries.',
+  'Preparing import... Contacting Plex.',
+  'Preparing import... Please be patient while KAM gathers library items.',
+  'Preparing import... Checking asset folders before import starts.',
+];
+
 function LibraryPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -92,6 +100,7 @@ function LibraryPage() {
 
   const [importState, setImportState] = useState({ active: false, percent: 0, label: '', errors: [] });
   const hideTimerRef = useRef();
+  const preparingTimerRef = useRef();
   const [isImporting, setIsImporting] = useState(false);
   const unresolvedCount = Number(notReadyCount) || 0;
 
@@ -107,7 +116,13 @@ function LibraryPage() {
     }, delay);
   }, []);
 
-  useEffect(() => () => clearTimeout(hideTimerRef.current), []);
+  useEffect(
+    () => () => {
+      clearTimeout(hideTimerRef.current);
+      clearInterval(preparingTimerRef.current);
+    },
+    []
+  );
 
   const [folderModalOpen, setFolderModalOpen] = useState(false);
   const [folderModalItem, setFolderModalItem] = useState(null);
@@ -157,11 +172,32 @@ function LibraryPage() {
     const isCollections = lower === 'collections';
     const isTVLib = lower.includes('tv');
     const failures = [];
+    let preparingLabelIndex = 0;
 
-    showStatus({ active: true, percent: 0, label: 'Preparing import…', errors: [] });
+    const stopPreparingStatus = () => {
+      if (preparingTimerRef.current) {
+        clearInterval(preparingTimerRef.current);
+        preparingTimerRef.current = null;
+      }
+    };
+
+    const showPreparingStatus = () => {
+      showStatus({
+        active: true,
+        percent: 0,
+        label: IMPORT_PREPARING_LABELS[preparingLabelIndex],
+        errors: [],
+      });
+      preparingLabelIndex = (preparingLabelIndex + 1) % IMPORT_PREPARING_LABELS.length;
+    };
+
+    stopPreparingStatus();
+    showPreparingStatus();
+    preparingTimerRef.current = setInterval(showPreparingStatus, 3500);
 
     try {
       const { items: allItems = [] } = await fetchAllForLibrary(lib, query, { notReadyOnly });
+      stopPreparingStatus();
       const importable = allItems.filter((item) => item?.assetReady !== false);
       const skipped = allItems.filter((item) => item?.assetReady === false);
 
@@ -270,6 +306,7 @@ function LibraryPage() {
       pushFailureEntry(failures, { library: lib, title: '', folder: '' }, 'Import', message);
       showStatus({ active: true, percent: 0, label: message, errors: failures.slice() });
     } finally {
+      stopPreparingStatus();
       setIsImporting(false);
     }
   }, [library, fetchAllForLibrary, query, notReadyOnly, reload, showStatus, hideStatus, unresolvedCount]);
@@ -303,41 +340,43 @@ function LibraryPage() {
 
   return (
     <div>
-      <header>
-        <h1>KAM</h1>
-        <LibraryToolbar
-          libraries={libraries}
-          selectedLibrary={library || ''}
-          onLibraryChange={setLibrary}
-          searchValue={searchInput}
-          onSearchChange={handleSearchChange}
-          onImportAll={handleImportAll}
-          importDisabled={!library || isImporting || loading || unresolvedCount > 0}
-          importTitle={importTooltip}
-          onScanMapping={handleScanMapping}
-          scanDisabled={scanDisabled}
-          scanTitle={scanTitle}
-          page={page || 1}
-          totalPages={totalPages || 1}
-          onFirst={handleFirst}
-          onPrev={handlePrev}
-          onNext={handleNext}
-          onLast={handleLast}
-          countLabel={countLabel}
-          onViewNotReady={handleViewNotReady}
-          notReadyCount={notReadyCount}
-          notReadyDisabled={notReadyButtonDisabled}
-        >
-          <ImportStatusPanel
-            active={importState.active}
-            percent={importState.percent}
-            label={importState.label}
-            errors={importState.errors}
-          />
-        </LibraryToolbar>
-        <Link className="settings-link" to="/settings" aria-label="Open settings">
-          <span aria-hidden="true">⚙</span>
-        </Link>
+      <header className="library-header">
+        <h1 className="library-site-title">KAM - Kometa Asset Manager</h1>
+        <div className="library-header-controls">
+          <LibraryToolbar
+            libraries={libraries}
+            selectedLibrary={library || ''}
+            onLibraryChange={setLibrary}
+            searchValue={searchInput}
+            onSearchChange={handleSearchChange}
+            onImportAll={handleImportAll}
+            importDisabled={!library || isImporting || loading || unresolvedCount > 0}
+            importTitle={importTooltip}
+            onScanMapping={handleScanMapping}
+            scanDisabled={scanDisabled}
+            scanTitle={scanTitle}
+            page={page || 1}
+            totalPages={totalPages || 1}
+            onFirst={handleFirst}
+            onPrev={handlePrev}
+            onNext={handleNext}
+            onLast={handleLast}
+            countLabel={countLabel}
+            onViewNotReady={handleViewNotReady}
+            notReadyCount={notReadyCount}
+            notReadyDisabled={notReadyButtonDisabled}
+          >
+            <ImportStatusPanel
+              active={importState.active}
+              percent={importState.percent}
+              label={importState.label}
+              errors={importState.errors}
+            />
+          </LibraryToolbar>
+          <Link className="settings-link" to="/settings" aria-label="Open settings">
+            <span aria-hidden="true">⚙</span>
+          </Link>
+        </div>
       </header>
       <main>
         <ItemGrid
