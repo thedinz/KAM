@@ -58,6 +58,20 @@ async def _invoke_upload(upload_module, library, folder, content: bytes):
     )
 
 
+async def _invoke_season_upload(upload_module, library, folder, content: bytes, kind: str):
+    upload_file = UploadFile(
+        filename="season.jpg",
+        file=io.BytesIO(content),
+    )
+    return await upload_module.upload_season_asset(
+        library=library,
+        folderName=folder,
+        season="2",
+        kind=kind,
+        file=upload_file,
+    )
+
+
 def test_upload_movie_writes_file(tmp_path, monkeypatch):
     upload_module, target_dir, library, folder = _setup_env(tmp_path, monkeypatch)
 
@@ -78,3 +92,15 @@ def test_upload_movie_rejects_empty_file(tmp_path, monkeypatch):
     assert excinfo.value.status_code == 422
     assert "Empty file" in str(excinfo.value.detail)
     assert not (target_dir / "poster.jpg").exists()
+
+
+def test_upload_season_background_uses_kometa_filename(tmp_path, monkeypatch):
+    upload_module, target_dir, library, folder = _setup_env(tmp_path, monkeypatch)
+
+    response = asyncio.run(
+        _invoke_season_upload(upload_module, library, folder, b"season-background", "background")
+    )
+
+    background_path = target_dir / "Season02_background.jpg"
+    assert response == {"ok": True, "path": str(background_path)}
+    assert background_path.read_bytes() == b"season-background"

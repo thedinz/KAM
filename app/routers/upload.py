@@ -79,6 +79,7 @@ async def upload_season_asset(
     library: str = Form(...),
     folderName: str = Form(...),
     season: str = Form(...),                # numeric string (e.g., "1", "02")
+    kind: Optional[str] = Form("poster"),   # "poster" | "background"
     file: UploadFile = File(...),
 ):
     """
@@ -89,12 +90,20 @@ async def upload_season_asset(
     except Exception:
         raise HTTPException(status_code=422, detail=f"Invalid season: {season!r}")
 
+    normalized_kind = (kind or "poster").strip().lower()
+    if normalized_kind not in ("poster", "background"):
+        raise HTTPException(status_code=422, detail=f"Invalid kind: {kind}")
+
     try:
         dest_dir = resolve_existing_dir_or_422(library, folderName)
     except FileNotFoundError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
-    dest_name = f"Season{idx:02d}.jpg"
+    dest_name = (
+        f"Season{idx:02d}_background.jpg"
+        if normalized_kind == "background"
+        else f"Season{idx:02d}.jpg"
+    )
     dest_path = os.path.join(dest_dir, dest_name)
     await run_in_threadpool(_write_file, dest_path, file)
     return {"ok": True, "path": dest_path}

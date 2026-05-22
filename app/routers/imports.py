@@ -122,6 +122,12 @@ def _download_to(path: str, url: str):
         logger.warning("Download error for %s: %s", _safe_url(url), e)
         raise HTTPException(status_code=502, detail=f"Download error for {url}: {e}")
 
+
+def _download_result(path: str, src: str) -> Dict[str, Any]:
+    replaced = os.path.isfile(path)
+    _download_to(path, src)
+    return {"ok": True, "path": path, "src": src, "error": None, "replaced": replaced}
+
 def _json_or_xml(path: str) -> Dict[str, Any] | str:
     """
     Return JSON dict if server answered JSON; otherwise return XML text.
@@ -227,6 +233,7 @@ def _children_for_show(rating_key: str) -> List[Dict[str, Any]]:
                     "index": it.get("index"),
                     "ratingKey": it.get("ratingKey"),
                     "thumb": it.get("thumb"),
+                    "art": it.get("art"),
                 })
         return out
     try:
@@ -238,6 +245,7 @@ def _children_for_show(rating_key: str) -> List[Dict[str, Any]]:
                     "index": node.attrib.get("index"),
                     "ratingKey": node.attrib.get("ratingKey"),
                     "thumb": node.attrib.get("thumb"),
+                    "art": node.attrib.get("art"),
                 })
         for node in root.findall(".//Video"):
             if node.attrib.get("type") == "season":
@@ -246,6 +254,7 @@ def _children_for_show(rating_key: str) -> List[Dict[str, Any]]:
                     "index": node.attrib.get("index"),
                     "ratingKey": node.attrib.get("ratingKey"),
                     "thumb": node.attrib.get("thumb"),
+                    "art": node.attrib.get("art"),
                 })
     except Exception as e:
         logger.warning("Failed to parse season metadata for ratingKey=%s: %s", rating_key, e)
@@ -283,6 +292,32 @@ def _season_poster_url(show_rating_key: str, season_index: int) -> str:
     )
     raise HTTPException(status_code=502, detail="Season poster URL unavailable from Plex")
 
+
+def _season_background_url(show_rating_key: str, season_index: int) -> str:
+    seasons = _children_for_show(show_rating_key)
+    target = None
+    for season in seasons:
+        try:
+            if int(str(season.get("index"))) == int(season_index):
+                target = season
+                break
+        except Exception as exc:
+            logger.warning(
+                "Invalid season index encountered for show %s: %s", show_rating_key, exc
+            )
+            continue
+    if not target:
+        raise HTTPException(status_code=404, detail=f"Season {season_index} not found in Plex")
+
+    plex_url, plex_token = _require_plex()
+    art = target.get("art")
+    rating_key = target.get("ratingKey")
+    if art:
+        return f"{plex_url}{art}?X-Plex-Token={plex_token}"
+    if rating_key:
+        return f"{plex_url}/library/metadata/{rating_key}/art?X-Plex-Token={plex_token}"
+    raise HTTPException(status_code=502, detail="Season background URL unavailable from Plex")
+
 # ---------------- Endpoints ----------------
 
 @router.post("/api/import/poster")
@@ -308,8 +343,7 @@ def import_poster_post(
         folderName,
         _safe_url(src),
     )
-    _download_to(path, src)
-    return {"ok": True, "path": path, "src": src}
+    return _download_result(path, src)
 
 @router.get("/api/import/poster")
 def import_poster_get(
@@ -343,8 +377,7 @@ def import_background_post(
         folderName,
         _safe_url(src),
     )
-    _download_to(path, src)
-    return {"ok": True, "path": path, "src": src}
+    return _download_result(path, src)
 
 @router.get("/api/import/background")
 def import_background_get(
@@ -360,14 +393,16 @@ def import_season_post(
     library: str = Form(...),
     folderName: str = Form(...),
     season: str = Form(...),
+    kind: str = Form("poster"),
     ratingKey: Optional[str] = Form(None),  # show ratingKey; required if url not supplied
     url: Optional[str] = Form(None),
 ):
     logger.debug(
-        "Import season POST library=%s folder=%s season=%s ratingKey=%s url=%s",
+        "Import season POST library=%s folder=%s season=%s kind=%s ratingKey=%s url=%s",
         library,
         folderName,
         season,
+        kind,
         ratingKey,
         _safe_url(url),
     )
@@ -376,31 +411,45 @@ def import_season_post(
     except Exception:
         raise HTTPException(status_code=422, detail=f"Invalid season: {season!r}")
 
+    normalized_kind = str(kind or "poster").strip().lower()
+    if normalized_kind not in {"poster", "background"}:
+        raise HTTPException(status_code=422, detail=f"Invalid kind: {kind!r}")
+
     dest_dir = _dest_dir_or_422(library, folderName)
-    path = os.path.join(dest_dir, f"Season{idx:02d}.jpg")
+    filename = (
+        f"Season{idx:02d}_background.jpg"
+        if normalized_kind == "background"
+        else f"Season{idx:02d}.jpg"
+    )
+    path = os.path.join(dest_dir, filename)
 
     if url:
         src = url
     else:
         if not ratingKey:
             raise HTTPException(status_code=422, detail="ratingKey is required when url is not provided")
-        src = _season_poster_url(ratingKey, idx)
+        src = (
+            _season_background_url(ratingKey, idx)
+            if normalized_kind == "background"
+            else _season_poster_url(ratingKey, idx)
+        )
 
     logger.debug(
-        "Season source resolved for library=%s folder=%s season=%s: %s",
+        "Season source resolved for library=%s folder=%s season=%s kind=%s: %s",
         library,
         folderName,
         idx,
+        normalized_kind,
         _safe_url(src),
     )
-    _download_to(path, src)
-    return {"ok": True, "path": path, "src": src}
+    return _download_result(path, src)
 
 @router.get("/api/import/season")
 def import_season_get(
     library: str = Query(...),
     folderName: str = Query(...),
     season: str = Query(...),
+    kind: str = Query("poster"),
     ratingKey: Optional[str] = Query(None),
     url: Optional[str] = Query(None),
 ):
@@ -408,6 +457,7 @@ def import_season_get(
         library=library,
         folderName=folderName,
         season=season,
+        kind=kind,
         ratingKey=ratingKey,
         url=url,
     )
@@ -434,8 +484,8 @@ def import_movie_both(
     dest_dir = _dest_dir_or_422(library, folderName)
 
     results = {
-        "poster": {"ok": False, "path": None, "src": None, "error": None},
-        "background": {"ok": False, "path": None, "src": None, "error": None},
+        "poster": {"ok": False, "path": None, "src": None, "error": None, "replaced": False},
+        "background": {"ok": False, "path": None, "src": None, "error": None, "replaced": False},
     }
 
     if includePoster:
@@ -448,8 +498,7 @@ def import_movie_both(
                 folderName,
                 _safe_url(p_src),
             )
-            _download_to(p_path, p_src)
-            results["poster"] = {"ok": True, "path": p_path, "src": p_src, "error": None}
+            results["poster"] = _download_result(p_path, p_src)
         except HTTPException as e:
             logger.warning(
                 "Movie poster import failed for library=%s folder=%s: %s",
@@ -477,8 +526,7 @@ def import_movie_both(
                 folderName,
                 _safe_url(b_src),
             )
-            _download_to(b_path, b_src)
-            results["background"] = {"ok": True, "path": b_path, "src": b_src, "error": None}
+            results["background"] = _download_result(b_path, b_src)
         except HTTPException as e:
             logger.warning(
                 "Movie background import failed for library=%s folder=%s: %s",
@@ -507,24 +555,27 @@ def import_show_all(
     includePoster: bool = Form(True),
     includeBackground: bool = Form(True),
     includeSeasons: bool = Form(True),
+    includeSeasonBackgrounds: bool = Form(True),
 ):
     """
-    Import a show's poster, background, and all season posters in one call.
+    Import a show's poster, background, and all season artwork in one call.
     """
     logger.debug(
-        "Import show POST library=%s folder=%s ratingKey=%s includePoster=%s includeBackground=%s includeSeasons=%s",
+        "Import show POST library=%s folder=%s ratingKey=%s includePoster=%s includeBackground=%s includeSeasons=%s includeSeasonBackgrounds=%s",
         library,
         folderName,
         ratingKey,
         includePoster,
         includeBackground,
         includeSeasons,
+        includeSeasonBackgrounds,
     )
     dest_dir = _dest_dir_or_422(library, folderName)
     results: Dict[str, Any] = {
-        "poster": {"ok": False, "path": None, "src": None, "error": None},
-        "background": {"ok": False, "path": None, "src": None, "error": None},
+        "poster": {"ok": False, "path": None, "src": None, "error": None, "replaced": False},
+        "background": {"ok": False, "path": None, "src": None, "error": None, "replaced": False},
         "seasons": [],
+        "seasonBackgrounds": [],
     }
 
     # Series poster
@@ -538,8 +589,7 @@ def import_show_all(
                 folderName,
                 _safe_url(p_src),
             )
-            _download_to(p_path, p_src)
-            results["poster"] = {"ok": True, "path": p_path, "src": p_src, "error": None}
+            results["poster"] = _download_result(p_path, p_src)
         except HTTPException as e:
             logger.warning(
                 "Show poster import failed for library=%s folder=%s: %s",
@@ -568,8 +618,7 @@ def import_show_all(
                 folderName,
                 _safe_url(b_src),
             )
-            _download_to(b_path, b_src)
-            results["background"] = {"ok": True, "path": b_path, "src": b_src, "error": None}
+            results["background"] = _download_result(b_path, b_src)
         except HTTPException as e:
             logger.warning(
                 "Show background import failed for library=%s folder=%s: %s",
@@ -588,49 +637,106 @@ def import_show_all(
             results["background"]["error"] = str(e)
 
     # Seasons
-    if includeSeasons:
+    if includeSeasons or includeSeasonBackgrounds:
         try:
             seasons = _children_for_show(ratingKey)  # [{index, ratingKey, thumb}, ...]
             for s in seasons:
                 idx_raw = s.get("index")
-                ok_entry = {"index": idx_raw, "ok": False, "path": None, "src": None, "error": None}
                 try:
                     idx = int(str(idx_raw))
                 except Exception:
-                    ok_entry["error"] = f"Invalid season index: {idx_raw!r}"
-                    results["seasons"].append(ok_entry)
+                    error_entry = {
+                        "index": idx_raw,
+                        "ok": False,
+                        "path": None,
+                        "src": None,
+                        "error": f"Invalid season index: {idx_raw!r}",
+                        "replaced": False,
+                    }
+                    if includeSeasons:
+                        results["seasons"].append(dict(error_entry))
+                    if includeSeasonBackgrounds:
+                        results["seasonBackgrounds"].append(dict(error_entry))
                     continue
-                try:
-                    sea_path = os.path.join(dest_dir, f"Season{idx:02d}.jpg")
-                    sea_src = _season_poster_url(ratingKey, idx)
-                    logger.debug(
-                        "Show season source resolved for library=%s folder=%s season=%s: %s",
-                        library,
-                        folderName,
-                        idx,
-                        _safe_url(sea_src),
-                    )
-                    _download_to(sea_path, sea_src)
-                    ok_entry.update({"ok": True, "path": sea_path, "src": sea_src})
-                except HTTPException as e:
-                    logger.warning(
-                        "Season import failed for library=%s folder=%s season=%s: %s",
-                        library,
-                        folderName,
-                        idx,
-                        e.detail,
-                    )
-                    ok_entry["error"] = e.detail
-                except Exception as e:
-                    logger.warning(
-                        "Season import error for library=%s folder=%s season=%s: %s",
-                        library,
-                        folderName,
-                        idx,
-                        e,
-                    )
-                    ok_entry["error"] = str(e)
-                results["seasons"].append(ok_entry)
+                if includeSeasons:
+                    ok_entry = {
+                        "index": idx_raw,
+                        "ok": False,
+                        "path": None,
+                        "src": None,
+                        "error": None,
+                        "replaced": False,
+                    }
+                    try:
+                        sea_path = os.path.join(dest_dir, f"Season{idx:02d}.jpg")
+                        sea_src = _season_poster_url(ratingKey, idx)
+                        logger.debug(
+                            "Show season source resolved for library=%s folder=%s season=%s: %s",
+                            library,
+                            folderName,
+                            idx,
+                            _safe_url(sea_src),
+                        )
+                        ok_entry.update(_download_result(sea_path, sea_src))
+                    except HTTPException as e:
+                        logger.warning(
+                            "Season import failed for library=%s folder=%s season=%s: %s",
+                            library,
+                            folderName,
+                            idx,
+                            e.detail,
+                        )
+                        ok_entry["error"] = e.detail
+                    except Exception as e:
+                        logger.warning(
+                            "Season import error for library=%s folder=%s season=%s: %s",
+                            library,
+                            folderName,
+                            idx,
+                            e,
+                        )
+                        ok_entry["error"] = str(e)
+                    results["seasons"].append(ok_entry)
+
+                if includeSeasonBackgrounds:
+                    background_entry = {
+                        "index": idx_raw,
+                        "ok": False,
+                        "path": None,
+                        "src": None,
+                        "error": None,
+                        "replaced": False,
+                    }
+                    try:
+                        sea_bg_path = os.path.join(dest_dir, f"Season{idx:02d}_background.jpg")
+                        sea_bg_src = _season_background_url(ratingKey, idx)
+                        logger.debug(
+                            "Show season background source resolved for library=%s folder=%s season=%s: %s",
+                            library,
+                            folderName,
+                            idx,
+                            _safe_url(sea_bg_src),
+                        )
+                        background_entry.update(_download_result(sea_bg_path, sea_bg_src))
+                    except HTTPException as e:
+                        logger.warning(
+                            "Season background import failed for library=%s folder=%s season=%s: %s",
+                            library,
+                            folderName,
+                            idx,
+                            e.detail,
+                        )
+                        background_entry["error"] = e.detail
+                    except Exception as e:
+                        logger.warning(
+                            "Season background import error for library=%s folder=%s season=%s: %s",
+                            library,
+                            folderName,
+                            idx,
+                            e,
+                        )
+                        background_entry["error"] = str(e)
+                    results["seasonBackgrounds"].append(background_entry)
         except Exception as e:
             logger.warning(
                 "Failed to enumerate seasons for library=%s folder=%s ratingKey=%s: %s",
@@ -645,6 +751,7 @@ def import_show_all(
         results["poster"]["ok"]
         or results["background"]["ok"]
         or any(s.get("ok") for s in results["seasons"])
+        or any(s.get("ok") for s in results["seasonBackgrounds"])
     )
     return results
 
@@ -671,8 +778,8 @@ def import_collection_both(
     dest_dir = _dest_dir_or_422(library, folderName)
 
     results: Dict[str, Any] = {
-        "poster": {"ok": False, "path": None, "src": None, "error": None},
-        "background": {"ok": False, "path": None, "src": None, "error": None},
+        "poster": {"ok": False, "path": None, "src": None, "error": None, "replaced": False},
+        "background": {"ok": False, "path": None, "src": None, "error": None, "replaced": False},
     }
 
     if includePoster:
@@ -685,8 +792,7 @@ def import_collection_both(
                 folderName,
                 _safe_url(p_src),
             )
-            _download_to(p_path, p_src)
-            results["poster"] = {"ok": True, "path": p_path, "src": p_src, "error": None}
+            results["poster"] = _download_result(p_path, p_src)
         except HTTPException as e:
             logger.warning(
                 "Collection poster import failed for library=%s folder=%s: %s",
@@ -714,8 +820,7 @@ def import_collection_both(
                 folderName,
                 _safe_url(b_src),
             )
-            _download_to(b_path, b_src)
-            results["background"] = {"ok": True, "path": b_path, "src": b_src, "error": None}
+            results["background"] = _download_result(b_path, b_src)
         except HTTPException as e:
             logger.warning(
                 "Collection background import failed for library=%s folder=%s: %s",
