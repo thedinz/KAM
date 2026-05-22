@@ -18,6 +18,7 @@ export async function importMovieAssets(library, ratingKey, folderName) {
       poster,
       background,
       seasons: [],
+      seasonBackgrounds: [],
       error: message || (data && data.error) || null,
       endpoint: 'movie',
     };
@@ -28,6 +29,7 @@ export async function importMovieAssets(library, ratingKey, folderName) {
       poster: normalizeAssetResult(null, message),
       background: normalizeAssetResult(null, message),
       seasons: [],
+      seasonBackgrounds: [],
       error: message,
       endpoint: 'movie',
     };
@@ -52,6 +54,7 @@ export async function importCollectionAssets(library, ratingKey, folderName) {
       poster,
       background,
       seasons: [],
+      seasonBackgrounds: [],
       error: message || (data && data.error) || null,
       endpoint: 'collection',
     };
@@ -62,6 +65,7 @@ export async function importCollectionAssets(library, ratingKey, folderName) {
       poster: normalizeAssetResult(null, message),
       background: normalizeAssetResult(null, message),
       seasons: [],
+      seasonBackgrounds: [],
       error: message,
       endpoint: 'collection',
     };
@@ -86,13 +90,24 @@ export async function importShowPosterPreferShowEndpoint(library, ratingKey, fol
       path: season && season.path ? season.path : null,
       src: season && season.src ? season.src : null,
       error: season && season.error ? season.error : null,
+      replaced: Boolean(season && season.replaced),
     }));
-    const ok = Boolean((data && typeof data.ok === 'boolean' ? data.ok : null) ?? (poster.ok || background.ok || seasons.some((season) => season.ok)));
+    const seasonBackgroundsRaw = Array.isArray(data && data.seasonBackgrounds) ? data.seasonBackgrounds : [];
+    const seasonBackgrounds = seasonBackgroundsRaw.map((season) => ({
+      ok: Boolean(season && season.ok),
+      index: season && (season.index ?? season.season ?? season.number ?? null),
+      path: season && season.path ? season.path : null,
+      src: season && season.src ? season.src : null,
+      error: season && season.error ? season.error : null,
+      replaced: Boolean(season && season.replaced),
+    }));
+    const ok = Boolean((data && typeof data.ok === 'boolean' ? data.ok : null) ?? (poster.ok || background.ok || seasons.some((season) => season.ok) || seasonBackgrounds.some((season) => season.ok)));
     const result = {
       ok: ok && response.ok,
       poster,
       background,
       seasons,
+      seasonBackgrounds,
       error: message || (data && data.error) || null,
       endpoint: 'show',
     };
@@ -112,46 +127,103 @@ export async function importShowPosterPreferShowEndpoint(library, ratingKey, fol
 
 export async function importAllSeasons(library, showFolder, seasons, ratingKey) {
   const results = [];
+  const backgroundResults = [];
   let anyOk = false;
   for (const season of seasons || []) {
     const idxRaw = season && (season.index ?? season.season ?? season.number ?? null);
     const entry = { ok: false, index: idxRaw ?? null, path: null, src: null, error: null };
+    const backgroundEntry = { ok: false, index: idxRaw ?? null, path: null, src: null, error: null };
     const idx = Number(idxRaw);
     if (!Number.isFinite(idx)) {
       entry.error = `Invalid season index: ${idxRaw}`;
+      backgroundEntry.error = `Invalid season index: ${idxRaw}`;
       results.push(entry);
+      backgroundResults.push(backgroundEntry);
       continue;
     }
-    const fd = new FormData();
-    fd.append('library', library);
-    if (showFolder) fd.append('folderName', showFolder);
-    fd.append('season', String(idx));
-    if (ratingKey != null) fd.append('ratingKey', String(ratingKey));
-    try {
-      const response = await fetch('/api/import/season', { method: 'POST', body: fd });
-      const data = await safeJson(response);
-      if (!response.ok) {
-        entry.error = responseErrorMessage(response, data);
-      } else {
-        entry.ok = Boolean((data && typeof data.ok === 'boolean' ? data.ok : null) ?? response.ok);
-        entry.path = (data && data.path) || null;
-        entry.src = (data && data.src) || null;
-        if (!entry.ok) entry.error = (data && data.error) || null;
+    const imports = [
+      {
+        kind: 'poster',
+        plexUrl: season?.plexPosterUrl || null,
+        entry,
+      },
+      {
+        kind: 'background',
+        plexUrl: season?.plexBackgroundUrl || null,
+        entry: backgroundEntry,
+      },
+    ];
+    for (const importSpec of imports) {
+      const fd = new FormData();
+      fd.append('library', library);
+      if (showFolder) fd.append('folderName', showFolder);
+      fd.append('season', String(idx));
+      fd.append('kind', importSpec.kind);
+      if (ratingKey != null) fd.append('ratingKey', String(ratingKey));
+      if (importSpec.plexUrl) fd.append('url', importSpec.plexUrl);
+      try {
+        const response = await fetch('/api/import/season', { method: 'POST', body: fd });
+        const data = await safeJson(response);
+        if (!response.ok) {
+          importSpec.entry.error = responseErrorMessage(response, data);
+        } else {
+          importSpec.entry.ok = Boolean((data && typeof data.ok === 'boolean' ? data.ok : null) ?? response.ok);
+          importSpec.entry.path = (data && data.path) || null;
+          importSpec.entry.src = (data && data.src) || null;
+          importSpec.entry.replaced = Boolean(data && data.replaced);
+          if (!importSpec.entry.ok) importSpec.entry.error = (data && data.error) || null;
+        }
+      } catch (error) {
+        importSpec.entry.error = error?.message || String(error);
       }
-    } catch (error) {
-      entry.error = error?.message || String(error);
+      if (!importSpec.entry.error && !importSpec.entry.ok) importSpec.entry.error = 'Unknown error';
+      if (importSpec.entry.ok) anyOk = true;
     }
-    if (!entry.error && !entry.ok) entry.error = 'Unknown error';
-    if (entry.ok) anyOk = true;
     results.push(entry);
+    backgroundResults.push(backgroundEntry);
   }
-  return { ok: anyOk, seasons: results, endpoint: 'season' };
+  return { ok: anyOk, seasons: results, seasonBackgrounds: backgroundResults, endpoint: 'season' };
 }
 
 export function summarizeImportResult(failures) {
   const count = failures.length;
   if (!count) return 'Import complete.';
   return `Import completed with ${count} failure${count === 1 ? '' : 's'}.`;
+}
+
+export function createImportReceipt() {
+  return {
+    imported: 0,
+    overwritten: 0,
+    skipped: 0,
+    failed: 0,
+  };
+}
+
+export function addImportResultToReceipt(receipt, result) {
+  if (!receipt || !result) return receipt;
+  const entries = [
+    result.poster,
+    result.background,
+    ...(Array.isArray(result.seasons) ? result.seasons : []),
+    ...(Array.isArray(result.seasonBackgrounds) ? result.seasonBackgrounds : []),
+  ].filter((entry) => entry && typeof entry === 'object');
+
+  if (!entries.length && !result.ok) {
+    receipt.failed += 1;
+    return receipt;
+  }
+
+  entries.forEach((entry) => {
+    if (entry.ok) {
+      receipt.imported += 1;
+      if (entry.replaced) receipt.overwritten += 1;
+    } else {
+      receipt.failed += 1;
+    }
+  });
+
+  return receipt;
 }
 
 export { collectResultFailures, pushFailureEntry };

@@ -28,6 +28,7 @@ def tv_env(tmp_path, monkeypatch):
     (show_folder / "poster.jpg").write_bytes(b"poster")
     (show_folder / "background.jpg").write_bytes(b"background")
     (show_folder / "Season01.jpg").write_bytes(b"s1")
+    (show_folder / "Season01_background.jpg").write_bytes(b"s1-bg")
 
     overrides_path = tmp_path / "overrides.json"
 
@@ -72,6 +73,7 @@ def tv_env(tmp_path, monkeypatch):
                             "title": "Season 1",
                             "ratingKey": "201",
                             "thumb": "/season/thumb",
+                            "art": "/season/art",
                         }
                     ]
                 }
@@ -113,5 +115,8 @@ def test_tv_route_prefers_override(tv_env):
     assert data["posterUrl"].startswith("/fileproxy")
     assert data["backgroundUrl"].startswith("/fileproxy")
     assert data["seasons"][0]["posterUrl"].startswith("/fileproxy")
+    assert data["seasons"][0]["backgroundUrl"].startswith("/fileproxy")
+    assert data["seasons"][0]["backgroundExists"] is True
     assert data["plexPosterUrl"].startswith("http://plex.test")
     assert data["plexBackgroundUrl"].startswith("http://plex.test")
+    assert data["seasons"][0]["plexBackgroundUrl"].startswith("http://plex.test")
