@@ -1,9 +1,57 @@
 import { responseErrorMessage, safeJson } from './api.js';
 
 const STOPWORDS = new Set(['the', 'a', 'an', 'movie', 'film']);
+const RELAXED_VARIANT_SUFFIXES = new Set([
+  'alternate',
+  'anniversary',
+  'collectors',
+  'complete',
+  'cut',
+  'director',
+  'directors',
+  'edition',
+  'edit',
+  'extended',
+  'final',
+  'imax',
+  'remaster',
+  'remastered',
+  'restored',
+  'special',
+  'theatrical',
+  'ultimate',
+  'uncut',
+  'unrated',
+  'version',
+]);
+const SEQUEL_MARKERS = new Set(['book', 'chapter', 'episode', 'part', 'vol', 'volume']);
+const NUMBER_WORDS = new Map([
+  ['one', '1'],
+  ['two', '2'],
+  ['three', '3'],
+  ['four', '4'],
+  ['five', '5'],
+  ['six', '6'],
+  ['seven', '7'],
+  ['eight', '8'],
+  ['nine', '9'],
+  ['ten', '10'],
+]);
+const ROMAN_NUMERALS = new Map([
+  ['i', '1'],
+  ['ii', '2'],
+  ['iii', '3'],
+  ['iv', '4'],
+  ['v', '5'],
+  ['vi', '6'],
+  ['vii', '7'],
+  ['viii', '8'],
+  ['ix', '9'],
+  ['x', '10'],
+]);
 
 function normalizeTitle(value) {
-  if (!value) return { key: '', year: null };
+  if (!value) return { key: '', year: null, tokens: [] };
   const normalized = String(value).normalize('NFKC').replace(/[\u0000-\u001f]/g, '');
   const tokens = normalized
     .toLowerCase()
@@ -14,7 +62,7 @@ function normalizeTitle(value) {
   if (tokens.length > 1 && /^\d{4}$/.test(tokens[tokens.length - 1])) {
     year = tokens.pop();
   }
-  return { key: tokens.join(''), year };
+  return { key: tokens.join(''), year, tokens };
 }
 
 function buildFolderIndex(names = []) {
@@ -28,19 +76,58 @@ function buildFolderIndex(names = []) {
 }
 
 function pickFolderMatch(candidate, index) {
-  const { key, year } = normalizeTitle(candidate);
+  const { key, year, tokens } = normalizeTitle(candidate);
   if (!key) return '';
+
+  const sequelTokens = getSequelTokens(tokens);
+  const isUsable = (entry) =>
+    (!year || entry.year === year) && equalTokens(sequelTokens, getSequelTokens(entry.tokens));
+
   for (const entry of index) {
     if (entry.key !== key) continue;
-    if (year && entry.year && entry.year !== year) continue;
+    if (!isUsable(entry)) continue;
     return entry.name;
   }
   for (const entry of index) {
     if (!(entry.key.startsWith(key) || key.startsWith(entry.key))) continue;
-    if (year && entry.year && entry.year !== year) continue;
+    if (!hasEditionSuffix(tokens, entry.tokens)) continue;
+    if (!isUsable(entry)) continue;
     return entry.name;
   }
   return '';
+}
+
+function getSequelTokens(tokens = []) {
+  return tokens.reduce((result, token, index) => {
+    const previous = index > 0 ? tokens[index - 1] : '';
+    const finalToken = index === tokens.length - 1;
+
+    if (/^\d+$/.test(token)) {
+      result.push(token);
+    } else if (NUMBER_WORDS.has(token) && (finalToken || SEQUEL_MARKERS.has(previous))) {
+      result.push(NUMBER_WORDS.get(token));
+    } else if (
+      ROMAN_NUMERALS.has(token) &&
+      (token.length > 1 || finalToken || SEQUEL_MARKERS.has(previous))
+    ) {
+      result.push(ROMAN_NUMERALS.get(token));
+    }
+
+    return result;
+  }, []);
+}
+
+function equalTokens(first = [], second = []) {
+  return first.length === second.length && first.every((token, index) => token === second[index]);
+}
+
+function hasEditionSuffix(first = [], second = []) {
+  if (first.length === second.length) return false;
+  const shorter = first.length < second.length ? first : second;
+  const longer = first.length < second.length ? second : first;
+  if (!shorter.every((token, index) => token === longer[index])) return false;
+  const suffix = longer.slice(shorter.length);
+  return suffix.length > 0 && suffix.every((token) => RELAXED_VARIANT_SUFFIXES.has(token));
 }
 
 function buildMatchCandidates(item) {
@@ -62,6 +149,21 @@ function buildMatchCandidates(item) {
     }
   }
   return candidates;
+}
+
+export function isCertainItemFolderMatch(item, folderName) {
+  const selectedFolder = String(folderName || '').trim();
+  if (!selectedFolder) return false;
+
+  const folderIndex = buildFolderIndex([selectedFolder]);
+  const titleCandidates = buildMatchCandidates({
+    ...item,
+    folder: '',
+    folderName: '',
+    assetReady: false,
+  });
+
+  return titleCandidates.some((candidate) => pickFolderMatch(candidate.value, folderIndex) === selectedFolder);
 }
 
 async function fetchFolderNames(targetLibrary, { optional = false } = {}) {

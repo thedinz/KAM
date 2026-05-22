@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { assignMatchedFolders, runLibraryMappingScan } from '../mappingScan.js';
+import { assignMatchedFolders, isCertainItemFolderMatch, runLibraryMappingScan } from '../mappingScan.js';
 
 function jsonResponse(payload, { ok = true, status = 200, statusText = 'OK' } = {}) {
   return {
@@ -102,6 +102,53 @@ describe('runLibraryMappingScan', () => {
     });
   });
 
+  it('does not assign a year-scoped movie to a yearless folder', async () => {
+    global.fetch = vi.fn(() =>
+      Promise.resolve(jsonResponse({ items: [{ name: 'Dune', isDir: true }] }))
+    );
+    const fetchAllForLibrary = vi.fn().mockResolvedValue({
+      items: [
+        {
+          ratingKey: '2021',
+          title: 'Dune',
+          year: 2021,
+          type: 'movie',
+          assetReady: false,
+        },
+      ],
+    });
+
+    const result = await runLibraryMappingScan({ library: 'Movies', fetchAllForLibrary });
+
+    expect(result.entries[0]).toMatchObject({
+      matched: false,
+      matchedFolder: '',
+    });
+  });
+
+  it('does not treat Roman numeral sequel names as edition suffixes', async () => {
+    global.fetch = vi.fn(() =>
+      Promise.resolve(jsonResponse({ items: [{ name: 'A Quiet Place', isDir: true }] }))
+    );
+    const fetchAllForLibrary = vi.fn().mockResolvedValue({
+      items: [
+        {
+          ratingKey: 'quiet-place-two',
+          title: 'A Quiet Place Part II',
+          type: 'movie',
+          assetReady: false,
+        },
+      ],
+    });
+
+    const result = await runLibraryMappingScan({ library: 'Movies', fetchAllForLibrary });
+
+    expect(result.entries[0]).toMatchObject({
+      matched: false,
+      matchedFolder: '',
+    });
+  });
+
   it('uses the same selected-library-only matching for TV series', async () => {
     global.fetch = vi.fn((url) => {
       const parsed = new URL(url, 'http://localhost');
@@ -154,6 +201,33 @@ describe('runLibraryMappingScan', () => {
       matched: true,
       matchedFolder: 'Breaking Bad',
     });
+  });
+});
+
+describe('isCertainItemFolderMatch', () => {
+  it('rejects a current folder from the original movie for a Roman numeral sequel', () => {
+    expect(
+      isCertainItemFolderMatch(
+        {
+          title: 'A Quiet Place Part II',
+          type: 'movie',
+        },
+        'A Quiet Place'
+      )
+    ).toBe(false);
+  });
+
+  it('still accepts a known edition folder for bulk import', () => {
+    expect(
+      isCertainItemFolderMatch(
+        {
+          title: 'Jurassic World Fallen Kingdom',
+          year: 2018,
+          type: 'movie',
+        },
+        'Jurassic World Fallen Kingdom (Extended Edition) (2018)'
+      )
+    ).toBe(true);
   });
 });
 
