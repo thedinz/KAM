@@ -1,4 +1,5 @@
 import { BrowserRouter, Navigate, Outlet, Route, Routes } from 'react-router-dom';
+import BrandLockup from './components/BrandLockup.jsx';
 import LoginPage from './pages/LoginPage.jsx';
 import CollectionDetailPage from './pages/CollectionDetailPage.jsx';
 import LibraryPage from './pages/LibraryPage.jsx';
@@ -10,6 +11,7 @@ import ShowDetailPage from './pages/ShowDetailPage.jsx';
 import { AuthProvider, useAuth } from './hooks/AuthProvider.jsx';
 import { LibraryItemsProvider } from './hooks/LibraryItemsProvider.jsx';
 import { ThemeProvider } from './theme/ThemeProvider.jsx';
+import { KAM_VERSION } from './version.js';
 
 function RequireAuth() {
   const { enabled, authenticated, loading } = useAuth();
@@ -18,7 +20,9 @@ function RequireAuth() {
     return (
       <main className="login-page">
         <section className="login-card">
-          <h1>KAM</h1>
+          <h1 className="login-brand-title">
+            <BrandLockup compact />
+          </h1>
           <p className="login-subtitle">Checking your session…</p>
         </section>
       </main>
@@ -32,27 +36,42 @@ function RequireAuth() {
   return <Outlet />;
 }
 
+function AppFooter() {
+  return (
+    <footer className="app-footer">
+      <span>Made and provided for free with love</span>
+      <span aria-hidden="true">/</span>
+      <span>KAM v{KAM_VERSION}</span>
+    </footer>
+  );
+}
+
 function App() {
   return (
     <AuthProvider>
       <ThemeProvider>
         <BrowserRouter>
           <LibraryItemsProvider>
-            <Routes>
-              <Route path="/login" element={<LoginPage />} />
-              <Route element={<RequireAuth />}>
-                <Route path="/" element={<Navigate to="/libraries" replace />} />
-                <Route path="/libraries" element={<LibraryPage />} />
-                <Route path="/libraries/:library" element={<LibraryPage />} />
-                <Route path="/libraries/:library/not-ready" element={<NotReadyPage />} />
-                <Route path="/libraries/:library/mapping" element={<MappingScanPage />} />
-                <Route path="/libraries/:library/movies/:ratingKey" element={<MovieDetailPage />} />
-                <Route path="/libraries/:library/shows/:ratingKey" element={<ShowDetailPage />} />
-                <Route path="/libraries/:library/collections/:ratingKey" element={<CollectionDetailPage />} />
-                <Route path="/settings" element={<SettingsPage />} />
-              </Route>
-              <Route path="*" element={<Navigate to="/libraries" replace />} />
-            </Routes>
+            <div className="app-shell">
+              <div className="app-shell-routes">
+                <Routes>
+                  <Route path="/login" element={<LoginPage />} />
+                  <Route element={<RequireAuth />}>
+                    <Route path="/" element={<Navigate to="/libraries" replace />} />
+                    <Route path="/libraries" element={<LibraryPage />} />
+                    <Route path="/libraries/:library" element={<LibraryPage />} />
+                    <Route path="/libraries/:library/not-ready" element={<NotReadyPage />} />
+                    <Route path="/libraries/:library/mapping" element={<MappingScanPage />} />
+                    <Route path="/libraries/:library/movies/:ratingKey" element={<MovieDetailPage />} />
+                    <Route path="/libraries/:library/shows/:ratingKey" element={<ShowDetailPage />} />
+                    <Route path="/libraries/:library/collections/:ratingKey" element={<CollectionDetailPage />} />
+                    <Route path="/settings" element={<SettingsPage />} />
+                  </Route>
+                  <Route path="*" element={<Navigate to="/libraries" replace />} />
+                </Routes>
+              </div>
+              <AppFooter />
+            </div>
           </LibraryItemsProvider>
         </BrowserRouter>
       </ThemeProvider>
