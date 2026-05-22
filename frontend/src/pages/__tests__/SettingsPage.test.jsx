@@ -24,7 +24,16 @@ describe('SettingsPage', () => {
   });
 
   beforeEach(() => {
-    global.fetch = vi.fn();
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          ok: true,
+          checks: [],
+          assetMappings: [],
+          collectionPaths: [],
+        }),
+    });
   });
 
   it('renders plex libraries and enables bulk actions after selection', () => {
@@ -91,6 +100,75 @@ describe('SettingsPage', () => {
     revertButtons.forEach((button) => {
       expect(button).toBeDisabled();
     });
+  });
+
+  it('shows the setup health check report', async () => {
+    global.fetch.mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          ok: true,
+          checks: [
+            {
+              key: 'plex',
+              label: 'Plex connection',
+              status: 'ok',
+              detail: 'Connected.',
+              path: '',
+            },
+          ],
+          assetMappings: [
+            {
+              key: 'asset-mapping',
+              label: 'Movies assets',
+              library: 'Movies',
+              status: 'ok',
+              detail: 'Path is visible and writable.',
+              path: '/assets/Movies',
+            },
+          ],
+          collectionPaths: [],
+        }),
+    });
+    useTheme.mockReturnValue({
+      theme: 'dark',
+      savedTheme: 'dark',
+      plexUrl: 'http://plex.local',
+      plexToken: 'token',
+      savedSettings: { plexUrl: 'http://plex.local', plexToken: 'token' },
+      libraryMappings: [],
+      savedLibraryMappings: [],
+      libraries: [],
+      librariesLoading: false,
+      librariesError: null,
+      loading: false,
+      saving: false,
+      error: null,
+      libraryMappingsDirty: false,
+      hasUnsavedChanges: false,
+      applyTheme: vi.fn(),
+      updateSettings: vi.fn(),
+      saveSettings: vi.fn(),
+      revertSettings: vi.fn(),
+      refreshLibraries: vi.fn(),
+      setLibraryMappings: vi.fn(),
+      exclusions: [],
+      exclusionsLoading: false,
+      exclusionsError: null,
+      refreshExclusions: vi.fn(),
+      includeItem: vi.fn(),
+      excludeItem: vi.fn(),
+      isItemExcluded: vi.fn(() => false),
+    });
+
+    render(
+      <MemoryRouter>
+        <SettingsPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText('Plex connection')).toBeInTheDocument();
+    expect(screen.getByText('/assets/Movies')).toBeInTheDocument();
   });
 
   it('surfaces library errors in the status message', () => {
