@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import BrandLockup from '../components/BrandLockup.jsx';
 import { useAuth } from '../hooks/AuthProvider.jsx';
 
 function LoginPage() {
@@ -32,7 +33,9 @@ function LoginPage() {
   return (
     <main className="login-page">
       <section className="login-card">
-        <h1>KAM</h1>
+        <h1 className="login-brand-title">
+          <BrandLockup compact />
+        </h1>
         <p className="login-subtitle">Enter your password to continue.</p>
         <form onSubmit={handleSubmit} className="login-form">
           <label className="login-label" htmlFor="password">

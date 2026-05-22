@@ -33,6 +33,32 @@ body {
   color: var(--fg);
 }
 
+.app-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-shell-routes {
+  flex: 1 0 auto;
+  min-height: 0;
+}
+
+.app-footer {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 8px 16px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+  flex-wrap: wrap;
+}
+
 .login-page {
   min-height: 100vh;
   display: flex;
@@ -56,6 +82,11 @@ body {
 .login-card h1 {
   margin: 0;
   font-size: 26px;
+}
+
+.login-brand-title {
+  display: flex;
+  justify-content: center;
 }
 
 .login-subtitle {
@@ -99,6 +130,149 @@ header {
 header h1 {
   font-size: 18px;
   margin: 0 8px 0 0;
+}
+
+.library-header {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.library-header .library-site-title {
+  width: 100%;
+  margin: 0;
+  display: flex;
+  justify-content: center;
+}
+
+.kam-brand {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  min-width: 0;
+  padding: 2px 0;
+}
+
+.kam-brand-mark {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  flex: 0 0 64px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid color-mix(in oklab, var(--accent) 58%, var(--border));
+  border-radius: 8px;
+  background:
+    linear-gradient(145deg, rgba(94, 161, 255, 0.28), rgba(21, 21, 28, 0.96) 48%),
+    var(--card);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.06),
+    0 10px 28px rgba(0, 0, 0, 0.28);
+}
+
+.kam-brand-mark::before {
+  content: '';
+  position: absolute;
+  inset: 8px 9px 8px 16px;
+  border: 1px solid rgba(126, 214, 166, 0.62);
+  border-radius: 6px;
+  background: linear-gradient(155deg, rgba(126, 214, 166, 0.18), rgba(126, 214, 166, 0.03));
+  transform: translateX(7px);
+}
+
+.kam-brand-mark-frame {
+  position: absolute;
+  inset: 8px 14px 8px 9px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 6px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.1), transparent 34%),
+    rgba(9, 9, 14, 0.6);
+}
+
+.kam-brand-mark-frame::before,
+.kam-brand-mark-frame::after {
+  content: '';
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.kam-brand-mark-frame::before {
+  top: 6px;
+}
+
+.kam-brand-mark-frame::after {
+  bottom: 6px;
+}
+
+.kam-brand-mark-letter {
+  position: relative;
+  z-index: 1;
+  color: var(--fg);
+  font-size: 34px;
+  font-weight: 800;
+  line-height: 1;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
+}
+
+.kam-brand-copy {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+  text-align: left;
+}
+
+.kam-brand-name {
+  color: var(--fg);
+  font-size: 31px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.kam-brand-subtitle {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+  text-transform: uppercase;
+  letter-spacing: 0;
+}
+
+.kam-brand--compact {
+  gap: 12px;
+}
+
+.kam-brand--compact .kam-brand-mark {
+  width: 52px;
+  height: 52px;
+  flex-basis: 52px;
+}
+
+.kam-brand--compact .kam-brand-mark-letter {
+  font-size: 28px;
+}
+
+.kam-brand--compact .kam-brand-name {
+  font-size: 27px;
+}
+
+.library-header-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  width: 100%;
+}
+
+.library-header .page-header-tools {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 select,
@@ -1160,7 +1334,7 @@ main {
 }
 
 .settings-page {
-  max-width: 720px;
+  width: min(1400px, 100%);
   margin: 0 auto;
   padding: 24px 16px 48px;
   display: flex;
@@ -1168,14 +1342,23 @@ main {
   gap: 24px;
 }
 
+.settings-foundation-grid,
+.settings-management-grid {
+  display: grid;
+  gap: 20px;
+  align-items: start;
+  min-width: 0;
+}
+
 .settings-card {
   background: var(--card);
   border: 1px solid var(--border);
-  border-radius: 16px;
+  border-radius: 8px;
   padding: 24px;
   display: flex;
   flex-direction: column;
   gap: 16px;
+  min-width: 0;
 }
 
 .settings-card h2 {
@@ -1205,9 +1388,7 @@ main {
 }
 
 .settings-form {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
+  margin: 0;
 }
 
 .settings-section {
@@ -1361,6 +1542,7 @@ main {
 
 .settings-libraries-table-wrapper {
   overflow-x: auto;
+  min-width: 0;
 }
 
 .settings-libraries-status {
@@ -1418,10 +1600,12 @@ main {
 .settings-exclusions-list {
   list-style: none;
   margin: 0;
-  padding: 0;
+  padding: 0 6px 0 0;
   display: flex;
   flex-direction: column;
   gap: 12px;
+  max-height: min(620px, 70vh);
+  overflow-y: auto;
 }
 
 .settings-exclusion-row {
@@ -1439,6 +1623,7 @@ main {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  min-width: 0;
 }
 
 .settings-exclusion-title {
@@ -1540,10 +1725,46 @@ main {
   }
 }
 
+@media (min-width: 640px) {
+  .settings-foundation-grid {
+    grid-template-columns: minmax(260px, 1fr) minmax(340px, 1.15fr);
+  }
+
+  .settings-card--plex {
+    grid-column: 1 / -1;
+  }
+}
+
 @media (min-width: 768px) {
   .library-actions {
     flex-direction: row;
     flex-wrap: wrap;
+  }
+}
+
+@media (min-width: 1080px) {
+  .settings-foundation-grid {
+    grid-template-columns: minmax(220px, 0.75fr) repeat(2, minmax(320px, 1fr));
+  }
+
+  .settings-card--plex {
+    grid-column: auto;
+  }
+}
+
+@media (min-width: 1240px) {
+  .settings-management-grid {
+    grid-template-columns: minmax(760px, 2fr) minmax(360px, 1fr);
+    align-items: start;
+  }
+
+  .settings-card--exclusions .settings-exclusion-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .settings-card--exclusions .settings-exclusion-include {
+    align-self: flex-end;
   }
 }
 
