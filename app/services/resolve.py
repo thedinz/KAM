@@ -15,6 +15,54 @@ _YEAR_SUFFIX_RE = re.compile(
 )
 
 _STOPWORDS = {"the", "a", "an", "movie", "film"}
+_RELAXED_VARIANT_SUFFIXES = {
+    "alternate",
+    "anniversary",
+    "collectors",
+    "complete",
+    "cut",
+    "director",
+    "directors",
+    "edition",
+    "edit",
+    "extended",
+    "final",
+    "imax",
+    "remaster",
+    "remastered",
+    "restored",
+    "special",
+    "theatrical",
+    "ultimate",
+    "uncut",
+    "unrated",
+    "version",
+}
+_SEQUEL_MARKERS = {"book", "chapter", "episode", "part", "vol", "volume"}
+_NUMBER_WORDS = {
+    "one": "1",
+    "two": "2",
+    "three": "3",
+    "four": "4",
+    "five": "5",
+    "six": "6",
+    "seven": "7",
+    "eight": "8",
+    "nine": "9",
+    "ten": "10",
+}
+_ROMAN_NUMERALS = {
+    "i": "1",
+    "ii": "2",
+    "iii": "3",
+    "iv": "4",
+    "v": "5",
+    "vi": "6",
+    "vii": "7",
+    "viii": "8",
+    "ix": "9",
+    "x": "10",
+}
 
 
 def _extract_trailing_year(s: str) -> tuple[str, Optional[str]]:
@@ -81,15 +129,49 @@ def _normalize_with_year(s: str) -> tuple[str, Optional[str]]:
 
 
 def _sequel_tokens(tokens: tuple[str, ...]) -> tuple[str, ...]:
-    """Return numeric title tokens such as the 2 in a sequel title."""
+    """Return title identity numbers such as the 2 or II in a sequel title."""
 
-    return tuple(tok for tok in tokens if tok.isdigit())
+    sequel_tokens: list[str] = []
+    for index, token in enumerate(tokens):
+        previous = tokens[index - 1] if index else ""
+        final_token = index == len(tokens) - 1
+
+        if token.isdigit():
+            sequel_tokens.append(token)
+        elif token in _NUMBER_WORDS and (final_token or previous in _SEQUEL_MARKERS):
+            sequel_tokens.append(_NUMBER_WORDS[token])
+        elif token in _ROMAN_NUMERALS and (
+            len(token) > 1 or final_token or previous in _SEQUEL_MARKERS
+        ):
+            sequel_tokens.append(_ROMAN_NUMERALS[token])
+
+    return tuple(sequel_tokens)
 
 
 def _sequel_tokens_compatible(
     want_tokens: tuple[str, ...], candidate_tokens: tuple[str, ...]
 ) -> bool:
     return _sequel_tokens(want_tokens) == _sequel_tokens(candidate_tokens)
+
+
+def _relaxed_variant_tokens_compatible(
+    want_tokens: tuple[str, ...], candidate_tokens: tuple[str, ...]
+) -> bool:
+    """Allow known edition suffixes, not arbitrary title prefix matches."""
+
+    if len(want_tokens) == len(candidate_tokens):
+        return False
+
+    if len(want_tokens) < len(candidate_tokens):
+        shorter, longer = want_tokens, candidate_tokens
+    else:
+        shorter, longer = candidate_tokens, want_tokens
+
+    if tuple(longer[: len(shorter)]) != shorter:
+        return False
+
+    suffix = longer[len(shorter) :]
+    return bool(suffix) and all(token in _RELAXED_VARIANT_SUFFIXES for token in suffix)
 
 
 def _year_compatible(want_year: Optional[str], candidate_year: Optional[str]) -> bool:
@@ -133,6 +215,7 @@ def _best_match(candidates, want: str) -> Optional[str]:
         for original, normalized, year, tokens in normalized_candidates
         if normalized
         and (normalized.startswith(want_key) or want_key.startswith(normalized))
+        and _relaxed_variant_tokens_compatible(want_tokens, tokens)
         and usable(year, tokens)
     ]
     if len(relaxed_matches) == 1:
@@ -145,6 +228,10 @@ def _best_match(candidates, want: str) -> Optional[str]:
     scored_matches: list[tuple[float, str, float, tuple[int, int]]] = []
     for original, normalized, year, tokens in normalized_candidates:
         if not normalized or not usable(year, tokens):
+            continue
+        if (
+            normalized.startswith(want_key) or want_key.startswith(normalized)
+        ) and not _relaxed_variant_tokens_compatible(want_tokens, tokens):
             continue
         matcher = SequenceMatcher(a=normalized, b=want_key)
         base_ratio = matcher.ratio()
