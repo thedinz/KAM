@@ -852,12 +852,12 @@ function SettingsPage() {
             Revert
           </button>
         </div>
-        <section className="settings-card">
-          <h2>Theme</h2>
-          <p className="settings-description">
-            Choose how KAM looks. Changes are previewed immediately and applied once saved.
-          </p>
-          <form onSubmit={handleSubmit} className="settings-form">
+        <form onSubmit={handleSubmit} className="settings-form settings-foundation-grid">
+          <section className="settings-card settings-card--theme">
+            <h2>Theme</h2>
+            <p className="settings-description">
+              Choose how KAM looks. Changes are previewed immediately and applied once saved.
+            </p>
             <fieldset disabled={busy}>
               <legend className="sr-only">Theme preference</legend>
               <label className="settings-radio">
@@ -881,246 +881,196 @@ function SettingsPage() {
                 <span>Light</span>
               </label>
             </fieldset>
-            <div className="settings-section">
-              <h3>Login</h3>
-              <p className="settings-description">
-                Choose whether KAM uses its own login screen or trusts authentication from a reverse
-                proxy.
-              </p>
-              <div className="settings-auth-mode" role="group" aria-label="Authentication mode">
-                <label className="settings-radio">
-                  <input
-                    type="radio"
-                    name="authMode"
-                    value="builtin"
-                    checked={effectiveAuthMode === 'builtin'}
-                    onChange={handleAuthModeChange}
-                    disabled={busy}
-                  />
-                  <span>Built-in auth</span>
-                </label>
-                <label className="settings-radio">
-                  <input
-                    type="radio"
-                    name="authMode"
-                    value="reverse_proxy"
-                    checked={effectiveAuthMode === 'reverse_proxy'}
-                    onChange={handleAuthModeChange}
-                    disabled={busy}
-                  />
-                  <span>Reverse proxy auth</span>
-                </label>
-              </div>
-              {!reverseProxyAuth ? (
-                <label className="settings-input">
-                  <span>Login password</span>
-                  <input
-                    type="password"
-                    name="authPassword"
-                    value={effectiveAuthPassword}
-                    onChange={handleAuthPasswordChange}
-                    placeholder={
-                      savedAuthPassword
-                        ? 'Saved password (leave blank to clear)'
-                        : 'Enter a password'
-                    }
-                    autoComplete="new-password"
-                    disabled={busy}
-                  />
-                </label>
-              ) : null}
-              <p className="settings-help">
-                {reverseProxyAuth
-                  ? 'KAM will skip built-in login and trust the upstream proxy.'
-                  : hasAuthPassword
-                  ? 'Login is currently enabled. Save changes to update the password.'
-                  : 'Login is currently disabled.'}
-              </p>
-            </div>
-            <div className="settings-section">
-              <h3>Plex</h3>
-              <p className="settings-description">
-                Provide your Plex URL and token to enable Plex integrations in KAM.
-              </p>
-              <label className="settings-input">
-                <span>Plex URL</span>
+          </section>
+
+          <section className="settings-card settings-card--login">
+            <h2>Login</h2>
+            <p className="settings-description">
+              Choose whether KAM uses its own login screen or trusts authentication from a reverse
+              proxy.
+            </p>
+            <div className="settings-auth-mode" role="group" aria-label="Authentication mode">
+              <label className="settings-radio">
                 <input
-                  type="url"
-                  name="plexUrl"
-                  value={plexUrl}
-                  onChange={handlePlexUrlChange}
-                  placeholder="http://plex.local:32400"
-                  autoComplete="off"
+                  type="radio"
+                  name="authMode"
+                  value="builtin"
+                  checked={effectiveAuthMode === 'builtin'}
+                  onChange={handleAuthModeChange}
                   disabled={busy}
                 />
+                <span>Built-in auth</span>
               </label>
+              <label className="settings-radio">
+                <input
+                  type="radio"
+                  name="authMode"
+                  value="reverse_proxy"
+                  checked={effectiveAuthMode === 'reverse_proxy'}
+                  onChange={handleAuthModeChange}
+                  disabled={busy}
+                />
+                <span>Reverse proxy auth</span>
+              </label>
+            </div>
+            {!reverseProxyAuth ? (
               <label className="settings-input">
-                <span>Plex Token (sensitive)</span>
+                <span>Login password</span>
                 <input
                   type="password"
-                  name="plexToken"
-                  value={plexToken}
-                  onChange={handlePlexTokenChange}
-                  placeholder="Enter your Plex token"
+                  name="authPassword"
+                  value={effectiveAuthPassword}
+                  onChange={handleAuthPasswordChange}
+                  placeholder={
+                    savedAuthPassword
+                      ? 'Saved password (leave blank to clear)'
+                      : 'Enter a password'
+                  }
                   autoComplete="new-password"
                   disabled={busy}
                 />
               </label>
-            </div>
-          </form>
-        </section>
-
-        <section className="settings-card">
-          <h2>Plex Libraries</h2>
-          <p className="settings-description">
-            Map Plex libraries to asset folders. Use the controls below to assign folders, apply paths to
-            multiple libraries, and manage optional collections folders.
-          </p>
-          <div className="settings-libraries-toolbar">
-            <div className="settings-libraries-group">
-              <button
-                type="button"
-                onClick={handleApplyAssetToSelection}
-                disabled={!selectedLibraries.length || combinedBusy}
-              >
-                Set asset folder for selected
-              </button>
-              <button
-                type="button"
-                onClick={handleApplyCollectionsToSelection}
-                disabled={!selectedLibraries.length || !selectionHasAsset || combinedBusy}
-              >
-                Set collections folder for selected
-              </button>
-            </div>
-            <div className="settings-libraries-group">
-              <button
-                type="button"
-                onClick={handleRefreshLibraries}
-                disabled={combinedBusy || !hasPlexCredentials}
-              >
-                {librariesLoading ? 'Refreshing…' : 'Refresh libraries'}
-              </button>
-            </div>
-          </div>
-          <div className="settings-libraries-table-wrapper" aria-live="polite">
-            {librariesLoading ? <p className="settings-libraries-status">Loading libraries…</p> : null}
-            {!librariesLoading && !libraryRows.length ? (
-              <p className="settings-libraries-status">
-                {hasPlexCredentials
-                  ? 'No libraries are available. Configure Plex and refresh.'
-                  : 'Enter your Plex URL and token, then save and refresh to load Plex libraries.'}
-              </p>
             ) : null}
-            {libraryRows.length ? (
-              <table className="settings-libraries-table">
-                <thead>
-                  <tr>
-                    <th scope="col" className="library-select">
-                      <input
-                        type="checkbox"
-                        ref={selectAllRef}
-                        checked={libraryRows.length > 0 && selectedLibraries.length === libraryRows.length}
-                        onChange={handleToggleAll}
-                        disabled={!libraryRows.length || combinedBusy}
-                        aria-label="Select all libraries"
-                      />
-                    </th>
-                    <th scope="col">Library</th>
-                    <th scope="col">Asset folder</th>
-                    <th scope="col">Collections folder</th>
-                    <th scope="col">Status</th>
-                    <th scope="col" className="library-actions">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {libraryRows.map((row) => {
-                    const isSelected = selectedLibraries.includes(row.name);
-                    return (
-                      <Fragment key={row.name}>
-                        <tr className={row.isDirty ? 'is-dirty' : undefined}>
-                          <td className="library-select">
-                            <input
-                              type="checkbox"
-                              checked={isSelected}
-                              onChange={() => handleToggleLibrary(row.name)}
-                              disabled={combinedBusy}
-                              aria-label={`Select ${row.name}`}
-                            />
-                          </td>
-                          <th scope="row">
-                            <div className="library-name">{row.name}</div>
-                            <div className="library-meta">
-                              {row.type ? <span className="library-tag">{row.type}</span> : null}
-                              {row.key ? <span className="library-tag">Key {row.key}</span> : null}
-                            </div>
-                          </th>
-                          <td>
-                            {row.assetPath ? <code>{row.assetPath}</code> : <span className="placeholder">Not set</span>}
-                          </td>
-                          <td>
-                            {row.collectionsPath ? (
-                              <code>{row.collectionsPath}</code>
-                            ) : (
-                              <span className="placeholder">Not set</span>
-                            )}
-                            {row.collectionSuggestionExtras?.length ? (
-                              <div className="collection-suggestions">
-                                Suggested:{' '}
-                                {row.collectionSuggestionExtras.map((value, index) => (
-                                  <span key={value}>
-                                    {index > 0 ? ', ' : ''}
-                                    <code>{value}</code>
-                                  </span>
-                                ))}
-                              </div>
-                            ) : null}
-                          </td>
-                          <td>
-                            {row.isDirty ? <span className="status-unsaved">Unsaved changes</span> : <span>Saved</span>}
-                          </td>
-                          <td className="library-actions">
-                            <button
-                              type="button"
-                              onClick={() => handleOpenAssetModal(row.name)}
-                              disabled={combinedBusy}
-                            >
-                              Set asset folder
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleOpenCollectionsModal(row.name)}
-                              disabled={combinedBusy || !row.assetPath}
-                            >
-                              Set collections folder
-                            </button>
-                          </td>
-                        </tr>
-                        {row.collectionOverrides?.map((override) => (
-                          <tr
-                            key={`${row.name}::${override.key}`}
-                            className={`library-override-row${override.isDirty ? ' is-dirty' : ''}`}
-                          >
-                            <td className="library-select" aria-hidden="true" />
+            <p className="settings-help">
+              {reverseProxyAuth
+                ? 'KAM will skip built-in login and trust the upstream proxy.'
+                : hasAuthPassword
+                ? 'Login is currently enabled. Save changes to update the password.'
+                : 'Login is currently disabled.'}
+            </p>
+          </section>
+
+          <section className="settings-card settings-card--plex">
+            <h2>Plex</h2>
+            <p className="settings-description">
+              Provide your Plex URL and token to enable Plex integrations in KAM.
+            </p>
+            <label className="settings-input">
+              <span>Plex URL</span>
+              <input
+                type="url"
+                name="plexUrl"
+                value={plexUrl}
+                onChange={handlePlexUrlChange}
+                placeholder="http://plex.local:32400"
+                autoComplete="off"
+                disabled={busy}
+              />
+            </label>
+            <label className="settings-input">
+              <span>Plex Token (sensitive)</span>
+              <input
+                type="password"
+                name="plexToken"
+                value={plexToken}
+                onChange={handlePlexTokenChange}
+                placeholder="Enter your Plex token"
+                autoComplete="new-password"
+                disabled={busy}
+              />
+            </label>
+          </section>
+        </form>
+
+        <div className="settings-management-grid">
+          <section className="settings-card settings-card--libraries">
+            <h2>Plex Libraries</h2>
+            <p className="settings-description">
+              Map Plex libraries to asset folders. Use the controls below to assign folders, apply paths to
+              multiple libraries, and manage optional collections folders.
+            </p>
+            <div className="settings-libraries-toolbar">
+              <div className="settings-libraries-group">
+                <button
+                  type="button"
+                  onClick={handleApplyAssetToSelection}
+                  disabled={!selectedLibraries.length || combinedBusy}
+                >
+                  Set asset folder for selected
+                </button>
+                <button
+                  type="button"
+                  onClick={handleApplyCollectionsToSelection}
+                  disabled={!selectedLibraries.length || !selectionHasAsset || combinedBusy}
+                >
+                  Set collections folder for selected
+                </button>
+              </div>
+              <div className="settings-libraries-group">
+                <button
+                  type="button"
+                  onClick={handleRefreshLibraries}
+                  disabled={combinedBusy || !hasPlexCredentials}
+                >
+                  {librariesLoading ? 'Refreshing…' : 'Refresh libraries'}
+                </button>
+              </div>
+            </div>
+            <div className="settings-libraries-table-wrapper" aria-live="polite">
+              {librariesLoading ? <p className="settings-libraries-status">Loading libraries…</p> : null}
+              {!librariesLoading && !libraryRows.length ? (
+                <p className="settings-libraries-status">
+                  {hasPlexCredentials
+                    ? 'No libraries are available. Configure Plex and refresh.'
+                    : 'Enter your Plex URL and token, then save and refresh to load Plex libraries.'}
+                </p>
+              ) : null}
+              {libraryRows.length ? (
+                <table className="settings-libraries-table">
+                  <thead>
+                    <tr>
+                      <th scope="col" className="library-select">
+                        <input
+                          type="checkbox"
+                          ref={selectAllRef}
+                          checked={libraryRows.length > 0 && selectedLibraries.length === libraryRows.length}
+                          onChange={handleToggleAll}
+                          disabled={!libraryRows.length || combinedBusy}
+                          aria-label="Select all libraries"
+                        />
+                      </th>
+                      <th scope="col">Library</th>
+                      <th scope="col">Asset folder</th>
+                      <th scope="col">Collections folder</th>
+                      <th scope="col">Status</th>
+                      <th scope="col" className="library-actions">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {libraryRows.map((row) => {
+                      const isSelected = selectedLibraries.includes(row.name);
+                      return (
+                        <Fragment key={row.name}>
+                          <tr className={row.isDirty ? 'is-dirty' : undefined}>
+                            <td className="library-select">
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => handleToggleLibrary(row.name)}
+                                disabled={combinedBusy}
+                                aria-label={`Select ${row.name}`}
+                              />
+                            </td>
                             <th scope="row">
-                              <div className="library-name override-name">{override.name}</div>
+                              <div className="library-name">{row.name}</div>
                               <div className="library-meta">
-                                <span className="library-tag">Collections override</span>
+                                {row.type ? <span className="library-tag">{row.type}</span> : null}
+                                {row.key ? <span className="library-tag">Key {row.key}</span> : null}
                               </div>
                             </th>
                             <td>
-                              <span className="placeholder">Uses library asset folder</span>
+                              {row.assetPath ? <code>{row.assetPath}</code> : <span className="placeholder">Not set</span>}
                             </td>
                             <td>
-                              {override.collectionsPath ? (
-                                <code>{override.collectionsPath}</code>
+                              {row.collectionsPath ? (
+                                <code>{row.collectionsPath}</code>
                               ) : (
                                 <span className="placeholder">Not set</span>
                               )}
-                              {override.collectionSuggestionExtras?.length ? (
+                              {row.collectionSuggestionExtras?.length ? (
                                 <div className="collection-suggestions">
                                   Suggested:{' '}
-                                  {override.collectionSuggestionExtras.map((value, index) => (
+                                  {row.collectionSuggestionExtras.map((value, index) => (
                                     <span key={value}>
                                       {index > 0 ? ', ' : ''}
                                       <code>{value}</code>
@@ -1130,89 +1080,143 @@ function SettingsPage() {
                               ) : null}
                             </td>
                             <td>
-                              {override.isDirty ? (
-                                <span className="status-unsaved">Unsaved changes</span>
-                              ) : (
-                                <span>Saved</span>
-                              )}
+                              {row.isDirty ? <span className="status-unsaved">Unsaved changes</span> : <span>Saved</span>}
                             </td>
                             <td className="library-actions">
                               <button
                                 type="button"
-                                onClick={() => handleOpenCollectionOverrideModal(row.name, override.key)}
+                                onClick={() => handleOpenAssetModal(row.name)}
+                                disabled={combinedBusy}
+                              >
+                                Set asset folder
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleOpenCollectionsModal(row.name)}
                                 disabled={combinedBusy || !row.assetPath}
                               >
                                 Set collections folder
                               </button>
                             </td>
                           </tr>
-                        ))}
-                      </Fragment>
-                    );
-                  })}
-                </tbody>
-              </table>
-            ) : null}
-          </div>
-        </section>
+                          {row.collectionOverrides?.map((override) => (
+                            <tr
+                              key={`${row.name}::${override.key}`}
+                              className={`library-override-row${override.isDirty ? ' is-dirty' : ''}`}
+                            >
+                              <td className="library-select" aria-hidden="true" />
+                              <th scope="row">
+                                <div className="library-name override-name">{override.name}</div>
+                                <div className="library-meta">
+                                  <span className="library-tag">Collections override</span>
+                                </div>
+                              </th>
+                              <td>
+                                <span className="placeholder">Uses library asset folder</span>
+                              </td>
+                              <td>
+                                {override.collectionsPath ? (
+                                  <code>{override.collectionsPath}</code>
+                                ) : (
+                                  <span className="placeholder">Not set</span>
+                                )}
+                                {override.collectionSuggestionExtras?.length ? (
+                                  <div className="collection-suggestions">
+                                    Suggested:{' '}
+                                    {override.collectionSuggestionExtras.map((value, index) => (
+                                      <span key={value}>
+                                        {index > 0 ? ', ' : ''}
+                                        <code>{value}</code>
+                                      </span>
+                                    ))}
+                                  </div>
+                                ) : null}
+                              </td>
+                              <td>
+                                {override.isDirty ? (
+                                  <span className="status-unsaved">Unsaved changes</span>
+                                ) : (
+                                  <span>Saved</span>
+                                )}
+                              </td>
+                              <td className="library-actions">
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenCollectionOverrideModal(row.name, override.key)}
+                                  disabled={combinedBusy || !row.assetPath}
+                                >
+                                  Set collections folder
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </Fragment>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              ) : null}
+            </div>
+          </section>
 
-        <section className="settings-card">
-          <h2>Exclusions</h2>
-          <p className="settings-description">
-            Items excluded from KAM appear here. Include them to show them again in library views.
-          </p>
-          <div className="settings-exclusions-toolbar">
-            <button
-              type="button"
-              onClick={handleRefreshExclusions}
-              disabled={exclusionsLoading}
-            >
-              {exclusionsLoading ? 'Refreshing…' : 'Refresh exclusions'}
-            </button>
-          </div>
-          {exclusionsLoading ? (
-            <div className="settings-exclusions-empty" role="status">
-              Loading exclusions…
+          <section className="settings-card settings-card--exclusions">
+            <h2>Exclusions</h2>
+            <p className="settings-description">
+              Items excluded from KAM appear here. Include them to show them again in library views.
+            </p>
+            <div className="settings-exclusions-toolbar">
+              <button
+                type="button"
+                onClick={handleRefreshExclusions}
+                disabled={exclusionsLoading}
+              >
+                {exclusionsLoading ? 'Refreshing…' : 'Refresh exclusions'}
+              </button>
             </div>
-          ) : exclusionRows.length === 0 ? (
-            <div className="settings-exclusions-empty">
-              No items are currently excluded.
-            </div>
-          ) : (
-            <ul className="settings-exclusions-list">
-              {exclusionRows.map((row) => {
-                const key = `${row.library}:::${row.ratingKey}`;
-                const buttonBusy = includingSet.has(key);
-                return (
-                  <li key={key} className="settings-exclusion-row">
-                    <div className="settings-exclusion-meta">
-                      <div className="settings-exclusion-title">{row.displayTitle}</div>
-                      <div className="settings-exclusion-details">
-                        <span className="settings-exclusion-type">{row.typeLabel}</span>
-                        <span aria-hidden="true">•</span>
-                        <span>{row.library}</span>
-                        {row.year ? (
-                          <>
-                            <span aria-hidden="true">•</span>
-                            <span>{row.year}</span>
-                          </>
-                        ) : null}
+            {exclusionsLoading ? (
+              <div className="settings-exclusions-empty" role="status">
+                Loading exclusions…
+              </div>
+            ) : exclusionRows.length === 0 ? (
+              <div className="settings-exclusions-empty">
+                No items are currently excluded.
+              </div>
+            ) : (
+              <ul className="settings-exclusions-list" aria-label="Excluded items">
+                {exclusionRows.map((row) => {
+                  const key = `${row.library}:::${row.ratingKey}`;
+                  const buttonBusy = includingSet.has(key);
+                  return (
+                    <li key={key} className="settings-exclusion-row">
+                      <div className="settings-exclusion-meta">
+                        <div className="settings-exclusion-title">{row.displayTitle}</div>
+                        <div className="settings-exclusion-details">
+                          <span className="settings-exclusion-type">{row.typeLabel}</span>
+                          <span aria-hidden="true">•</span>
+                          <span>{row.library}</span>
+                          {row.year ? (
+                            <>
+                              <span aria-hidden="true">•</span>
+                              <span>{row.year}</span>
+                            </>
+                          ) : null}
+                        </div>
                       </div>
-                    </div>
-                    <button
-                      type="button"
-                      className="btn-secondary settings-exclusion-include"
-                      onClick={() => handleIncludeExclusion(row)}
-                      disabled={buttonBusy || exclusionsLoading}
-                    >
-                      {buttonBusy ? 'Including…' : 'Include'}
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </section>
+                      <button
+                        type="button"
+                        className="btn-secondary settings-exclusion-include"
+                        onClick={() => handleIncludeExclusion(row)}
+                        disabled={buttonBusy || exclusionsLoading}
+                      >
+                        {buttonBusy ? 'Including…' : 'Include'}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </section>
+        </div>
 
         {status ? (
           <div
