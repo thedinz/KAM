@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import ArtworkCard from '../components/ArtworkCard.jsx';
+import { useLibraryItemsContext } from '../hooks/LibraryItemsProvider.jsx';
 import { responseErrorMessage, safeJson } from '../utils/api.js';
 import { useTheme } from '../theme/ThemeProvider.jsx';
 
@@ -25,6 +26,7 @@ function MovieDetailPage() {
   const ratingKey = rawRatingKey ? String(rawRatingKey) : '';
 
   const { excludeItem, includeItem, isItemExcluded, exclusionsLoading } = useTheme();
+  const { reload: reloadLibraryItems } = useLibraryItemsContext();
 
   const [detail, setDetail] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -175,6 +177,9 @@ function MovieDetailPage() {
           lastAction: 'upload',
         });
         setStatusMessage('Upload complete.');
+        if (kind === 'poster') {
+          reloadLibraryItems();
+        }
         await fetchDetails();
       } catch (err) {
         const message = err?.message || String(err);
@@ -189,7 +194,7 @@ function MovieDetailPage() {
         throw err;
       }
     },
-    [folderExists, library, effectiveRatingKey, folderName, fetchDetails, updateOperation]
+    [folderExists, library, effectiveRatingKey, folderName, fetchDetails, reloadLibraryItems, updateOperation]
   );
 
   const handleImport = useCallback(
@@ -235,6 +240,9 @@ function MovieDetailPage() {
           lastAction: 'import',
         });
         setStatusMessage('Import complete.');
+        if (kind === 'poster') {
+          reloadLibraryItems();
+        }
         await fetchDetails();
       } catch (err) {
         const message = err?.message || String(err);
@@ -248,7 +256,7 @@ function MovieDetailPage() {
         setStatusMessage(message);
       }
     },
-    [folderExists, library, effectiveRatingKey, folderName, detail, fetchDetails, updateOperation]
+    [folderExists, library, effectiveRatingKey, folderName, detail, fetchDetails, reloadLibraryItems, updateOperation]
   );
 
   const handleExclude = useCallback(async () => {
