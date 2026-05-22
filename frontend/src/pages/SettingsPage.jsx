@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import FolderFinderModal from '../components/FolderFinderModal.jsx';
 import { useAuth } from '../hooks/AuthProvider.jsx';
 import { useTheme } from '../theme/ThemeProvider.jsx';
+import { responseErrorMessage, safeJson } from '../utils/api.js';
 import {
   areLibraryMappingsEqual,
   createLibraryMappingLookup,
@@ -72,6 +73,9 @@ function SettingsPage() {
   const [selectedLibraries, setSelectedLibraries] = useState([]);
   const [modalState, setModalState] = useState(initialModalState);
   const [includingKeys, setIncludingKeys] = useState([]);
+  const [healthReport, setHealthReport] = useState(null);
+  const [healthLoading, setHealthLoading] = useState(false);
+  const [healthError, setHealthError] = useState('');
   const selectAllRef = useRef(null);
   const previousLoadingFlagsRef = useRef({
     loading,
@@ -177,6 +181,27 @@ function SettingsPage() {
 
   const busy = loading || saving;
   const combinedBusy = busy || librariesLoading;
+  const refreshHealth = useCallback(async () => {
+    setHealthLoading(true);
+    setHealthError('');
+    try {
+      const response = await fetch('/api/settings/health');
+      const data = await safeJson(response);
+      if (!response?.ok) {
+        throw new Error(responseErrorMessage(response, data));
+      }
+      setHealthReport(data || null);
+    } catch (err) {
+      setHealthReport(null);
+      setHealthError(err?.message || 'Unable to run setup check.');
+    } finally {
+      setHealthLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshHealth();
+  }, [refreshHealth]);
 
   const includingSet = useMemo(() => new Set(includingKeys), [includingKeys]);
 
@@ -797,6 +822,7 @@ function SettingsPage() {
     setStatus(null);
     try {
       await saveSettings();
+      await refreshHealth();
       const authState = await refreshAuth();
       if (authState?.enabled && !authState?.authenticated) {
         navigate('/login', { replace: true });
@@ -808,7 +834,7 @@ function SettingsPage() {
       revertSettings();
       setStatus({ type: 'error', message });
     }
-  }, [isDirty, navigate, refreshAuth, saveSettings, revertSettings, setStatus]);
+  }, [isDirty, navigate, refreshAuth, refreshHealth, saveSettings, revertSettings, setStatus]);
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -852,6 +878,78 @@ function SettingsPage() {
             Revert
           </button>
         </div>
+        <section className="settings-card settings-card--health">
+          <div className="settings-health-heading">
+            <div>
+              <h2>Setup Check</h2>
+              <p className="settings-description">
+                Checks saved Plex settings and the folders KAM can see from inside the container.
+              </p>
+            </div>
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => void refreshHealth()}
+              disabled={healthLoading}
+            >
+              {healthLoading ? 'Checking...' : 'Run check'}
+            </button>
+          </div>
+          {healthError ? (
+            <div className="settings-health-error" role="alert">
+              {healthError}
+            </div>
+          ) : null}
+          {healthLoading && !healthReport ? (
+            <div className="settings-health-empty" aria-live="polite">
+              Running setup checks...
+            </div>
+          ) : null}
+          {healthReport?.checks?.length ? (
+            <div className="settings-health-grid" aria-live="polite">
+              {healthReport.checks.map((check) => (
+                <article key={check.key} className={`settings-health-check is-${check.status}`}>
+                  <div className="settings-health-check-top">
+                    <h3>{check.label}</h3>
+                    <span>{check.status === 'ok' ? 'Ready' : check.status === 'error' ? 'Needs attention' : 'Review'}</span>
+                  </div>
+                  <p>{check.detail}</p>
+                  {check.path ? <code>{check.path}</code> : null}
+                </article>
+              ))}
+            </div>
+          ) : null}
+          {healthReport?.assetMappings?.length ? (
+            <div className="settings-health-section">
+              <h3>Mapped asset folders</h3>
+              <ul className="settings-health-paths">
+                {healthReport.assetMappings.map((check) => (
+                  <li key={`${check.library}:${check.path}`} className={`is-${check.status}`}>
+                    <strong>{check.library || check.label}</strong>
+                    <span>{check.detail}</span>
+                    {check.path ? <code>{check.path}</code> : null}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : (
+            <div className="settings-health-empty">Map a Plex library to see folder checks here.</div>
+          )}
+          {healthReport?.collectionPaths?.length ? (
+            <div className="settings-health-section">
+              <h3>Collection folders</h3>
+              <ul className="settings-health-paths">
+                {healthReport.collectionPaths.map((check) => (
+                  <li key={`${check.library}:${check.path}:${check.label}`} className={`is-${check.status}`}>
+                    <strong>{check.label}</strong>
+                    <span>{check.detail}</span>
+                    {check.path ? <code>{check.path}</code> : null}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </section>
         <form onSubmit={handleSubmit} className="settings-form settings-foundation-grid">
           <section className="settings-card settings-card--theme">
             <h2>Theme</h2>

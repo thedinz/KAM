@@ -7,6 +7,7 @@ from typing import List, Literal
 from urllib.parse import urlparse
 
 from ..services import (
+    health as health_service,
     library_mappings as library_mappings_service,
     settings as settings_service,
 )
@@ -159,6 +160,11 @@ def get_settings() -> SettingsPayload:
 def update_settings(payload: SettingsPayload) -> SettingsPayload:
     stored = settings_service.save_settings(payload.model_dump())
     return SettingsPayload(**stored)
+
+
+@router.get("/api/settings/health")
+def get_settings_health() -> dict:
+    return health_service.get_health_report()
 
 
 class LibraryMappingsUpdatePayload(BaseModel):
