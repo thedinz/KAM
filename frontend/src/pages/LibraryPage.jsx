@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import BrandLockup from '../components/BrandLockup.jsx';
 import FolderFinderModal from '../components/FolderFinderModal.jsx';
 import ImportStatusPanel from '../components/ImportStatusPanel.jsx';
 import ItemGrid from '../components/ItemGrid.jsx';
@@ -341,7 +342,9 @@ function LibraryPage() {
   return (
     <div>
       <header className="library-header">
-        <h1 className="library-site-title">KAM - Kometa Asset Manager</h1>
+        <h1 className="library-site-title">
+          <BrandLockup />
+        </h1>
         <div className="library-header-controls">
           <LibraryToolbar
             libraries={libraries}
