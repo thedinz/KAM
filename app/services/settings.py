@@ -87,6 +87,11 @@ def _get_storage_path() -> Path:
     return Path(_STORAGE_PATH)
 
 
+def get_storage_path() -> Path:
+    """Return the current settings JSON path."""
+    return _get_storage_path()
+
+
 def load_settings() -> Dict[str, Any]:
     """Return the stored settings merged with defaults."""
     with _LOCK:
