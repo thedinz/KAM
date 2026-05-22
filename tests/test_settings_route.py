@@ -87,6 +87,19 @@ def test_get_settings_returns_stored_values(settings_modules):
     }
 
 
+def test_get_settings_health_returns_runtime_report(settings_modules, monkeypatch):
+    router, _, _, _ = settings_modules
+    expected = {
+        "ok": True,
+        "checks": [{"key": "plex", "status": "ok"}],
+        "assetMappings": [],
+        "collectionPaths": [],
+    }
+    monkeypatch.setattr(router.health_service, "get_health_report", lambda: expected)
+
+    assert router.get_settings_health() == expected
+
+
 def test_put_settings_updates_file(settings_modules):
     router, service, path, _ = settings_modules
 

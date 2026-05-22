@@ -9,7 +9,9 @@ import { useLibraryItemsContext } from '../hooks/LibraryItemsProvider.jsx';
 import { responseErrorMessage, safeJson } from '../utils/api.js';
 import { isShowItem } from '../utils/items.js';
 import {
+  addImportResultToReceipt,
   collectResultFailures,
+  createImportReceipt,
   importAllSeasons,
   importCollectionAssets,
   importMovieAssets,
@@ -99,21 +101,27 @@ function LibraryPage() {
     navigate(`/libraries/${encodeURIComponent(lib)}/not-ready`);
   }, [library, navigate]);
 
-  const [importState, setImportState] = useState({ active: false, percent: 0, label: '', errors: [] });
+  const [importState, setImportState] = useState({
+    active: false,
+    percent: 0,
+    label: '',
+    errors: [],
+    receipt: null,
+  });
   const hideTimerRef = useRef();
   const preparingTimerRef = useRef();
   const [isImporting, setIsImporting] = useState(false);
   const unresolvedCount = Number(notReadyCount) || 0;
 
-  const showStatus = useCallback(({ percent = 0, label = '', errors = [], active = true }) => {
+  const showStatus = useCallback(({ percent = 0, label = '', errors = [], receipt = null, active = true }) => {
     clearTimeout(hideTimerRef.current);
-    setImportState({ active, percent, label, errors });
+    setImportState({ active, percent, label, errors, receipt });
   }, []);
 
   const hideStatus = useCallback((delay = 0) => {
     clearTimeout(hideTimerRef.current);
     hideTimerRef.current = setTimeout(() => {
-      setImportState({ active: false, percent: 0, label: '', errors: [] });
+      setImportState({ active: false, percent: 0, label: '', errors: [], receipt: null });
     }, delay);
   }, []);
 
@@ -168,11 +176,23 @@ function LibraryPage() {
       });
       return;
     }
+    const confirmed =
+      typeof window === 'undefined' ||
+      typeof window.confirm !== 'function' ||
+      window.confirm(
+        `Import all Plex artwork for ${lib}? Existing assets in mapped Kometa folders will be overwritten.`
+      );
+    if (!confirmed) {
+      showStatus({ active: true, percent: 0, label: 'Import canceled.', errors: [] });
+      hideStatus(2000);
+      return;
+    }
     setIsImporting(true);
     const lower = lib.toLowerCase();
     const isCollections = lower === 'collections';
     const isTVLib = lower.includes('tv');
     const failures = [];
+    const receipt = createImportReceipt();
     let preparingLabelIndex = 0;
 
     const stopPreparingStatus = () => {
@@ -201,6 +221,7 @@ function LibraryPage() {
       stopPreparingStatus();
       const importable = allItems.filter((item) => item?.assetReady !== false);
       const skipped = allItems.filter((item) => item?.assetReady === false);
+      receipt.skipped = skipped.length;
 
       skipped.forEach((skip) => {
         const context = {
@@ -219,6 +240,7 @@ function LibraryPage() {
             percent: 0,
             label: `Import skipped. ${count} item${count === 1 ? '' : 's'} missing asset folders.`,
             errors: failures.slice(),
+            receipt: { ...receipt },
           });
         } else {
           showStatus({ active: true, percent: 0, label: 'Nothing to import.', errors: [] });
@@ -240,6 +262,7 @@ function LibraryPage() {
           percent: pct,
           label: `Importing assets from Plex… ${processed}/${total}${skipSuffix}`,
           errors: failures.slice(),
+          receipt: { ...receipt },
         });
       };
 
@@ -257,6 +280,7 @@ function LibraryPage() {
         try {
           if (isCollections) {
             const result = await importCollectionAssets(lib, ratingKey, folderName);
+            addImportResultToReceipt(receipt, result);
             collectResultFailures(failures, context, result);
           } else if (isTVLib || isShowItem(item, lib)) {
             let showData = null;
@@ -276,14 +300,17 @@ function LibraryPage() {
             const showFolder = showData?.folderName || folderName;
             const seasonsMeta = Array.isArray(showData?.seasons) ? showData.seasons : [];
             const showResult = await importShowPosterPreferShowEndpoint(lib, ratingKey, showFolder);
+            addImportResultToReceipt(receipt, showResult);
             collectResultFailures(failures, context, showResult);
             const hasSeasonResults = Array.isArray(showResult.seasons) && showResult.seasons.length > 0;
             if (!hasSeasonResults && seasonsMeta.length) {
               const seasonResult = await importAllSeasons(lib, showFolder, seasonsMeta, ratingKey);
+              addImportResultToReceipt(receipt, seasonResult);
               collectResultFailures(failures, context, seasonResult);
             }
           } else {
             const result = await importMovieAssets(lib, ratingKey, folderName);
+            addImportResultToReceipt(receipt, result);
             collectResultFailures(failures, context, result);
           }
         } catch (err) {
@@ -295,17 +322,36 @@ function LibraryPage() {
       }
 
       await reload();
+      receipt.failed = Math.max(receipt.failed, failures.length);
 
       if (failures.length) {
-        showStatus({ active: true, percent: 100, label: summarizeImportResult(failures), errors: failures.slice() });
+        showStatus({
+          active: true,
+          percent: 100,
+          label: summarizeImportResult(failures),
+          errors: failures.slice(),
+          receipt: { ...receipt },
+        });
       } else {
-        showStatus({ active: true, percent: 100, label: 'Import complete.', errors: [] });
-        hideStatus(2500);
+        showStatus({
+          active: true,
+          percent: 100,
+          label: 'Import complete.',
+          errors: [],
+          receipt: { ...receipt },
+        });
       }
     } catch (err) {
       const message = `Import failed: ${err?.message || err}`;
       pushFailureEntry(failures, { library: lib, title: '', folder: '' }, 'Import', message);
-      showStatus({ active: true, percent: 0, label: message, errors: failures.slice() });
+      receipt.failed = Math.max(receipt.failed, failures.length);
+      showStatus({
+        active: true,
+        percent: 0,
+        label: message,
+        errors: failures.slice(),
+        receipt: { ...receipt },
+      });
     } finally {
       stopPreparingStatus();
       setIsImporting(false);
@@ -330,8 +376,8 @@ function LibraryPage() {
     : unresolvedCount > 0
       ? `Resolve or exclude ${unresolvedCount} not-ready item${unresolvedCount === 1 ? '' : 's'} before importing.`
       : normalizedLibrary.toLowerCase() === 'collections'
-        ? 'Import all collection posters/backgrounds from Plex into Kometa asset folders'
-        : 'Import all posters/backgrounds (and TV seasons) from Plex into Kometa asset folders';
+        ? 'Import all collection posters/backgrounds from Plex into Kometa asset folders. Existing assets are overwritten.'
+        : 'Import all posters/backgrounds and TV season artwork from Plex into Kometa asset folders. Existing assets are overwritten.';
 
   const notReadyButtonDisabled = !library || (Number(notReadyCount) || 0) <= 0;
   const scanDisabled = !library || loading;
@@ -374,6 +420,7 @@ function LibraryPage() {
               percent={importState.percent}
               label={importState.label}
               errors={importState.errors}
+              receipt={importState.receipt}
             />
           </LibraryToolbar>
           <Link className="settings-link" to="/settings" aria-label="Open settings">

@@ -17,6 +17,7 @@ function ImportStatusPanel({
   percent,
   label,
   errors,
+  receipt = null,
   errorHeading = 'Import Errors',
   errorNoun = 'import error',
   modalId = 'importErrorsDialog',
@@ -29,6 +30,15 @@ function ImportStatusPanel({
   }, [errors]);
 
   const hasErrors = formattedErrors.length > 0;
+  const receiptItems = useMemo(() => {
+    if (!receipt || typeof receipt !== 'object') return [];
+    return [
+      ['Imported', Number(receipt.imported) || 0],
+      ['Overwritten', Number(receipt.overwritten) || 0],
+      ['Skipped', Number(receipt.skipped) || 0],
+      ['Failed', Number(receipt.failed) || 0],
+    ];
+  }, [receipt]);
   const clamped = Number.isFinite(percent) ? Math.max(0, Math.min(100, percent)) : 0;
   const classes = ['import-status'];
   if (active) classes.push('is-active');
@@ -96,6 +106,16 @@ function ImportStatusPanel({
         </div>
         <span className="progress-label">{label}</span>
       </div>
+      {receiptItems.length ? (
+        <dl className="import-receipt" aria-label="Import results">
+          {receiptItems.map(([itemLabel, value]) => (
+            <div key={itemLabel} className="import-receipt-item">
+              <dt>{itemLabel}</dt>
+              <dd>{value}</dd>
+            </div>
+          ))}
+        </dl>
+      ) : null}
       {hasErrors ? (
         <button
           type="button"

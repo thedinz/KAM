@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import ArtworkCard from '../components/ArtworkCard.jsx';
 import { responseErrorMessage, safeJson } from '../utils/api.js';
@@ -14,6 +14,10 @@ function createOperation() {
     error: null,
     lastAction: null,
   };
+}
+
+function seasonOperationKey(index, kind) {
+  return `${String(index)}:${kind === 'background' ? 'background' : 'poster'}`;
 }
 
 function ShowDetailPage() {
@@ -63,8 +67,8 @@ function ShowDetailPage() {
     });
   }, []);
 
-  const updateSeasonOperation = useCallback((index, nextState) => {
-    const key = String(index);
+  const updateSeasonOperation = useCallback((index, kind, nextState) => {
+    const key = seasonOperationKey(index, kind);
     setOperations((prev) => {
       const current = prev.seasons?.[key] ?? createOperation();
       const next = typeof nextState === 'function' ? nextState(current) : nextState;
@@ -121,11 +125,16 @@ function ShowDetailPage() {
         const seasonsMap = { ...(prev.seasons || {}) };
         const nextKeys = new Set();
         (Array.isArray(data?.seasons) ? data.seasons : []).forEach((season) => {
-          const key = season?.index != null ? String(season.index) : null;
+          const key = season?.index != null ? seasonOperationKey(season.index, 'poster') : null;
+          const backgroundKey = season?.index != null ? seasonOperationKey(season.index, 'background') : null;
           if (!key) return;
           nextKeys.add(key);
+          nextKeys.add(backgroundKey);
           if (!seasonsMap[key]) {
             seasonsMap[key] = createOperation();
+          }
+          if (!seasonsMap[backgroundKey]) {
+            seasonsMap[backgroundKey] = createOperation();
           }
         });
         Object.keys(seasonsMap).forEach((key) => {
@@ -220,15 +229,25 @@ function ShowDetailPage() {
         const title = season.title || `Season ${String(idx).padStart(2, '0')}`;
         const posterUrl = season.posterUrl || season.url || null;
         const plexPosterUrl = season.plexPosterUrl || season.urlPlex || null;
-        const exists = typeof season.exists === 'boolean'
-          ? season.exists
+        const posterExists = typeof season.posterExists === 'boolean'
+          ? season.posterExists
+          : typeof season.exists === 'boolean'
+            ? season.exists
           : Boolean(posterUrl && posterUrl.startsWith('/fileproxy'));
+        const backgroundUrl = season.backgroundUrl || season.backgroundUrlPlex || null;
+        const plexBackgroundUrl = season.plexBackgroundUrl || null;
+        const backgroundExists = typeof season.backgroundExists === 'boolean'
+          ? season.backgroundExists
+          : Boolean(backgroundUrl && backgroundUrl.startsWith('/fileproxy'));
         return {
           index: idx,
           title,
           posterUrl,
           plexPosterUrl,
-          exists,
+          posterExists,
+          backgroundUrl,
+          plexBackgroundUrl,
+          backgroundExists,
         };
       });
 
@@ -355,25 +374,28 @@ function ShowDetailPage() {
   );
 
   const handleSeasonUpload = useCallback(
-    async (index, file) => {
+    async (index, kind, file) => {
       if (!folderExists) {
         setStatusMessage(MISSING_FOLDER_MESSAGE);
         throw new Error(MISSING_FOLDER_MESSAGE);
       }
       const idx = Number(index);
-      updateSeasonOperation(idx, {
+      const normalizedKind = kind === 'background' ? 'background' : 'poster';
+      const description = normalizedKind === 'background' ? 'background' : 'poster';
+      updateSeasonOperation(idx, normalizedKind, {
         uploading: true,
         importing: false,
         success: false,
         error: null,
         lastAction: 'upload',
       });
-      setStatusMessage(`Uploading season ${String(index).padStart(2, '0')}…`);
+      setStatusMessage(`Uploading season ${String(index).padStart(2, '0')} ${description}…`);
 
       const form = new FormData();
       form.append('library', library);
       if (folderName) form.append('folderName', folderName);
       form.append('season', String(index));
+      form.append('kind', normalizedKind);
       form.append('file', file);
 
       try {
@@ -382,7 +404,7 @@ function ShowDetailPage() {
         if (!response.ok) {
           throw new Error(responseErrorMessage(response, data));
         }
-        updateSeasonOperation(idx, {
+        updateSeasonOperation(idx, normalizedKind, {
           uploading: false,
           importing: false,
           success: true,
@@ -393,7 +415,7 @@ function ShowDetailPage() {
         await fetchDetails();
       } catch (err) {
         const message = err?.message || String(err);
-        updateSeasonOperation(idx, {
+        updateSeasonOperation(idx, normalizedKind, {
           uploading: false,
           importing: false,
           success: false,
@@ -408,25 +430,28 @@ function ShowDetailPage() {
   );
 
   const handleSeasonImport = useCallback(
-    async (index, plexUrl) => {
+    async (index, kind, plexUrl) => {
       if (!folderExists) {
         setStatusMessage(MISSING_FOLDER_MESSAGE);
         return;
       }
       const idx = Number(index);
-      updateSeasonOperation(idx, {
+      const normalizedKind = kind === 'background' ? 'background' : 'poster';
+      const description = normalizedKind === 'background' ? 'background' : 'poster';
+      updateSeasonOperation(idx, normalizedKind, {
         uploading: false,
         importing: true,
         success: false,
         error: null,
         lastAction: 'import',
       });
-      setStatusMessage(`Importing season ${String(index).padStart(2, '0')}…`);
+      setStatusMessage(`Importing season ${String(index).padStart(2, '0')} ${description}…`);
 
       const form = new FormData();
       form.append('library', library);
       if (folderName) form.append('folderName', folderName);
       form.append('season', String(index));
+      form.append('kind', normalizedKind);
       if (effectiveRatingKey) form.append('ratingKey', effectiveRatingKey);
       if (plexUrl) form.append('url', plexUrl);
 
@@ -436,7 +461,7 @@ function ShowDetailPage() {
         if (!response.ok || !(data && (data.ok || data.path || data.src))) {
           throw new Error(responseErrorMessage(response, data));
         }
-        updateSeasonOperation(idx, {
+        updateSeasonOperation(idx, normalizedKind, {
           uploading: false,
           importing: false,
           success: true,
@@ -447,7 +472,7 @@ function ShowDetailPage() {
         await fetchDetails();
       } catch (err) {
         const message = err?.message || String(err);
-        updateSeasonOperation(idx, {
+        updateSeasonOperation(idx, normalizedKind, {
           uploading: false,
           importing: false,
           success: false,
@@ -646,19 +671,31 @@ function ShowDetailPage() {
                   onImport={() => handleShowImport('poster')}
                 />
                 {seasons.map((season) => {
-                  const op = operations.seasons?.[String(season.index)] ?? createOperation();
+                  const posterOp = operations.seasons?.[seasonOperationKey(season.index, 'poster')] ?? createOperation();
+                  const backgroundOp = operations.seasons?.[seasonOperationKey(season.index, 'background')] ?? createOperation();
                   return (
-                    <ArtworkCard
-                      key={season.index}
-                      label={season.title}
-                      variant="poster"
-                      exists={season.exists}
-                      imageUrl={season.posterUrl}
-                      folderExists={folderExists}
-                      operation={op}
-                      onUpload={(file) => handleSeasonUpload(season.index, file)}
-                      onImport={() => handleSeasonImport(season.index, season.plexPosterUrl)}
-                    />
+                    <Fragment key={season.index}>
+                      <ArtworkCard
+                        label={`${season.title} Poster`}
+                        variant="poster"
+                        exists={season.posterExists}
+                        imageUrl={season.posterUrl}
+                        folderExists={folderExists}
+                        operation={posterOp}
+                        onUpload={(file) => handleSeasonUpload(season.index, 'poster', file)}
+                        onImport={() => handleSeasonImport(season.index, 'poster', season.plexPosterUrl)}
+                      />
+                      <ArtworkCard
+                        label={`${season.title} Background`}
+                        variant="landscape"
+                        exists={season.backgroundExists}
+                        imageUrl={season.backgroundUrl}
+                        folderExists={folderExists}
+                        operation={backgroundOp}
+                        onUpload={(file) => handleSeasonUpload(season.index, 'background', file)}
+                        onImport={() => handleSeasonImport(season.index, 'background', season.plexBackgroundUrl)}
+                      />
+                    </Fragment>
                   );
                 })}
               </div>
