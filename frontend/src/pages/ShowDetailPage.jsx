@@ -1,6 +1,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import ArtworkCard from '../components/ArtworkCard.jsx';
+import { useLibraryItemsContext } from '../hooks/LibraryItemsProvider.jsx';
 import { responseErrorMessage, safeJson } from '../utils/api.js';
 import { useTheme } from '../theme/ThemeProvider.jsx';
 
@@ -29,6 +30,7 @@ function ShowDetailPage() {
   const ratingKey = rawRatingKey ? String(rawRatingKey) : '';
 
   const { excludeItem, includeItem, isItemExcluded, exclusionsLoading } = useTheme();
+  const { reload: reloadLibraryItems } = useLibraryItemsContext();
 
   const [detail, setDetail] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -297,6 +299,9 @@ function ShowDetailPage() {
           lastAction: 'upload',
         });
         setStatusMessage('Upload complete.');
+        if (kind === 'poster') {
+          reloadLibraryItems();
+        }
         await fetchDetails();
       } catch (err) {
         const message = err?.message || String(err);
@@ -311,7 +316,7 @@ function ShowDetailPage() {
         throw err;
       }
     },
-    [folderExists, library, folderName, fetchDetails, updateOperation]
+    [folderExists, library, folderName, fetchDetails, reloadLibraryItems, updateOperation]
   );
 
   const handleShowImport = useCallback(
@@ -357,6 +362,9 @@ function ShowDetailPage() {
           lastAction: 'import',
         });
         setStatusMessage('Import complete.');
+        if (kind === 'poster') {
+          reloadLibraryItems();
+        }
         await fetchDetails();
       } catch (err) {
         const message = err?.message || String(err);
@@ -370,7 +378,7 @@ function ShowDetailPage() {
         setStatusMessage(message);
       }
     },
-    [folderExists, library, folderName, effectiveRatingKey, detail, fetchDetails, updateOperation]
+    [folderExists, library, folderName, effectiveRatingKey, detail, fetchDetails, reloadLibraryItems, updateOperation]
   );
 
   const handleSeasonUpload = useCallback(
