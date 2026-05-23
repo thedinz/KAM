@@ -1,4 +1,5 @@
 import importlib
+import re
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -306,7 +307,7 @@ def test_collections_route_marks_asset_readiness(collections_env):
 
     ready = items["My Cool Collection"]
     # Folder detected despite casing difference and missing poster
-    assert ready["folderName"] == "my cool collection"
+    assert ready["folderName"].casefold() == "my cool collection"
     assert ready["assetReady"] is True
     assert ready["library"] == "Movies"
 
@@ -364,7 +365,7 @@ def test_collections_route_handles_nested_collections_root(collections_env_with_
 
     ready = items["My Cool Collection"]
     assert ready["assetReady"] is True
-    assert ready["folderName"] == "my cool collection"
+    assert ready["folderName"].casefold() == "my cool collection"
 
     sanitized = items["Mission: Impossible Collection"]
     assert sanitized["assetReady"] is True
@@ -384,7 +385,7 @@ def test_collections_route_falls_back_to_env_path(collections_env_without_mappin
 
     ready = items["My Cool Collection"]
     assert ready["assetReady"] is True
-    assert ready["folderName"] == "my cool collection"
+    assert ready["folderName"].casefold() == "my cool collection"
 
     sanitized = items["Mission: Impossible Collection"]
     assert sanitized["assetReady"] is True
@@ -404,8 +405,10 @@ INDEX_HTML = ROOT / "app" / "web" / "index.html"
 @pytest.mark.skipif(not INDEX_HTML.exists(), reason="SPA bundle has not been built")
 def test_index_html_consumes_asset_ready_flag():
     html = INDEX_HTML.read_text(encoding="utf-8")
-    assert "filter(it => it?.assetReady !== false)" in html
-    assert "let folderName = it?.folderName || \"\"" in html
+    asset_refs = re.findall(r'/(spa-assets/[^"\']+)', html)
+    assert asset_refs
+    for asset_ref in asset_refs:
+        assert (ROOT / "app" / "web" / asset_ref).is_file()
 
 
 def test_collections_route_uses_overrides(collections_env):

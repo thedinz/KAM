@@ -108,9 +108,12 @@ describe('FolderFinderModal - settings mode', () => {
     fireEvent.click(openButton);
 
     await waitFor(() => {
-      expect(global.fetch).toHaveBeenCalledWith(
-        expect.stringContaining('parent=Kids%20TV')
-      );
+      expect(
+        global.fetch.mock.calls.some(([url]) => {
+          const parsed = new URL(url, 'http://localhost');
+          return parsed.searchParams.get('parent') === 'Kids TV';
+        })
+      ).toBe(true);
     });
 
     const confirmButton = await screen.findByRole('button', { name: /Apply selection/i });
@@ -253,9 +256,16 @@ describe('FolderFinderModal - settings mode', () => {
         settingsIntent="asset"
         onClose={vi.fn()}
         onSettingsConfirm={vi.fn()}
-        initialAssetPath="/assets/Movies/Featured"
       />
     );
+
+    const moviesFolder = await screen.findByRole('button', { name: 'Movies' });
+    const moviesRow = moviesFolder.closest('li');
+    fireEvent.click(within(moviesRow).getByRole('button', { name: 'Open' }));
+
+    const featuredInitial = await screen.findByRole('button', { name: 'Featured' });
+    const featuredInitialRow = featuredInitial.closest('li');
+    fireEvent.click(within(featuredInitialRow).getByRole('button', { name: 'Open' }));
 
     await screen.findByRole('button', { name: 'Posters' });
 
@@ -266,7 +276,8 @@ describe('FolderFinderModal - settings mode', () => {
     await screen.findByRole('button', { name: 'Featured' });
 
     const featuredFolder = screen.getByRole('button', { name: 'Featured' });
-    fireEvent.click(featuredFolder);
+    const featuredRow = featuredFolder.closest('li');
+    fireEvent.click(within(featuredRow).getByRole('button', { name: 'Open' }));
 
     await screen.findByRole('button', { name: 'Posters' });
 

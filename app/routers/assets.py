@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import List
+from typing import Dict, List
 
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ..services import folder_overrides
 from ..services import library_mappings as library_mappings_service
@@ -19,6 +19,16 @@ class AssignFolderPayload(BaseModel):
     library: str
     ratingKey: str
     folderName: str
+
+
+class AssignFolderEntry(BaseModel):
+    ratingKey: str
+    folderName: str
+
+
+class AssignFoldersPayload(BaseModel):
+    library: str
+    assignments: List[AssignFolderEntry] = Field(default_factory=list, max_length=10000)
 
 
 def _guess_library_root(library: str, folder_dir: Path) -> Path | None:
@@ -301,4 +311,79 @@ def assign_folder(payload: AssignFolderPayload):
         "assetReady": True,
         "posterExists": poster_exists,
         "backgroundExists": background_exists,
+    }
+
+
+@router.post("/api/items/assign-folders")
+def assign_folders(payload: AssignFoldersPayload):
+    library = (payload.library or "").strip()
+    if not library:
+        raise HTTPException(status_code=422, detail="Missing library")
+
+    root, _default_relative = _library_root(library)
+
+    try:
+        folder_lookup = {
+            child.name: child
+            for child in root.iterdir()
+            if child.is_dir()
+        }
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Permission denied")
+
+    canonical_by_key: Dict[str, str] = {}
+    first_folder_dir: Path | None = None
+    results: List[dict] = []
+    errors: List[dict] = []
+
+    for assignment in payload.assignments:
+        rating_key = str(assignment.ratingKey or "").strip()
+        folder_name = str(assignment.folderName or "").strip()
+        if not rating_key or not folder_name:
+            errors.append({
+                "ratingKey": rating_key,
+                "folderName": folder_name,
+                "error": "Missing ratingKey or folderName",
+            })
+            continue
+
+        folder_dir = folder_lookup.get(folder_name)
+        if folder_dir is None:
+            try:
+                folder_dir = Path(resolve_existing_dir_or_422(library, folder_name))
+            except Exception as exc:
+                errors.append({
+                    "ratingKey": rating_key,
+                    "folderName": folder_name,
+                    "error": str(exc) or "Folder not found",
+                })
+                continue
+
+        canonical_folder = folder_dir.name
+        canonical_by_key[rating_key] = canonical_folder
+        if first_folder_dir is None:
+            first_folder_dir = folder_dir
+
+        poster_exists = (folder_dir / "poster.jpg").is_file()
+        background_exists = (folder_dir / "background.jpg").is_file()
+        results.append({
+            "library": library,
+            "ratingKey": rating_key,
+            "folderName": canonical_folder,
+            "folderExists": True,
+            "assetReady": True,
+            "posterExists": poster_exists,
+            "backgroundExists": background_exists,
+        })
+
+    if canonical_by_key:
+        folder_overrides.set_canonical_overrides(library, canonical_by_key)
+        if first_folder_dir is not None:
+            _ensure_library_mapping(library, first_folder_dir)
+
+    return {
+        "library": library,
+        "assignedCount": len(canonical_by_key),
+        "items": results,
+        "errors": errors,
     }

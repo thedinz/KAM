@@ -6,7 +6,7 @@ import logging
 import os
 import threading
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, Mapping, Optional
 
 from .resolve import resolve_existing_dir_or_422
 
@@ -114,6 +114,16 @@ def get_override(library: str, rating_key: str) -> Optional[str]:
         return data.get(library, {}).get(key)
 
 
+def get_library_overrides(library: str) -> Dict[str, str]:
+    """Return all stored folder overrides for a library."""
+
+    if not library:
+        return {}
+    with _LOCK:
+        data = _load_locked()
+        return dict(data.get(library, {}))
+
+
 def set_override(library: str, rating_key: str, folder_name: str) -> str:
     if not library:
         raise ValueError("library is required")
@@ -138,6 +148,36 @@ def set_override(library: str, rating_key: str, folder_name: str) -> str:
         canonical,
     )
     return canonical
+
+
+def set_canonical_overrides(library: str, assignments: Mapping[str, str]) -> Dict[str, str]:
+    """Persist already-validated ratingKey -> canonical folder overrides in one write."""
+
+    if not library:
+        raise ValueError("library is required")
+
+    cleaned: Dict[str, str] = {}
+    for rating_key, folder_name in assignments.items():
+        key = str(rating_key or "").strip()
+        name = str(folder_name or "").strip()
+        if key and name:
+            cleaned[key] = name
+
+    if not cleaned:
+        return {}
+
+    with _LOCK:
+        data = _load_locked()
+        lib_entries = data.setdefault(library, {})
+        lib_entries.update(cleaned)
+        _write_locked(data)
+
+    logger.debug(
+        "Stored %d folder overrides for library=%s",
+        len(cleaned),
+        library,
+    )
+    return dict(cleaned)
 
 
 def clear_override(library: str, rating_key: str) -> bool:
