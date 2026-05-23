@@ -21,9 +21,7 @@ function MappingScanPage() {
   const {
     library,
     setLibrary,
-    reload,
-    refreshNotReadyCount,
-    fetchAllForLibrary,
+    setNotReadyCount,
     updateItem,
   } = useLibraryItemsContext();
 
@@ -65,7 +63,6 @@ function MappingScanPage() {
     try {
       const result = await runLibraryMappingScan({
         library: selectedLibrary,
-        fetchAllForLibrary,
         onProgress: ({ percent, label }) => {
           setScanState({ active: true, percent, label: label || '', errors: [] });
         },
@@ -93,6 +90,7 @@ function MappingScanPage() {
       setRows(nextResult.entries);
       setLastScannedAt(result.scannedAt);
       localStorage.setItem(storageKeyForLibrary(selectedLibrary), JSON.stringify(nextResult));
+      setNotReadyCount(notReadyCountNext);
       setScanState({
         active: true,
         percent: 100,
@@ -101,8 +99,6 @@ function MappingScanPage() {
         }.${appliedText}${errorText}`,
         errors: assignmentErrors,
       });
-      await reload();
-      await refreshNotReadyCount(selectedLibrary);
     } catch (err) {
       const message = err?.message || String(err);
       setScanError(message);
@@ -110,7 +106,7 @@ function MappingScanPage() {
     } finally {
       setIsScanning(false);
     }
-  }, [selectedLibrary, fetchAllForLibrary, reload, refreshNotReadyCount]);
+  }, [selectedLibrary, setNotReadyCount]);
 
   useEffect(() => {
     if (!selectedLibrary || rows.length) return;
@@ -161,15 +157,14 @@ function MappingScanPage() {
         };
       });
       setRows(nextRows);
+      setNotReadyCount(nextRows.filter((entry) => entryIsNotReady(entry)).length);
       localStorage.setItem(
         storageKeyForLibrary(selectedLibrary),
         JSON.stringify({ library: selectedLibrary, scannedAt: lastScannedAt || new Date().toISOString(), entries: nextRows })
       );
       closeFolderModal();
-      await reload();
-      await refreshNotReadyCount(selectedLibrary);
     },
-    [folderModalItem, updateItem, rows, selectedLibrary, lastScannedAt, closeFolderModal, reload, refreshNotReadyCount]
+    [folderModalItem, updateItem, rows, selectedLibrary, lastScannedAt, closeFolderModal, setNotReadyCount]
   );
 
   if (!selectedLibrary) {

@@ -89,6 +89,7 @@ def items_env(tmp_path, monkeypatch):
 
     return SimpleNamespace(
         call=_call,
+        items_router=items_router,
         folder_overrides=folder_overrides,
         folder=folder,
         exclusions=exclusions_module,
@@ -116,7 +117,7 @@ def test_items_route_reports_not_ready_count_and_filters(items_env):
 
     by_key = {it["ratingKey"]: it for it in data["items"]}
     assert by_key["22"]["assetReady"] is False
-    assert by_key["22"]["posterUrl"].startswith("http://plex.test")
+    assert by_key["22"]["posterUrl"].startswith("/api/plex/image")
     assert by_key["22"]["posterUrlPlex"].startswith("http://plex.test")
     assert "?" in by_key["22"]["posterUrlPlex"]
     assert "X-Plex-Token=token" in by_key["22"]["posterUrlPlex"].split("?")[-1]
@@ -136,3 +137,17 @@ def test_items_route_omits_excluded_items(items_env):
 
     keys = {it["ratingKey"] for it in data["items"]}
     assert "22" not in keys
+
+
+def test_mapping_source_returns_lightweight_items(items_env):
+    items_env.folder_overrides.set_override("Movies", "11", items_env.folder.name)
+
+    data = items_env.items_router.list_items_for_mapping_scan(library="Movies")
+    by_key = {it["ratingKey"]: it for it in data["items"]}
+
+    assert data["total_count"] == 2
+    assert by_key["11"]["folderName"] == items_env.folder.name
+    assert by_key["11"]["assetReady"] is True
+    assert by_key["22"]["folderName"] == ""
+    assert by_key["22"]["assetReady"] is False
+    assert "posterUrl" not in by_key["11"]

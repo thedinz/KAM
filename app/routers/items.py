@@ -86,6 +86,31 @@ def _to_int(x) -> Optional[int]:
     try: return int(str(x))
     except Exception: return None
 
+
+def _library_rows(library: str, query: Optional[str] = None) -> List[Dict[str, Any]]:
+    section_key = _section_key_by_name(library)
+
+    if query:
+        movies = _plex_list(f"/library/sections/{section_key}/search", {"type": 1, "query": query})
+        shows  = _plex_list(f"/library/sections/{section_key}/search", {"type": 2, "query": query})
+        md = movies + shows
+    else:
+        movies = _plex_list(f"/library/sections/{section_key}/all", {"type": 1})
+        shows  = _plex_list(f"/library/sections/{section_key}/all", {"type": 2})
+        md = movies + shows
+
+    rows: List[Dict[str, Any]] = []
+    for it in md:
+        rows.append({
+            "title": (it.get("title") or "").strip(),
+            "year": _to_int(it.get("year")),
+            "ratingKey": str(it.get("ratingKey") or "").strip(),
+            "type": (it.get("type") or "").strip(),
+            "thumb": it.get("thumb"),
+        })
+    rows.sort(key=lambda x: x["title"].lower())
+    return rows
+
 # ---------- Local folder & poster helpers ----------
 
 def _try_existing_asset_folder(
@@ -166,28 +191,8 @@ def list_items(
     """
     Prefer local poster.jpg via fileproxy if it actually exists; otherwise fall back to Plex thumb.
     """
-    section_key = _section_key_by_name(library)
-
-    if query:
-        movies = _plex_list(f"/library/sections/{section_key}/search", {"type": 1, "query": query})
-        shows  = _plex_list(f"/library/sections/{section_key}/search", {"type": 2, "query": query})
-        md = movies + shows
-    else:
-        movies = _plex_list(f"/library/sections/{section_key}/all", {"type": 1})
-        shows  = _plex_list(f"/library/sections/{section_key}/all", {"type": 2})
-        md = movies + shows
-
-    # Normalize + sort
-    rows: List[Dict[str, Any]] = []
-    for it in md:
-        rows.append({
-            "title": (it.get("title") or "").strip(),
-            "year": _to_int(it.get("year")),
-            "ratingKey": str(it.get("ratingKey") or "").strip(),
-            "type": (it.get("type") or "").strip(),
-            "thumb": it.get("thumb"),
-        })
-    rows.sort(key=lambda x: x["title"].lower())
+    rows = _library_rows(library, query)
+    overrides_for_library = folder_overrides.get_library_overrides(library)
 
     enriched: List[Dict[str, Any]] = []
     not_ready_count = 0
@@ -195,7 +200,7 @@ def list_items(
         if exclusions.is_excluded(library, it["ratingKey"]):
             continue
 
-        override = folder_overrides.get_override(library, it["ratingKey"])
+        override = overrides_for_library.get(it["ratingKey"])
 
         folder_name, folder_path = _resolve_override_folder(library, override)
         if not folder_path:
@@ -247,4 +252,38 @@ def list_items(
         "total_count": total_count,
         "items": page_rows,
         "not_ready_count": not_ready_count,
+    }
+
+
+@router.get("/api/items/mapping-source")
+def list_items_for_mapping_scan(
+    library: str = Query(...),
+    query: Optional[str] = Query(None),
+):
+    """Return lightweight Plex item metadata for large mapping scans."""
+
+    rows = _library_rows(library, query)
+    overrides_for_library = folder_overrides.get_library_overrides(library)
+    items: List[Dict[str, Any]] = []
+
+    for it in rows:
+        rating_key = it["ratingKey"]
+        if exclusions.is_excluded(library, rating_key):
+            continue
+
+        override = overrides_for_library.get(rating_key)
+        items.append({
+            "ratingKey": rating_key,
+            "title": it["title"],
+            "year": it["year"],
+            "type": it["type"],
+            "folder": override or "",
+            "folderName": override or "",
+            "assetReady": bool(override),
+        })
+
+    return {
+        "library": library,
+        "total_count": len(items),
+        "items": items,
     }
