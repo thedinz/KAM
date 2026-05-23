@@ -50,7 +50,7 @@ def test_default_storage_path_falls_back_to_config(monkeypatch):
     monkeypatch.delenv("KAM_CONFIG_ROOT", raising=False)
 
     module = _reload_overrides_module()
-    assert str(module._get_storage_path()) == "/config/folder_overrides.json"
+    assert module._get_storage_path() == Path("/config/folder_overrides.json")
 
 
 @pytest.fixture
@@ -147,6 +147,35 @@ def test_assign_folder_endpoint_persists_override(overrides_env):
     assert fo.get_override("Movies", "9") == overrides_env.movie_folder.name
 
 
+def test_assign_folders_endpoint_persists_bulk_overrides(overrides_env):
+    fo = overrides_env.folder_overrides
+    router = overrides_env.assets_router
+
+    second_folder = overrides_env.movies_dir / "Second Movie (2024)"
+    second_folder.mkdir()
+
+    payload = router.AssignFoldersPayload(
+        library="Movies",
+        assignments=[
+            router.AssignFolderEntry(
+                ratingKey="9",
+                folderName=overrides_env.movie_folder.name,
+            ),
+            router.AssignFolderEntry(
+                ratingKey="10",
+                folderName=second_folder.name,
+            ),
+        ],
+    )
+    result = router.assign_folders(payload)
+
+    assert result["assignedCount"] == 2
+    assert result["errors"] == []
+    assert {item["ratingKey"] for item in result["items"]} == {"9", "10"}
+    assert fo.get_override("Movies", "9") == overrides_env.movie_folder.name
+    assert fo.get_override("Movies", "10") == second_folder.name
+
+
 def test_assign_folder_creates_library_mapping_when_missing(overrides_env):
     router = overrides_env.assets_router
     settings_module = overrides_env.settings_module
@@ -176,7 +205,7 @@ def test_assign_folder_creates_library_mapping_when_missing(overrides_env):
     mappings = stored.get("libraryMappings", [])
     doc_entries = [entry for entry in mappings if entry.get("library") == "Documentaries"]
     assert doc_entries
-    assert doc_entries[0]["assetPath"] == str(overrides_env.documentaries_dir)
+    assert Path(doc_entries[0]["assetPath"]) == overrides_env.documentaries_dir
 
 
 def test_list_asset_folders(overrides_env):

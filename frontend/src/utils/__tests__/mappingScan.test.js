@@ -45,6 +45,39 @@ describe('runLibraryMappingScan', () => {
     });
   });
 
+  it('uses the lightweight mapping source when no legacy item fetcher is provided', async () => {
+    global.fetch = vi.fn((url) => {
+      const parsed = new URL(url, 'http://localhost');
+      if (parsed.pathname === '/api/asset-folders') {
+        return Promise.resolve(jsonResponse({ items: [{ name: 'Alien (1979)', isDir: true }] }));
+      }
+      expect(parsed.pathname).toBe('/api/items/mapping-source');
+      expect(parsed.searchParams.get('library')).toBe('Movies');
+      return Promise.resolve(
+        jsonResponse({
+          items: [
+            {
+              ratingKey: '101',
+              title: 'Alien',
+              year: 1979,
+              type: 'movie',
+              assetReady: false,
+            },
+          ],
+        })
+      );
+    });
+
+    const result = await runLibraryMappingScan({ library: 'Movies' });
+
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(result.entries[0]).toMatchObject({
+      matched: true,
+      matchedFolder: 'Alien (1979)',
+      assetReady: false,
+    });
+  });
+
   it('requires movie year matches when Plex has a year', async () => {
     global.fetch = vi.fn(() =>
       Promise.resolve(
@@ -238,7 +271,12 @@ describe('assignMatchedFolders', () => {
 
   it('assigns matched folders for not-ready items only', async () => {
     global.fetch = vi.fn(() =>
-      Promise.resolve(jsonResponse({ folderName: 'Alien (1979)', assetReady: true }))
+      Promise.resolve(
+        jsonResponse({
+          items: [{ ratingKey: '2', folderName: 'Alien (1979)', assetReady: true }],
+          errors: [],
+        })
+      )
     );
 
     const result = await assignMatchedFolders({
@@ -270,14 +308,18 @@ describe('assignMatchedFolders', () => {
 
     expect(global.fetch).toHaveBeenCalledTimes(1);
     expect(global.fetch).toHaveBeenCalledWith(
-      '/api/items/assign-folder',
+      '/api/items/assign-folders',
       expect.objectContaining({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           library: 'Movies',
-          ratingKey: '2',
-          folderName: 'Alien (1979)',
+          assignments: [
+            {
+              ratingKey: '2',
+              folderName: 'Alien (1979)',
+            },
+          ],
         }),
       })
     );
@@ -294,7 +336,12 @@ describe('assignMatchedFolders', () => {
 
   it('assigns matched TV series folders to the selected TV library', async () => {
     global.fetch = vi.fn(() =>
-      Promise.resolve(jsonResponse({ folderName: 'Breaking Bad', assetReady: true }))
+      Promise.resolve(
+        jsonResponse({
+          items: [{ ratingKey: '401', folderName: 'Breaking Bad', assetReady: true }],
+          errors: [],
+        })
+      )
     );
 
     const result = await assignMatchedFolders({
@@ -312,12 +359,16 @@ describe('assignMatchedFolders', () => {
     });
 
     expect(global.fetch).toHaveBeenCalledWith(
-      '/api/items/assign-folder',
+      '/api/items/assign-folders',
       expect.objectContaining({
         body: JSON.stringify({
           library: 'TV Shows',
-          ratingKey: '401',
-          folderName: 'Breaking Bad',
+          assignments: [
+            {
+              ratingKey: '401',
+              folderName: 'Breaking Bad',
+            },
+          ],
         }),
       })
     );
