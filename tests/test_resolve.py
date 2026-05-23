@@ -44,7 +44,7 @@ def test_resolve_prefers_config_mapping(tmp_path, monkeypatch):
     resolve_module = _reload_with_assets_root(str(assets_root))
 
     resolved = resolve_module.resolve_existing_dir_or_422(library, target)
-    assert resolved == os.path.join(str(mapped_library_path), target)
+    assert Path(resolved) == mapped_library_path / target
 
 
 def test_resolve_accepts_high_similarity_variant(tmp_path, monkeypatch):

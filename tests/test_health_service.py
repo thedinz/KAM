@@ -1,4 +1,5 @@
 import importlib
+from pathlib import Path
 from types import SimpleNamespace
 
 
@@ -43,6 +44,6 @@ def test_health_report_checks_saved_paths(tmp_path, monkeypatch):
         "collections": "ok",
         "config": "ok",
     }
-    assert report["assetMappings"][0]["path"] == str(movie_assets)
+    assert Path(report["assetMappings"][0]["path"]) == movie_assets
     assert report["assetMappings"][0]["status"] == "ok"
-    assert report["collectionPaths"][0]["path"] == str(collections)
+    assert Path(report["collectionPaths"][0]["path"]) == collections
