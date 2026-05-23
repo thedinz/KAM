@@ -70,6 +70,7 @@ describe('MappingScanPage result filters', () => {
       reload: vi.fn().mockResolvedValue(undefined),
       refreshNotReadyCount: vi.fn().mockResolvedValue(undefined),
       fetchAllForLibrary: vi.fn(),
+      setNotReadyCount: vi.fn(),
       updateItem,
     });
     runLibraryMappingScan.mockResolvedValue({

@@ -1115,6 +1115,14 @@ function SettingsPage() {
               ) : null}
               {libraryRows.length ? (
                 <table className="settings-libraries-table">
+                  <colgroup>
+                    <col className="library-select-col" />
+                    <col className="library-name-col" />
+                    <col className="library-path-col" />
+                    <col className="library-path-col" />
+                    <col className="library-status-col" />
+                    <col className="library-actions-col" />
+                  </colgroup>
                   <thead>
                     <tr>
                       <th scope="col" className="library-select">
@@ -1181,20 +1189,22 @@ function SettingsPage() {
                               {row.isDirty ? <span className="status-unsaved">Unsaved changes</span> : <span>Saved</span>}
                             </td>
                             <td className="library-actions">
-                              <button
-                                type="button"
-                                onClick={() => handleOpenAssetModal(row.name)}
-                                disabled={combinedBusy}
-                              >
-                                Set asset folder
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleOpenCollectionsModal(row.name)}
-                                disabled={combinedBusy || !row.assetPath}
-                              >
-                                Set collections folder
-                              </button>
+                              <div className="library-action-buttons">
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenAssetModal(row.name)}
+                                  disabled={combinedBusy}
+                                >
+                                  Set asset folder
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenCollectionsModal(row.name)}
+                                  disabled={combinedBusy || !row.assetPath}
+                                >
+                                  Set collections folder
+                                </button>
+                              </div>
                             </td>
                           </tr>
                           {row.collectionOverrides?.map((override) => (
@@ -1238,13 +1248,15 @@ function SettingsPage() {
                                 )}
                               </td>
                               <td className="library-actions">
-                                <button
-                                  type="button"
-                                  onClick={() => handleOpenCollectionOverrideModal(row.name, override.key)}
-                                  disabled={combinedBusy || !row.assetPath}
-                                >
-                                  Set collections folder
-                                </button>
+                                <div className="library-action-buttons">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenCollectionOverrideModal(row.name, override.key)}
+                                    disabled={combinedBusy || !row.assetPath}
+                                  >
+                                    Set collections folder
+                                  </button>
+                                </div>
                               </td>
                             </tr>
                           ))}

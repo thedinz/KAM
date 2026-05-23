@@ -1,5 +1,6 @@
 import { responseErrorMessage, safeJson } from './api.js';
 
+const ASSIGN_BATCH_SIZE = 500;
 const STOPWORDS = new Set(['the', 'a', 'an', 'movie', 'film']);
 const RELAXED_VARIANT_SUFFIXES = new Set([
   'alternate',
@@ -183,6 +184,18 @@ async function fetchFolderNames(targetLibrary, { optional = false } = {}) {
     : [];
 }
 
+async function fetchMappingScanItems(targetLibrary) {
+  const response = await fetch(`/api/items/mapping-source?library=${encodeURIComponent(targetLibrary)}`);
+  const data = await safeJson(response);
+  if (!response.ok) {
+    throw new Error(responseErrorMessage(response, data));
+  }
+  return {
+    items: Array.isArray(data?.items) ? data.items : [],
+    totalCount: Number(data?.total_count) || 0,
+  };
+}
+
 async function assignFolder({ library, ratingKey, folderName }) {
   const response = await fetch('/api/items/assign-folder', {
     method: 'POST',
@@ -196,7 +209,20 @@ async function assignFolder({ library, ratingKey, folderName }) {
   return data || {};
 }
 
-export async function runLibraryMappingScan({ library, fetchAllForLibrary, onProgress }) {
+async function assignFolderBatch({ library, assignments }) {
+  const response = await fetch('/api/items/assign-folders', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ library, assignments }),
+  });
+  const data = await safeJson(response);
+  if (!response.ok) {
+    throw new Error(responseErrorMessage(response, data));
+  }
+  return data || {};
+}
+
+export async function runLibraryMappingScan({ library, fetchAllForLibrary, fetchItemsForMappingScan, onProgress }) {
   const lib = String(library || '').trim();
   if (!lib) {
     throw new Error('Library is required');
@@ -205,9 +231,15 @@ export async function runLibraryMappingScan({ library, fetchAllForLibrary, onPro
   onProgress?.({ percent: 0, label: 'Step 1/3: Scanning asset folders…' });
   const folderNames = await fetchFolderNames(lib);
   const folderIndex = buildFolderIndex(folderNames);
+  const folderNameSet = new Set(folderNames);
 
   onProgress?.({ percent: 33, label: 'Step 2/3: Scanning Plex library…' });
-  const { items: allItems = [] } = await fetchAllForLibrary(lib, '', { notReadyOnly: false });
+  const fetchItems =
+    fetchItemsForMappingScan ||
+    (fetchAllForLibrary
+      ? (targetLibrary) => fetchAllForLibrary(targetLibrary, '', { notReadyOnly: false })
+      : fetchMappingScanItems);
+  const { items: allItems = [] } = await fetchItems(lib);
 
   onProgress?.({ percent: 66, label: 'Step 3/3: Matching media to folders…' });
   const entries = allItems.map((item) => {
@@ -216,7 +248,8 @@ export async function runLibraryMappingScan({ library, fetchAllForLibrary, onPro
     const year = item?.year != null ? String(item.year).trim() : '';
     const ratingKey = String(item?.ratingKey ?? item?.key ?? item?.id ?? '');
     const candidates = buildMatchCandidates(item);
-    const assetReady = item?.assetReady !== false;
+    const currentFolderExists = folderName ? folderNameSet.has(folderName) : false;
+    const assetReady = item?.assetReady !== false && (!folderName || currentFolderExists);
     let matchedFolder = '';
     let matchedFrom = '';
     for (const candidate of candidates) {
@@ -255,7 +288,7 @@ export async function runLibraryMappingScan({ library, fetchAllForLibrary, onPro
   };
 }
 
-export async function assignMatchedFolders({ library, entries, onProgress }) {
+async function assignMatchedFoldersLegacy({ library, entries, onProgress }) {
   const lib = String(library || '').trim();
   if (!lib) {
     throw new Error('Library is required');
@@ -305,6 +338,103 @@ export async function assignMatchedFolders({ library, entries, onProgress }) {
         folder: entry.matchedFolder,
         asset: 'Folder assignment',
         message,
+      });
+    }
+  }
+
+  return {
+    entries: updatedEntries,
+    assignedCount,
+    errors,
+  };
+}
+
+export async function assignMatchedFolders({ library, entries, onProgress }) {
+  const lib = String(library || '').trim();
+  if (!lib) {
+    throw new Error('Library is required');
+  }
+
+  const updatedEntries = Array.isArray(entries) ? entries.map((entry) => ({ ...entry })) : [];
+  const assignableIndexes = updatedEntries
+    .map((entry, index) => ({ entry, index }))
+    .filter(({ entry }) => entry?.matched && entry.assetReady === false && entry.ratingKey && entry.matchedFolder);
+  const errors = [];
+  let assignedCount = 0;
+
+  for (let start = 0; start < assignableIndexes.length; start += ASSIGN_BATCH_SIZE) {
+    const batch = assignableIndexes.slice(start, start + ASSIGN_BATCH_SIZE);
+    const current = Math.min(start + batch.length, assignableIndexes.length);
+    onProgress?.({
+      assigned: assignedCount,
+      total: assignableIndexes.length,
+      current,
+      label: `Applying folder matches ${current}/${assignableIndexes.length}...`,
+    });
+
+    try {
+      const data = await assignFolderBatch({
+        library: lib,
+        assignments: batch.map(({ entry }) => ({
+          ratingKey: String(entry.ratingKey),
+          folderName: entry.matchedFolder,
+        })),
+      });
+      const resultByKey = new Map(
+        (Array.isArray(data?.items) ? data.items : []).map((item) => [String(item?.ratingKey || ''), item])
+      );
+      const errorByKey = new Map(
+        (Array.isArray(data?.errors) ? data.errors : []).map((item) => [String(item?.ratingKey || ''), item])
+      );
+
+      batch.forEach(({ entry, index }) => {
+        const key = String(entry.ratingKey);
+        const result = resultByKey.get(key);
+        if (result) {
+          const folderName = result?.folderName || entry.matchedFolder;
+          updatedEntries[index] = {
+            ...entry,
+            assigned: true,
+            assignmentError: '',
+            assetReady: true,
+            currentFolder: folderName,
+            matchedFolder: folderName,
+            matched: true,
+          };
+          assignedCount += 1;
+          return;
+        }
+
+        const failure = errorByKey.get(key);
+        if (failure) {
+          const message = failure?.error || 'Failed to assign folder';
+          updatedEntries[index] = {
+            ...entry,
+            assignmentError: message,
+          };
+          errors.push({
+            library: lib,
+            title: entry.title,
+            folder: entry.matchedFolder,
+            asset: 'Folder assignment',
+            message,
+          });
+        }
+      });
+    } catch (err) {
+      const message = err?.message || String(err);
+      batch.forEach(({ entry, index }) => {
+        updatedEntries[index] = {
+          ...entry,
+          assignmentError: message,
+        };
+        errors.push({
+          library: lib,
+          title: entry.title,
+          folder: entry.matchedFolder,
+          asset: 'Folder assignment',
+          message,
+        });
       });
     }
   }

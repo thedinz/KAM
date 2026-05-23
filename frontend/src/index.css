@@ -1735,7 +1735,24 @@ main {
 .settings-libraries-table {
   width: 100%;
   border-collapse: collapse;
-  min-width: 640px;
+  table-layout: fixed;
+  min-width: 820px;
+}
+
+.settings-libraries-table .library-select-col {
+  width: 44px;
+}
+
+.settings-libraries-table .library-name-col {
+  width: 124px;
+}
+
+.settings-libraries-table .library-status-col {
+  width: 112px;
+}
+
+.settings-libraries-table .library-actions-col {
+  width: 210px;
 }
 
 .settings-libraries-table th,
@@ -1753,7 +1770,8 @@ main {
 
 .settings-libraries-table code {
   font-size: 13px;
-  word-break: break-all;
+  overflow-wrap: anywhere;
+  word-break: normal;
 }
 
 .settings-libraries-table .collection-suggestions {
@@ -1858,7 +1876,6 @@ main {
 }
 
 .library-select {
-  width: 48px;
   text-align: center;
 }
 
@@ -1894,8 +1911,13 @@ main {
 }
 
 .library-actions {
+  width: 210px;
+}
+
+.library-action-buttons {
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
   gap: 6px;
 }
 
@@ -1932,7 +1954,7 @@ main {
 }
 
 @media (min-width: 768px) {
-  .library-actions {
+  .library-action-buttons {
     flex-direction: row;
     flex-wrap: wrap;
   }
