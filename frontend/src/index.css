@@ -462,7 +462,7 @@ a.btn:focus,
   color: var(--muted);
 }
 
-.pager button {
+.library-pagination-footer .pager button {
   display: inline-grid;
   place-items: center;
   width: 34px;
@@ -473,7 +473,7 @@ a.btn:focus,
   line-height: 1;
 }
 
-.pager span {
+.library-pagination-footer .pager span {
   min-width: 86px;
   text-align: center;
 }
@@ -2034,7 +2034,7 @@ main {
     grid-template-columns: minmax(0, 1fr) minmax(104px, 120px);
   }
 
-  .pager {
+  .library-pagination-footer .pager {
     width: 100%;
     justify-content: space-between;
   }
