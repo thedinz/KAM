@@ -4,6 +4,8 @@ function LibraryToolbar({
   onLibraryChange,
   searchValue,
   onSearchChange,
+  sortValue = 'title',
+  onSortChange,
   onImportAll,
   importDisabled,
   importTitle,
@@ -24,6 +26,7 @@ function LibraryToolbar({
   children,
 }) {
   const showNotReadyButton = typeof onViewNotReady === 'function';
+  const showSortControl = typeof onSortChange === 'function';
   const notReadyDisplay = Number(notReadyCount) || 0;
   const disableNotReady = Boolean(notReadyDisabled) || notReadyDisplay <= 0;
   const notReadyTitle = disableNotReady
@@ -64,6 +67,25 @@ function LibraryToolbar({
         value={searchValue}
         onChange={(event) => onSearchChange(event.target.value)}
       />
+
+      {showSortControl ? (
+        <>
+          <label className="sr-only" htmlFor="librarySort">
+            Sort library
+          </label>
+          <select
+            id="librarySort"
+            className="library-sort-select"
+            value={sortValue}
+            onChange={(event) => onSortChange(event.target.value)}
+            title="Sort library items"
+            aria-label="Sort library items"
+          >
+            <option value="title">A-Z</option>
+            <option value="newest">Newest</option>
+          </select>
+        </>
+      ) : null}
 
       <button type="button" onClick={onImportAll} disabled={importDisabled} title={importTitle}>
         Import Assets
