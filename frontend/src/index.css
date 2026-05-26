@@ -392,6 +392,10 @@ a.btn:focus,
   min-width: 220px;
 }
 
+.library-sort-select {
+  min-width: 106px;
+}
+
 .pager {
   display: flex;
   gap: 6px;
