@@ -46,6 +46,8 @@ function LibraryPage() {
     items,
     query,
     setQuery,
+    sortMode,
+    setSortMode,
     notReadyOnly,
     loading,
     error,
@@ -419,6 +421,8 @@ function LibraryPage() {
             onLibraryChange={setLibrary}
             searchValue={searchInput}
             onSearchChange={handleSearchChange}
+            sortValue={sortMode}
+            onSortChange={setSortMode}
             onImportAll={handleImportAll}
             importDisabled={!library || isImporting || loading || unresolvedCount > 0}
             importTitle={importTooltip}

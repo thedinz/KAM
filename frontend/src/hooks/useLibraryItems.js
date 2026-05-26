@@ -51,6 +51,7 @@ export function useLibraryItems({ initialLibrary } = {}) {
   const [notReadyCount, setNotReadyCount] = useState(0);
   const [rawItems, setRawItems] = useState([]);
   const [query, setQuery] = useState('');
+  const [sortMode, setSortModeState] = useState('title');
   const [notReadyOnly, setNotReadyOnlyState] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -111,11 +112,18 @@ export function useLibraryItems({ initialLibrary } = {}) {
   const previousLibraryMappingsKeyRef = useRef(savedLibraryMappingsKey);
 
   const loadItems = useCallback(
-    async ({ targetLibrary, targetPage, searchTerm, notReadyOnly: overrideNotReadyOnly } = {}) => {
+    async ({
+      targetLibrary,
+      targetPage,
+      searchTerm,
+      sortMode: overrideSortMode,
+      notReadyOnly: overrideNotReadyOnly,
+    } = {}) => {
       const lib = targetLibrary ?? library;
       if (!canFetch || !lib) return;
       const desiredPage = targetPage ?? page;
       const q = searchTerm ?? query;
+      const sort = overrideSortMode ?? sortMode;
       const notReady = overrideNotReadyOnly ?? notReadyOnly;
       const normalized = lib.trim().toLowerCase();
       const base = normalized === 'collections' ? '/collections' : '/api/items';
@@ -125,6 +133,7 @@ export function useLibraryItems({ initialLibrary } = {}) {
       }
       params.set('page', String(desiredPage));
       params.set('page_size', String(PAGE_SIZE));
+      params.set('sort', sort);
       if (q) {
         params.set('query', q);
       }
@@ -162,7 +171,7 @@ export function useLibraryItems({ initialLibrary } = {}) {
         setLoading(false);
       }
     },
-    [canFetch, library, page, query, notReadyOnly]
+    [canFetch, library, page, query, sortMode, notReadyOnly]
   );
 
   useEffect(() => {
@@ -184,6 +193,11 @@ export function useLibraryItems({ initialLibrary } = {}) {
   const changeQuery = useCallback((nextQuery) => {
     setPage(1);
     setQuery(nextQuery);
+  }, []);
+
+  const changeSortMode = useCallback((nextSortMode) => {
+    setPage(1);
+    setSortModeState(nextSortMode === 'newest' ? 'newest' : 'title');
   }, []);
 
   const changeNotReadyOnly = useCallback((nextValue) => {
@@ -313,6 +327,7 @@ export function useLibraryItems({ initialLibrary } = {}) {
       if (searchTerm) {
         params.set('query', searchTerm);
       }
+      params.set('sort', options?.sortMode || sortMode);
       if (options?.notReadyOnly) {
         params.set('not_ready_only', 'true');
       }
@@ -353,7 +368,7 @@ export function useLibraryItems({ initialLibrary } = {}) {
         notReadyCount: notReadyCountResp,
       };
     },
-    []
+    [sortMode]
   );
 
   const updateItem = useCallback((ratingKey, updates) => {
@@ -426,6 +441,8 @@ export function useLibraryItems({ initialLibrary } = {}) {
       items: filteredItems,
       query,
       setQuery: changeQuery,
+      sortMode,
+      setSortMode: changeSortMode,
       notReadyOnly,
       setNotReadyOnly: changeNotReadyOnly,
       loading,
@@ -449,6 +466,8 @@ export function useLibraryItems({ initialLibrary } = {}) {
       filteredItems,
       query,
       changeQuery,
+      sortMode,
+      changeSortMode,
       notReadyOnly,
       changeNotReadyOnly,
       loading,

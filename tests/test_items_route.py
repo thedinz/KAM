@@ -82,6 +82,7 @@ def items_env(tmp_path, monkeypatch):
             "page": 1,
             "page_size": 60,
             "query": None,
+            "sort": "title",
             "not_ready_only": False,
         }
         params.update(kwargs)
@@ -151,3 +152,32 @@ def test_mapping_source_returns_lightweight_items(items_env):
     assert by_key["22"]["folderName"] == ""
     assert by_key["22"]["assetReady"] is False
     assert "posterUrl" not in by_key["11"]
+
+
+def test_item_rows_sort_newest_uses_added_at_then_year(items_env):
+    rows = [
+        {"title": "Middle Added", "year": 2021, "addedAt": 200},
+        {"title": "Newest Added", "year": 2020, "addedAt": 300},
+        {"title": "Newest Year Fallback", "year": 2025, "addedAt": None},
+        {"title": "Oldest Year Fallback", "year": 2019, "addedAt": None},
+    ]
+
+    importlib.import_module("app.routers.items")._sort_item_rows(rows, "newest")
+
+    assert [row["title"] for row in rows] == [
+        "Newest Added",
+        "Middle Added",
+        "Newest Year Fallback",
+        "Oldest Year Fallback",
+    ]
+
+
+def test_item_rows_sort_defaults_to_title(items_env):
+    rows = [
+        {"title": "Zebra", "year": 2025, "addedAt": 300},
+        {"title": "alpha", "year": 2020, "addedAt": 100},
+    ]
+
+    importlib.import_module("app.routers.items")._sort_item_rows(rows, "unexpected")
+
+    assert [row["title"] for row in rows] == ["alpha", "Zebra"]
