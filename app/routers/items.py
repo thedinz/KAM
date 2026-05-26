@@ -79,6 +79,7 @@ def _plex_list(path: str, params: Optional[dict] = None) -> List[Dict[str, Any]]
             "year": _to_int(node.attrib.get("year")),
             "ratingKey": node.attrib.get("ratingKey"),
             "thumb": node.attrib.get("thumb"),
+            "addedAt": _to_int(node.attrib.get("addedAt")),
         })
     return out
 
@@ -86,8 +87,26 @@ def _to_int(x) -> Optional[int]:
     try: return int(str(x))
     except Exception: return None
 
+def _sort_item_rows(rows: List[Dict[str, Any]], sort_mode: Optional[str] = None) -> None:
+    mode = sort_mode if isinstance(sort_mode, str) else "title"
+    mode = mode.strip().lower()
+    if mode in {"newest", "newest_added", "added_desc", "added"}:
+        rows.sort(
+            key=lambda x: (
+                x.get("addedAt") is None,
+                -(_to_int(x.get("addedAt")) or _to_int(x.get("year")) or 0),
+                (x.get("title") or "").lower(),
+            )
+        )
+        return
 
-def _library_rows(library: str, query: Optional[str] = None) -> List[Dict[str, Any]]:
+    rows.sort(key=lambda x: (x.get("title") or "").lower())
+
+def _library_rows(
+    library: str,
+    query: Optional[str] = None,
+    sort: Optional[str] = None,
+) -> List[Dict[str, Any]]:
     section_key = _section_key_by_name(library)
 
     if query:
@@ -107,8 +126,9 @@ def _library_rows(library: str, query: Optional[str] = None) -> List[Dict[str, A
             "ratingKey": str(it.get("ratingKey") or "").strip(),
             "type": (it.get("type") or "").strip(),
             "thumb": it.get("thumb"),
+            "addedAt": _to_int(it.get("addedAt")),
         })
-    rows.sort(key=lambda x: x["title"].lower())
+    _sort_item_rows(rows, sort)
     return rows
 
 # ---------- Local folder & poster helpers ----------
@@ -186,12 +206,13 @@ def list_items(
     page: int = Query(1, ge=1),
     page_size: int = Query(60, ge=1, le=500),
     query: Optional[str] = Query(None),
+    sort: str = Query("title"),
     not_ready_only: bool = Query(False, alias="not_ready_only"),
 ):
     """
     Prefer local poster.jpg via fileproxy if it actually exists; otherwise fall back to Plex thumb.
     """
-    rows = _library_rows(library, query)
+    rows = _library_rows(library, query, sort)
     overrides_for_library = folder_overrides.get_library_overrides(library)
 
     enriched: List[Dict[str, Any]] = []
@@ -226,6 +247,7 @@ def list_items(
             "title": it["title"],
             "year": it["year"],
             "type": it["type"],
+            "addedAt": it.get("addedAt"),
             "folder": folder_name,
             "folderName": folder_name,
             "assetReady": asset_ready,
