@@ -124,6 +124,13 @@ function NotReadyPage() {
       const ratingKey = folderModalItem?.ratingKey ?? folderModalItem?.key ?? folderModalItem?.id;
       if (ratingKey != null) {
         updateItem(String(ratingKey), { assetReady: true, folderName, folder: folderName });
+        setItems((prev) =>
+          prev.filter((item) => {
+            const key = item?.ratingKey ?? item?.key ?? item?.id;
+            return key == null || String(key) !== String(ratingKey);
+          })
+        );
+        setNotReadyCount((prev) => Math.max(0, (Number(prev) || 0) - 1));
       }
       handleCloseFolderModal();
       await fetchItems(page);
