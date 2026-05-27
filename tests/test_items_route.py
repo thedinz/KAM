@@ -14,6 +14,11 @@ def items_env(tmp_path, monkeypatch):
     folder = library_path / "My Film (2023)"
     folder.mkdir(parents=True)
     (folder / "poster.jpg").write_bytes(b"poster")
+    tagged_folder = (
+        library_path
+        / "Tagged Movie (2024) {tmdb-12345} [Custom Format][Bluray-1080p][x265]-GROUP"
+    )
+    tagged_folder.mkdir(parents=True)
 
     overrides_path = tmp_path / "overrides.json"
     exclusions_path = tmp_path / "exclusions.json"
@@ -71,6 +76,13 @@ def items_env(tmp_path, monkeypatch):
                     "type": "movie",
                     "thumb": "/thumb2?width=500&height=750",
                 },
+                {
+                    "title": "Tagged Movie",
+                    "year": 2024,
+                    "ratingKey": "33",
+                    "type": "movie",
+                    "thumb": "/thumb3",
+                },
             ]
         return []
 
@@ -93,6 +105,7 @@ def items_env(tmp_path, monkeypatch):
         items_router=items_router,
         folder_overrides=folder_overrides,
         folder=folder,
+        tagged_folder=tagged_folder,
         exclusions=exclusions_module,
     )
 
@@ -117,6 +130,8 @@ def test_items_route_reports_not_ready_count_and_filters(items_env):
     assert data["not_ready_count"] == 1
 
     by_key = {it["ratingKey"]: it for it in data["items"]}
+    assert by_key["33"]["assetReady"] is True
+    assert by_key["33"]["folderName"] == items_env.tagged_folder.name
     assert by_key["22"]["assetReady"] is False
     assert by_key["22"]["posterUrl"].startswith("/api/plex/image")
     assert by_key["22"]["posterUrlPlex"].startswith("http://plex.test")
@@ -146,9 +161,11 @@ def test_mapping_source_returns_lightweight_items(items_env):
     data = items_env.items_router.list_items_for_mapping_scan(library="Movies")
     by_key = {it["ratingKey"]: it for it in data["items"]}
 
-    assert data["total_count"] == 2
+    assert data["total_count"] == 3
     assert by_key["11"]["folderName"] == items_env.folder.name
     assert by_key["11"]["assetReady"] is True
+    assert by_key["33"]["folderName"] == ""
+    assert by_key["33"]["assetReady"] is False
     assert by_key["22"]["folderName"] == ""
     assert by_key["22"]["assetReady"] is False
     assert "posterUrl" not in by_key["11"]

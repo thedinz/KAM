@@ -47,3 +47,23 @@ def test_show_with_year_can_still_try_title_folder(monkeypatch):
         ("TV Shows", "Breaking Bad (2008)"),
         ("TV Shows", "Breaking Bad"),
     ]
+
+
+def test_show_with_year_resolves_tagged_sonarr_folder(monkeypatch):
+    calls = []
+
+    def fake_resolve(library, folder_name):
+        calls.append((library, folder_name))
+        if folder_name == "Breaking Bad (2008)":
+            return "/assets/TV Shows/Breaking Bad [tvmaze-169] (2008) [imdb-tt0903747]"
+        raise FileNotFoundError(folder_name)
+
+    monkeypatch.setattr(items, "resolve_existing_dir_or_422", fake_resolve)
+
+    folder_name, folder_path = items._try_existing_asset_folder(
+        "TV Shows", "Breaking Bad", 2008, "show"
+    )
+
+    assert folder_name == "Breaking Bad [tvmaze-169] (2008) [imdb-tt0903747]"
+    assert folder_path == "/assets/TV Shows/Breaking Bad [tvmaze-169] (2008) [imdb-tt0903747]"
+    assert calls == [("TV Shows", "Breaking Bad (2008)")]

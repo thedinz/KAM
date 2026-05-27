@@ -1,6 +1,27 @@
 import { responseErrorMessage, safeJson } from './api.js';
 
 const ASSIGN_BATCH_SIZE = 500;
+const RELEASE_YEAR_PATTERN = '(?:18|19|20|21)\\d{2}';
+const YEAR_SUFFIX_RE = new RegExp(
+  `^(.*?)(?:\\s*[\\(\\[\\{]\\s*(${RELEASE_YEAR_PATTERN})\\s*[\\)\\]\\}]|\\s+(${RELEASE_YEAR_PATTERN}))\\s*$`
+);
+const YEAR_HINT_RE = new RegExp(
+  `(?:[\\(\\[\\{]\\s*${RELEASE_YEAR_PATTERN}\\s*[\\)\\]\\}]|\\b${RELEASE_YEAR_PATTERN}\\b)`,
+  'g'
+);
+const YEAR_HINT_TEST_RE = new RegExp(
+  `(?:[\\(\\[\\{]\\s*${RELEASE_YEAR_PATTERN}\\s*[\\)\\]\\}]|\\b${RELEASE_YEAR_PATTERN}\\b)`
+);
+const BRACE_METADATA_RE = new RegExp(`\\{\\s*(?!${RELEASE_YEAR_PATTERN}\\s*\\})[^{}]*\\}`, 'g');
+const SQUARE_BLOCK_RE = /\[[^\[\]]+\]/g;
+const PAREN_BLOCK_RE = /\([^()]+\)/g;
+const TRAILING_RELEASE_GROUP_RE = new RegExp(
+  `(.*(?:[\\(\\[\\{]\\s*${RELEASE_YEAR_PATTERN}\\s*[\\)\\]\\}]|\\b${RELEASE_YEAR_PATTERN}\\b))\\s*-\\s*[A-Za-z0-9][A-Za-z0-9._-]{1,40}\\s*$`
+);
+const METADATA_CONTENT_RE =
+  /\b(?:tmdb|tmdbid|imdb|imdbid|tvdb|tvdbid|tvmaze|tvmazeid|edition|custom|format|quality|proper|repack|remux|bluray|blu-ray|webdl|web-dl|webrip|hdtv|dvd|uhd|hdr|hdr10|hdr10plus|dolby\s*vision|dv|sdr|x264|x265|h264|h265|h\.264|h\.265|hevc|avc|aac|ac3|eac3|dts|truehd|atmos|ddp?|imax|criterion|director|directors|extended|alternate|theatrical|unrated|uncut|remaster|remastered|restored|special|nf|amzn|hulu|disney|hmax|pcok|release|group)\b|\btt\d+\b|\b\d{3,4}p\b|\b\d{1,2}bit\b|\b[57]\.1\b|\b3d\b|\bpg-?13\b|\bnc-?17\b|\btv-(?:y7?|g|pg|14|ma)\b/i;
+const ID_LABEL_TOKENS = new Set(['imdb', 'imdbid', 'tmdb', 'tmdbid', 'tvdb', 'tvdbid', 'tvmaze', 'tvmazeid']);
+const CERTIFICATION_TOKENS = new Set(['g', 'pg', 'r', 'nc', 'tv', 'y', 'y7', 'ma']);
 const STOPWORDS = new Set(['the', 'a', 'an', 'movie', 'film']);
 const RELAXED_VARIANT_SUFFIXES = new Set([
   'alternate',
@@ -51,19 +72,123 @@ const ROMAN_NUMERALS = new Map([
   ['x', '10'],
 ]);
 
-function normalizeTitle(value) {
-  if (!value) return { key: '', year: null, tokens: [] };
-  const normalized = String(value).normalize('NFKC').replace(/[\u0000-\u001f]/g, '');
-  const tokens = normalized
+function looksLikeMetadataContent(value) {
+  const text = String(value || '')
+    .normalize('NFKC')
+    .toLowerCase()
+    .trim();
+  if (!text) return false;
+  if (/^(?:tmdb|imdb|tvdb)\s*[-:]/i.test(text)) return true;
+  if (/^tvmaze\s*[-:]/i.test(text)) return true;
+  if (/^edition\s*[-:]/i.test(text)) return true;
+  if (/^(?:g|pg|pg-?13|r|nc-?17|tv-(?:y7?|g|pg|14|ma))$/i.test(text)) return true;
+  return METADATA_CONTENT_RE.test(text);
+}
+
+function hasReleaseYear(value) {
+  return YEAR_HINT_TEST_RE.test(String(value || ''));
+}
+
+function metadataSuffixTokens(value) {
+  return String(value || '')
     .toLowerCase()
     .split(/[^0-9a-z]+/)
-    .filter(Boolean)
-    .filter((token) => !STOPWORDS.has(token));
-  let year = null;
-  if (tokens.length > 1 && /^\d{4}$/.test(tokens[tokens.length - 1])) {
-    year = tokens.pop();
+    .filter(Boolean);
+}
+
+function isMetadataToken(token) {
+  if (!token) return false;
+  if (ID_LABEL_TOKENS.has(token) || CERTIFICATION_TOKENS.has(token)) return true;
+  if (/^tt\d+$/.test(token)) return true;
+  if (/^\d{3,4}p$/.test(token)) return true;
+  if (/^\d{1,2}bit$/.test(token)) return true;
+  if (/^(?:[xh]26[45]|h26[45]|hevc|avc)$/.test(token)) return true;
+  if (/^(?:hdr10(?:plus)?|hdr|dv|sdr|3d)$/.test(token)) return true;
+  if (/^(?:aac|ac3|eac3|dts|truehd|atmos|ddp?)$/.test(token)) return true;
+  if (/^[57]1$/.test(token)) return true;
+  return METADATA_CONTENT_RE.test(token);
+}
+
+function metadataSuffixOnly(value) {
+  const raw = String(value || '');
+  const cleaned = raw.replace(BRACE_METADATA_RE, ' ').replace(SQUARE_BLOCK_RE, ' ');
+  const stripped = cleaned.trim().replace(/^[ ._-]+|[ ._-]+$/g, '');
+  if (!stripped) return true;
+  if (/^-\s*[A-Za-z0-9][A-Za-z0-9._-]{1,40}$/.test(cleaned.trim())) return true;
+
+  const tokens = metadataSuffixTokens(stripped);
+  if (!tokens.length) return true;
+
+  const metadataCount = tokens.filter(isMetadataToken).length;
+  if (metadataCount === 0) return false;
+
+  return tokens.every((token, index) => {
+    if (isMetadataToken(token)) return true;
+    const previous = index > 0 ? tokens[index - 1] : '';
+    if (/^\d+$/.test(token) && (metadataCount > 0 || ID_LABEL_TOKENS.has(previous) || token.length >= 3)) {
+      return true;
+    }
+    return index === tokens.length - 1 && /^[a-z0-9][a-z0-9._-]{1,40}$/.test(token);
+  });
+}
+
+function stripMetadataAfterYear(text) {
+  const matches = Array.from(String(text || '').matchAll(YEAR_HINT_RE));
+  for (let index = matches.length - 1; index >= 0; index -= 1) {
+    const match = matches[index];
+    const end = (match.index || 0) + match[0].length;
+    const suffix = text.slice(end);
+    if (suffix && metadataSuffixOnly(suffix)) {
+      return text.slice(0, end).trim();
+    }
   }
-  return { key: tokens.join(''), year, tokens };
+  return text;
+}
+
+function stripFolderMetadata(value) {
+  let text = String(value || '')
+    .normalize('NFKC')
+    .replace(/[\u0000-\u001f]/g, '')
+    .trim();
+  if (!text) return '';
+
+  text = text.replace(BRACE_METADATA_RE, ' ');
+  text = text.replace(SQUARE_BLOCK_RE, (match, offset) => {
+    const content = match.slice(1, -1);
+    if (new RegExp(`^\\s*${RELEASE_YEAR_PATTERN}\\s*$`).test(content)) return match;
+    if (offset === 0 && !looksLikeMetadataContent(content)) return match;
+    return ' ';
+  });
+  text = text.replace(PAREN_BLOCK_RE, (match, offset) => {
+    const content = match.slice(1, -1);
+    const before = text.slice(0, offset);
+    if (new RegExp(`^\\s*${RELEASE_YEAR_PATTERN}\\s*$`).test(content)) return match;
+    if (hasReleaseYear(before) || looksLikeMetadataContent(content)) return ' ';
+    return match;
+  });
+  text = text.replace(TRAILING_RELEASE_GROUP_RE, '$1');
+  text = stripMetadataAfterYear(text);
+  return text.replace(/\s+/g, ' ').replace(/^[ ._-]+|[ ._-]+$/g, '');
+}
+
+function normalizeTitle(value) {
+  if (!value) return { key: '', year: null, tokens: [] };
+  const normalized = stripFolderMetadata(value);
+  const yearMatch = YEAR_SUFFIX_RE.exec(normalized);
+  const titlePart = yearMatch ? String(yearMatch[1] || '').trim() : normalized;
+  const year = yearMatch ? yearMatch[2] || yearMatch[3] || null : null;
+  const tokens = normalized
+    ? titlePart
+        .toLowerCase()
+        .split(/[^0-9a-z]+/)
+        .filter(Boolean)
+    : [];
+  const filteredTokens = tokens.filter((token) => !STOPWORDS.has(token));
+  const finalTokens =
+    filteredTokens.length && !filteredTokens.every((token) => /^\d+$/.test(token))
+      ? filteredTokens
+      : tokens;
+  return { key: finalTokens.join(''), year, tokens: finalTokens };
 }
 
 function buildFolderIndex(names = []) {
@@ -83,6 +208,23 @@ function pickFolderMatch(candidate, index) {
   const sequelTokens = getSequelTokens(tokens);
   const isUsable = (entry) =>
     (!year || entry.year === year) && equalTokens(sequelTokens, getSequelTokens(entry.tokens));
+  const hasExplicitYearConflict = (entry, comparisonTokens = entry.tokens) =>
+    Boolean(year) &&
+    index.some(
+      (other) =>
+        (other.key === entry.key || other.key === key) &&
+        other.year &&
+        other.year !== year &&
+        equalTokens(getSequelTokens(comparisonTokens), getSequelTokens(other.tokens))
+    );
+  const isUsableYearless = (entry) =>
+    Boolean(year) &&
+    !entry.year &&
+    equalTokens(sequelTokens, getSequelTokens(entry.tokens)) &&
+    !hasExplicitYearConflict(entry);
+  const isUsableTokenSubset = (entry) => !year || entry.year === year;
+  const isUsableYearlessTokenSubset = (entry) =>
+    Boolean(year) && !entry.year && !hasExplicitYearConflict(entry, tokens);
 
   for (const entry of index) {
     if (entry.key !== key) continue;
@@ -90,9 +232,30 @@ function pickFolderMatch(candidate, index) {
     return entry.name;
   }
   for (const entry of index) {
+    if (entry.key !== key) continue;
+    if (!isUsableYearless(entry)) continue;
+    return entry.name;
+  }
+  for (const entry of index) {
     if (!(entry.key.startsWith(key) || key.startsWith(entry.key))) continue;
     if (!hasEditionSuffix(tokens, entry.tokens)) continue;
     if (!isUsable(entry)) continue;
+    return entry.name;
+  }
+  for (const entry of index) {
+    if (!(entry.key.startsWith(key) || key.startsWith(entry.key))) continue;
+    if (!hasEditionSuffix(tokens, entry.tokens)) continue;
+    if (!isUsableYearless(entry)) continue;
+    return entry.name;
+  }
+  for (const entry of index) {
+    if (!tokensContainTitleWithIgnorableExtras(tokens, entry.tokens)) continue;
+    if (!isUsableTokenSubset(entry)) continue;
+    return entry.name;
+  }
+  for (const entry of index) {
+    if (!tokensContainTitleWithIgnorableExtras(tokens, entry.tokens)) continue;
+    if (!isUsableYearlessTokenSubset(entry)) continue;
     return entry.name;
   }
   return '';
@@ -120,6 +283,32 @@ function getSequelTokens(tokens = []) {
 
 function equalTokens(first = [], second = []) {
   return first.length === second.length && first.every((token, index) => token === second[index]);
+}
+
+function isIgnorableMatchExtra(token, index, tokens = []) {
+  if (isMetadataToken(token)) return true;
+  if (/^\d+$/.test(token) && token.length >= 3) return true;
+  if (index === 0 && token.length === 1 && tokens.length > 1) return true;
+  return false;
+}
+
+function tokensContainTitleWithIgnorableExtras(wantTokens = [], candidateTokens = []) {
+  if (!wantTokens.length || !candidateTokens.length) return false;
+  if (candidateTokens.length <= wantTokens.length) return false;
+
+  const span = wantTokens.length;
+  for (let start = 0; start <= candidateTokens.length - span; start += 1) {
+    const slice = candidateTokens.slice(start, start + span);
+    if (!equalTokens(slice, wantTokens)) continue;
+    const extras = candidateTokens
+      .map((token, index) => ({ token, index }))
+      .filter(({ index }) => index < start || index >= start + span);
+    if (extras.length && extras.every(({ token, index }) => isIgnorableMatchExtra(token, index, candidateTokens))) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 function hasEditionSuffix(first = [], second = []) {

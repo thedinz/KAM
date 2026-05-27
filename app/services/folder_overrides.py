@@ -22,6 +22,7 @@ def _iter_default_base_candidates() -> list[str]:
         os.environ.get("KAM_STATE_ROOT"),
         os.environ.get("KAM_CONFIG_ROOT"),
         "/config",
+        os.environ.get("KAM_LEGACY_STATE_ROOT"),
         "/data",
     )
 
@@ -71,8 +72,38 @@ def _get_storage_path() -> Path:
     return Path(_STORAGE_PATH)
 
 
-def _load_locked() -> Dict[str, Dict[str, str]]:
-    path = _get_storage_path()
+def _storage_read_paths() -> list[Path]:
+    paths: list[Path] = []
+
+    primary = _get_storage_path()
+    paths.append(primary)
+
+    if os.environ.get("KAM_FOLDER_OVERRIDES_PATH"):
+        return paths
+
+    filename = "folder_overrides.json"
+    for base in _iter_default_base_candidates():
+        candidate = Path(base) / filename
+        if candidate not in paths:
+            paths.append(candidate)
+
+    return paths
+
+
+def _parse_payload(raw: str, path: Path) -> Dict[str, Dict[str, str]]:
+    try:
+        data = json.loads(raw) or {}
+    except Exception as exc:
+        logger.warning("Invalid JSON in folder overrides file %s: %s", path, exc)
+        return {}
+    out: Dict[str, Dict[str, str]] = {}
+    for lib, entries in data.items():
+        if isinstance(lib, str) and isinstance(entries, dict):
+            out[lib] = {str(k): str(v) for k, v in entries.items() if v is not None}
+    return out
+
+
+def _read_file(path: Path) -> Dict[str, Dict[str, str]]:
     try:
         raw = path.read_text(encoding="utf-8")
     except FileNotFoundError:
@@ -80,17 +111,23 @@ def _load_locked() -> Dict[str, Dict[str, str]]:
     except Exception as exc:
         logger.warning("Unable to read folder overrides file %s: %s", path, exc)
         return {}
-    try:
-        data = json.loads(raw) or {}
-    except Exception as exc:
-        logger.warning("Invalid JSON in folder overrides file %s: %s", path, exc)
-        return {}
-    # ensure nested dicts
-    out: Dict[str, Dict[str, str]] = {}
-    for lib, entries in data.items():
-        if isinstance(lib, str) and isinstance(entries, dict):
-            out[lib] = {str(k): str(v) for k, v in entries.items() if v is not None}
-    return out
+    return _parse_payload(raw, path)
+
+
+def _merge_payloads(payloads: list[Dict[str, Dict[str, str]]]) -> Dict[str, Dict[str, str]]:
+    merged: Dict[str, Dict[str, str]] = {}
+    for payload in reversed(payloads):
+        for library, entries in payload.items():
+            if not entries:
+                continue
+            target = merged.setdefault(library, {})
+            target.update(entries)
+    return merged
+
+
+def _load_locked() -> Dict[str, Dict[str, str]]:
+    payloads = [_read_file(path) for path in _storage_read_paths()]
+    return _merge_payloads(payloads)
 
 
 def _write_locked(data: Dict[str, Dict[str, str]]) -> None:
