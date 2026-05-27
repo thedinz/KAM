@@ -10,9 +10,38 @@ from . import library_mappings as library_mappings_service
 ASSETS_ROOT = os.environ.get("KAM_ASSETS_ROOT", "/assets")
 
 _ILLEGAL_CTRL = re.compile(r"[\u0000-\u001F]")
+_RELEASE_YEAR_PATTERN = r"(?:18|19|20|21)\d{2}"
 _YEAR_SUFFIX_RE = re.compile(
-    r"^(?P<title>.*?)(?:\s*[\(\[\{]\s*(?P<bracket_year>(?:18|19|20|21)\d{2})\s*[\)\]\}]|\s+(?P<bare_year>(?:18|19|20|21)\d{2}))\s*$"
+    rf"^(?P<title>.*?)(?:\s*[\(\[\{{]\s*(?P<bracket_year>{_RELEASE_YEAR_PATTERN})\s*[\)\]\}}]|\s+(?P<bare_year>{_RELEASE_YEAR_PATTERN}))\s*$"
 )
+_YEAR_HINT_RE = re.compile(
+    rf"(?:[\(\[\{{]\s*{_RELEASE_YEAR_PATTERN}\s*[\)\]\}}]|\b{_RELEASE_YEAR_PATTERN}\b)"
+)
+_BRACE_METADATA_RE = re.compile(
+    rf"\{{\s*(?!{_RELEASE_YEAR_PATTERN}\s*\}})[^{{}}]*\}}"
+)
+_SQUARE_BLOCK_RE = re.compile(r"\[[^\[\]]+\]")
+_PAREN_BLOCK_RE = re.compile(r"\([^()]+\)")
+_TRAILING_RELEASE_GROUP_RE = re.compile(
+    rf"(?P<title>.*(?:[\(\[\{{]\s*{_RELEASE_YEAR_PATTERN}\s*[\)\]\}}]|\b{_RELEASE_YEAR_PATTERN}\b))\s*-\s*[A-Za-z0-9][A-Za-z0-9._-]{{1,40}}\s*$"
+)
+_METADATA_CONTENT_RE = re.compile(
+    r"\b(?:"
+    r"tmdb|tmdbid|imdb|imdbid|tvdb|tvdbid|tvmaze|tvmazeid|edition|"
+    r"custom|format|quality|proper|repack|remux|"
+    r"bluray|blu-ray|webdl|web-dl|webrip|hdtv|dvd|uhd|hdr|hdr10|hdr10plus|"
+    r"dolby\s*vision|dv|sdr|x264|x265|h264|h265|h\.264|h\.265|hevc|avc|"
+    r"aac|ac3|eac3|dts|truehd|atmos|ddp?|imax|criterion|director|"
+    r"directors|extended|alternate|theatrical|unrated|uncut|remaster|"
+    r"remastered|restored|special|nf|amzn|hulu|"
+    r"disney|hmax|pcok|release|group"
+    r")\b|(?:\btt\d+\b)|(?:\b\d{3,4}p\b)|(?:\b\d{1,2}bit\b)|"
+    r"(?:\b[57]\.1\b)|(?:\b3d\b)|(?:\bpg-?13\b)|(?:\bnc-?17\b)|"
+    r"(?:\btv-(?:y7?|g|pg|14|ma)\b)",
+    re.IGNORECASE,
+)
+_ID_LABEL_TOKENS = {"imdb", "imdbid", "tmdb", "tmdbid", "tvdb", "tvdbid", "tvmaze", "tvmazeid"}
+_CERTIFICATION_TOKENS = {"g", "pg", "r", "nc", "tv", "y", "y7", "ma"}
 
 _STOPWORDS = {"the", "a", "an", "movie", "film"}
 _RELAXED_VARIANT_SUFFIXES = {
@@ -65,11 +94,137 @@ _ROMAN_NUMERALS = {
 }
 
 
+def _looks_like_metadata_content(value: str) -> bool:
+    text = unicodedata.normalize("NFKC", str(value or "")).casefold().strip()
+    if not text:
+        return False
+    if re.match(r"^(?:tmdb|imdb|tvdb)\s*[-:]", text):
+        return True
+    if re.match(r"^tvmaze\s*[-:]", text):
+        return True
+    if re.match(r"^edition\s*[-:]", text):
+        return True
+    if re.fullmatch(r"(?:g|pg|pg-?13|r|nc-?17|tv-(?:y7?|g|pg|14|ma))", text):
+        return True
+    return bool(_METADATA_CONTENT_RE.search(text))
+
+
+def _has_release_year(value: str) -> bool:
+    return bool(_YEAR_HINT_RE.search(str(value or "")))
+
+
+def _metadata_suffix_tokens(value: str) -> list[str]:
+    return [
+        token
+        for token in re.split(r"[^0-9a-z]+", value.casefold())
+        if token
+    ]
+
+
+def _is_metadata_token(token: str) -> bool:
+    if not token:
+        return False
+    if token in _ID_LABEL_TOKENS or token in _CERTIFICATION_TOKENS:
+        return True
+    if re.fullmatch(r"tt\d+", token):
+        return True
+    if re.fullmatch(r"\d{3,4}p", token):
+        return True
+    if re.fullmatch(r"\d{1,2}bit", token):
+        return True
+    if re.fullmatch(r"[xh]26[45]|h26[45]|hevc|avc", token):
+        return True
+    if re.fullmatch(r"hdr10(?:plus)?|hdr|dv|sdr|3d", token):
+        return True
+    if re.fullmatch(r"aac|ac3|eac3|dts|truehd|atmos|ddp?", token):
+        return True
+    if re.fullmatch(r"[57]1", token):
+        return True
+    return bool(_METADATA_CONTENT_RE.search(token))
+
+
+def _metadata_suffix_only(value: str) -> bool:
+    raw = str(value or "")
+    cleaned = _BRACE_METADATA_RE.sub(" ", raw)
+    cleaned = _SQUARE_BLOCK_RE.sub(" ", cleaned)
+    stripped = cleaned.strip(" ._-")
+    if not stripped:
+        return True
+
+    if re.fullmatch(r"-\s*[A-Za-z0-9][A-Za-z0-9._-]{1,40}", cleaned.strip()):
+        return True
+
+    tokens = _metadata_suffix_tokens(stripped)
+    if not tokens:
+        return True
+
+    metadata_count = sum(1 for token in tokens if _is_metadata_token(token))
+    if metadata_count == 0:
+        return False
+
+    for index, token in enumerate(tokens):
+        if _is_metadata_token(token):
+            continue
+        previous = tokens[index - 1] if index else ""
+        if token.isdigit() and (
+            metadata_count > 0 or previous in _ID_LABEL_TOKENS or len(token) >= 3
+        ):
+            continue
+        # Release groups are often a final plain token after quality/media
+        # metadata, for example "2160p BluRay x265 RARBG".
+        if index == len(tokens) - 1 and re.fullmatch(r"[a-z0-9][a-z0-9._-]{1,40}", token):
+            continue
+        return False
+    return True
+
+
+def _strip_metadata_after_year(text: str) -> str:
+    matches = list(_YEAR_HINT_RE.finditer(text))
+    for match in reversed(matches):
+        suffix = text[match.end() :]
+        if suffix and _metadata_suffix_only(suffix):
+            return text[: match.end()].strip()
+    return text
+
+
+def _strip_folder_metadata(value: str) -> str:
+    text = unicodedata.normalize("NFKC", str(value or ""))
+    text = _ILLEGAL_CTRL.sub("", text).strip()
+    if not text:
+        return ""
+
+    text = _BRACE_METADATA_RE.sub(" ", text)
+
+    def replace_square_block(match: re.Match[str]) -> str:
+        content = match.group(0)[1:-1]
+        before = text[: match.start()]
+        if re.fullmatch(rf"\s*{_RELEASE_YEAR_PATTERN}\s*", content):
+            return match.group(0)
+        if match.start() == 0 and not _looks_like_metadata_content(content):
+            return match.group(0)
+        return " "
+
+    def replace_paren_block(match: re.Match[str]) -> str:
+        content = match.group(0)[1:-1]
+        before = text[: match.start()]
+        if re.fullmatch(rf"\s*{_RELEASE_YEAR_PATTERN}\s*", content):
+            return match.group(0)
+        if _has_release_year(before) or _looks_like_metadata_content(content):
+            return " "
+        return match.group(0)
+
+    text = _SQUARE_BLOCK_RE.sub(replace_square_block, text)
+    text = _PAREN_BLOCK_RE.sub(replace_paren_block, text)
+    text = _TRAILING_RELEASE_GROUP_RE.sub(lambda match: match.group("title"), text)
+    text = _strip_metadata_after_year(text)
+    text = re.sub(r"\s+", " ", text).strip(" ._-")
+    return text
+
+
 def _extract_trailing_year(s: str) -> tuple[str, Optional[str]]:
     """Split a folder/title into title text and a trailing release year."""
 
-    text = unicodedata.normalize("NFKC", str(s or ""))
-    text = _ILLEGAL_CTRL.sub("", text).strip()
+    text = _strip_folder_metadata(s)
     if not text:
         return "", None
 
@@ -174,6 +329,41 @@ def _relaxed_variant_tokens_compatible(
     return bool(suffix) and all(token in _RELAXED_VARIANT_SUFFIXES for token in suffix)
 
 
+def _is_ignorable_match_extra(token: str, index: int, tokens: tuple[str, ...]) -> bool:
+    if _is_metadata_token(token):
+        return True
+    if token.isdigit() and len(token) >= 3:
+        return True
+    if index == 0 and len(token) == 1 and len(tokens) > 1:
+        return True
+    return False
+
+
+def _tokens_contain_title_with_ignorable_extras(
+    want_tokens: tuple[str, ...], candidate_tokens: tuple[str, ...]
+) -> bool:
+    if not want_tokens or not candidate_tokens:
+        return False
+    if len(candidate_tokens) <= len(want_tokens):
+        return False
+
+    span = len(want_tokens)
+    for start in range(0, len(candidate_tokens) - span + 1):
+        if tuple(candidate_tokens[start : start + span]) != want_tokens:
+            continue
+        extras = [
+            (index, token)
+            for index, token in enumerate(candidate_tokens)
+            if index < start or index >= start + span
+        ]
+        if extras and all(
+            _is_ignorable_match_extra(token, index, candidate_tokens)
+            for index, token in extras
+        ):
+            return True
+    return False
+
+
 def _year_compatible(want_year: Optional[str], candidate_year: Optional[str]) -> bool:
     if want_year:
         return candidate_year == want_year
@@ -195,6 +385,38 @@ def _best_match(candidates, want: str) -> Optional[str]:
             want_tokens, tokens
         )
 
+    def usable_token_subset(year: Optional[str]) -> bool:
+        return _year_compatible(want_year, year)
+
+    def has_explicit_year_conflict(
+        normalized: str, tokens: tuple[str, ...]
+    ) -> bool:
+        if not want_year:
+            return False
+        for _, other_normalized, other_year, other_tokens in normalized_candidates:
+            if other_normalized not in {normalized, want_key}:
+                continue
+            if not other_year or other_year == want_year:
+                continue
+            if _sequel_tokens_compatible(tokens, other_tokens):
+                return True
+        return False
+
+    def usable_yearless(normalized: str, year: Optional[str], tokens: tuple[str, ...]) -> bool:
+        return (
+            bool(want_year)
+            and year is None
+            and _sequel_tokens_compatible(want_tokens, tokens)
+            and not has_explicit_year_conflict(normalized, tokens)
+        )
+
+    def usable_yearless_token_subset(year: Optional[str]) -> bool:
+        return (
+            bool(want_year)
+            and year is None
+            and not has_explicit_year_conflict(want_key, want_tokens)
+        )
+
     # 1) Exact normalized match, but only when the year and sequel markers are
     # compatible. If a year-scoped Plex item cannot find the same year on disk,
     # leave it unmatched instead of borrowing a sibling movie's folder.
@@ -206,6 +428,19 @@ def _best_match(candidates, want: str) -> Optional[str]:
     if len(exact_matches) == 1:
         return exact_matches[0]
     if len(exact_matches) > 1:
+        return None
+
+    # Existing Kometa libraries may use yearless folders even when Plex reports
+    # a year. Accept that only for exact, unambiguous title matches and only
+    # when another explicit-year sibling would not make the choice risky.
+    yearless_exact_matches = [
+        original
+        for original, normalized, year, tokens in normalized_candidates
+        if normalized == want_key and usable_yearless(normalized, year, tokens)
+    ]
+    if len(yearless_exact_matches) == 1:
+        return yearless_exact_matches[0]
+    if len(yearless_exact_matches) > 1:
         return None
 
     # 2) Relaxed prefix match for legitimate suffixes such as "Extended
@@ -223,7 +458,45 @@ def _best_match(candidates, want: str) -> Optional[str]:
     if len(relaxed_matches) > 1:
         return None
 
-    # 3) Fallback: closest fuzzy match when the similarity is very high and
+    yearless_relaxed_matches = [
+        original
+        for original, normalized, year, tokens in normalized_candidates
+        if normalized
+        and (normalized.startswith(want_key) or want_key.startswith(normalized))
+        and _relaxed_variant_tokens_compatible(want_tokens, tokens)
+        and usable_yearless(normalized, year, tokens)
+    ]
+    if len(yearless_relaxed_matches) == 1:
+        return yearless_relaxed_matches[0]
+    if len(yearless_relaxed_matches) > 1:
+        return None
+
+    # 3) Allow official folder-token extras such as leading IDs,
+    # certification, or TitleFirstCharacter when the actual title tokens remain
+    # intact and contiguous.
+    token_subset_matches = [
+        original
+        for original, _, year, tokens in normalized_candidates
+        if _tokens_contain_title_with_ignorable_extras(want_tokens, tokens)
+        and usable_token_subset(year)
+    ]
+    if len(token_subset_matches) == 1:
+        return token_subset_matches[0]
+    if len(token_subset_matches) > 1:
+        return None
+
+    yearless_token_subset_matches = [
+        original
+        for original, _, year, tokens in normalized_candidates
+        if _tokens_contain_title_with_ignorable_extras(want_tokens, tokens)
+        and usable_yearless_token_subset(year)
+    ]
+    if len(yearless_token_subset_matches) == 1:
+        return yearless_token_subset_matches[0]
+    if len(yearless_token_subset_matches) > 1:
+        return None
+
+    # 4) Fallback: closest fuzzy match when the similarity is very high and
     # there is a clear winner.
     scored_matches: list[tuple[float, str, float, tuple[int, int]]] = []
     for original, normalized, year, tokens in normalized_candidates:

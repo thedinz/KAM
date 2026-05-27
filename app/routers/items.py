@@ -140,9 +140,9 @@ def _try_existing_asset_folder(
     item_type: Optional[str] = None,
 ) -> Tuple[Optional[str], Optional[str]]:
     """
-    Use your resolver to find an actual, existing Kometa folder.
-    Movies with a Plex year only try 'Title (Year)' automatically. If that
-    cannot be resolved, leave them unmatched instead of guessing from 'Title'.
+    Use the resolver to find an actual, existing Kometa folder.
+    Movies with a Plex year resolve through 'Title (Year)' so the shared
+    resolver can enforce safe year-aware matching without a bare-title guess.
     """
     if not title:
         return None, None

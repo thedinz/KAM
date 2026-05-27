@@ -69,6 +69,120 @@ def test_resolve_accepts_high_similarity_variant(tmp_path, monkeypatch):
     assert os.path.basename(resolved) == existing
 
 
+def test_resolve_ignores_radarr_metadata_tags(tmp_path, monkeypatch):
+    assets_root = tmp_path / "assets"
+    library = "Movies"
+    target = "Jurassic World: Fallen Kingdom (2018)"
+    existing = (
+        "Jurassic World Fallen Kingdom (2018) {tmdb-351286} "
+        "{edition-Extended Edition} [IMAX Enhanced][Bluray-1080p]"
+        "[3D][HDR10][DTS 5.1][x265]-RARBG"
+    )
+
+    library_path = assets_root / library
+    library_path.mkdir(parents=True)
+    (library_path / existing).mkdir()
+
+    monkeypatch.setenv("KAM_ASSETS_ROOT", str(assets_root))
+
+    settings_module = importlib.reload(importlib.import_module("app.services.settings"))
+    settings_module.set_settings_path(str(tmp_path / "settings.json"))
+    settings_module.save_library_mappings([])
+
+    resolve_module = _reload_with_assets_root(str(assets_root))
+
+    resolved = resolve_module.resolve_existing_dir_or_422(library, target)
+    assert os.path.basename(resolved) == existing
+
+
+def test_resolve_ignores_bare_folder_ids_after_year(tmp_path, monkeypatch):
+    assets_root = tmp_path / "assets"
+    library = "Movies"
+    target = "The Matrix (1999)"
+    existing = "The Matrix (1999) tt0133093 603"
+
+    library_path = assets_root / library
+    library_path.mkdir(parents=True)
+    (library_path / existing).mkdir()
+
+    monkeypatch.setenv("KAM_ASSETS_ROOT", str(assets_root))
+
+    settings_module = importlib.reload(importlib.import_module("app.services.settings"))
+    settings_module.set_settings_path(str(tmp_path / "settings.json"))
+    settings_module.save_library_mappings([])
+
+    resolve_module = _reload_with_assets_root(str(assets_root))
+
+    resolved = resolve_module.resolve_existing_dir_or_422(library, target)
+    assert os.path.basename(resolved) == existing
+
+
+def test_resolve_ignores_leading_folder_id_and_certification_tokens(tmp_path, monkeypatch):
+    assets_root = tmp_path / "assets"
+    library = "Movies"
+    target = "The Matrix (1999)"
+    existing = "603 R The Matrix (1999)"
+
+    library_path = assets_root / library
+    library_path.mkdir(parents=True)
+    (library_path / existing).mkdir()
+
+    monkeypatch.setenv("KAM_ASSETS_ROOT", str(assets_root))
+
+    settings_module = importlib.reload(importlib.import_module("app.services.settings"))
+    settings_module.set_settings_path(str(tmp_path / "settings.json"))
+    settings_module.save_library_mappings([])
+
+    resolve_module = _reload_with_assets_root(str(assets_root))
+
+    resolved = resolve_module.resolve_existing_dir_or_422(library, target)
+    assert os.path.basename(resolved) == existing
+
+
+def test_resolve_ignores_sonarr_series_folder_ids(tmp_path, monkeypatch):
+    assets_root = tmp_path / "assets"
+    library = "TV Shows"
+    target = "Breaking Bad (2008)"
+    existing = "Breaking Bad [tvmaze-169] (2008) [imdb-tt0903747]"
+
+    library_path = assets_root / library
+    library_path.mkdir(parents=True)
+    (library_path / existing).mkdir()
+
+    monkeypatch.setenv("KAM_ASSETS_ROOT", str(assets_root))
+
+    settings_module = importlib.reload(importlib.import_module("app.services.settings"))
+    settings_module.set_settings_path(str(tmp_path / "settings.json"))
+    settings_module.save_library_mappings([])
+
+    resolve_module = _reload_with_assets_root(str(assets_root))
+
+    resolved = resolve_module.resolve_existing_dir_or_422(library, target)
+    assert os.path.basename(resolved) == existing
+
+
+def test_resolve_keeps_real_leading_bracketed_title(tmp_path, monkeypatch):
+    assets_root = tmp_path / "assets"
+    library = "Movies"
+    target = "[REC] (2007)"
+    existing = "[REC] (2007) [Bluray-1080p]"
+
+    library_path = assets_root / library
+    library_path.mkdir(parents=True)
+    (library_path / existing).mkdir()
+
+    monkeypatch.setenv("KAM_ASSETS_ROOT", str(assets_root))
+
+    settings_module = importlib.reload(importlib.import_module("app.services.settings"))
+    settings_module.set_settings_path(str(tmp_path / "settings.json"))
+    settings_module.save_library_mappings([])
+
+    resolve_module = _reload_with_assets_root(str(assets_root))
+
+    resolved = resolve_module.resolve_existing_dir_or_422(library, target)
+    assert os.path.basename(resolved) == existing
+
+
 def test_resolve_matches_stopword_and_year_variants(tmp_path, monkeypatch):
     assets_root = tmp_path / "assets"
     library = "Movies"
@@ -290,7 +404,7 @@ def test_resolve_does_not_match_original_to_sequel_year(tmp_path, monkeypatch):
         resolve_module.resolve_existing_dir_or_422(library, target)
 
 
-def test_resolve_does_not_match_year_scoped_movie_to_yearless_folder(tmp_path, monkeypatch):
+def test_resolve_matches_year_scoped_movie_to_unique_yearless_folder(tmp_path, monkeypatch):
     assets_root = tmp_path / "assets"
     library = "Movies"
     target = "Movie 2 (2015)"
@@ -299,6 +413,28 @@ def test_resolve_does_not_match_year_scoped_movie_to_yearless_folder(tmp_path, m
     library_path = assets_root / library
     library_path.mkdir(parents=True)
     (library_path / existing).mkdir()
+
+    monkeypatch.setenv("KAM_ASSETS_ROOT", str(assets_root))
+
+    settings_module = importlib.reload(importlib.import_module("app.services.settings"))
+    settings_module.set_settings_path(str(tmp_path / "settings.json"))
+    settings_module.save_library_mappings([])
+
+    resolve_module = _reload_with_assets_root(str(assets_root))
+
+    resolved = resolve_module.resolve_existing_dir_or_422(library, target)
+    assert os.path.basename(resolved) == existing
+
+
+def test_resolve_rejects_yearless_folder_when_explicit_year_conflicts(tmp_path, monkeypatch):
+    assets_root = tmp_path / "assets"
+    library = "Movies"
+    target = "Dune (2021)"
+
+    library_path = assets_root / library
+    library_path.mkdir(parents=True)
+    (library_path / "Dune").mkdir()
+    (library_path / "Dune (1984) {tmdb-841} [Bluray-1080p]").mkdir()
 
     monkeypatch.setenv("KAM_ASSETS_ROOT", str(assets_root))
 
