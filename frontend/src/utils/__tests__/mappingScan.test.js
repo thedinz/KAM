@@ -111,6 +111,90 @@ describe('runLibraryMappingScan', () => {
     });
   });
 
+  it('matches movie folders with Radarr metadata tags', async () => {
+    global.fetch = vi.fn(() =>
+      Promise.resolve(
+        jsonResponse({
+          items: [
+            {
+              name:
+                'Jurassic World Fallen Kingdom (2018) {tmdb-351286} {edition-Extended Edition} ' +
+                '[IMAX Enhanced][Bluray-1080p][3D][HDR10][DTS 5.1][x265]-RARBG',
+              isDir: true,
+            },
+          ],
+        })
+      )
+    );
+    const fetchAllForLibrary = vi.fn().mockResolvedValue({
+      items: [
+        {
+          ratingKey: '351286',
+          title: 'Jurassic World: Fallen Kingdom',
+          year: 2018,
+          type: 'movie',
+          assetReady: false,
+        },
+      ],
+    });
+
+    const result = await runLibraryMappingScan({ library: 'Movies', fetchAllForLibrary });
+
+    expect(result.entries[0]).toMatchObject({
+      matched: true,
+      matchedFrom: 'titleYear',
+    });
+    expect(result.entries[0].matchedFolder).toContain('{tmdb-351286}');
+  });
+
+  it('keeps real leading bracketed title text while ignoring trailing quality tags', async () => {
+    global.fetch = vi.fn(() =>
+      Promise.resolve(jsonResponse({ items: [{ name: '[REC] (2007) [Bluray-1080p]', isDir: true }] }))
+    );
+    const fetchAllForLibrary = vi.fn().mockResolvedValue({
+      items: [
+        {
+          ratingKey: 'rec',
+          title: '[REC]',
+          year: 2007,
+          type: 'movie',
+          assetReady: false,
+        },
+      ],
+    });
+
+    const result = await runLibraryMappingScan({ library: 'Movies', fetchAllForLibrary });
+
+    expect(result.entries[0]).toMatchObject({
+      matched: true,
+      matchedFolder: '[REC] (2007) [Bluray-1080p]',
+    });
+  });
+
+  it('matches folder IDs and certification tokens before the movie title', async () => {
+    global.fetch = vi.fn(() =>
+      Promise.resolve(jsonResponse({ items: [{ name: '603 R The Matrix (1999)', isDir: true }] }))
+    );
+    const fetchAllForLibrary = vi.fn().mockResolvedValue({
+      items: [
+        {
+          ratingKey: 'matrix',
+          title: 'The Matrix',
+          year: 1999,
+          type: 'movie',
+          assetReady: false,
+        },
+      ],
+    });
+
+    const result = await runLibraryMappingScan({ library: 'Movies', fetchAllForLibrary });
+
+    expect(result.entries[0]).toMatchObject({
+      matched: true,
+      matchedFolder: '603 R The Matrix (1999)',
+    });
+  });
+
   it('does not match movies to the same title from a different year', async () => {
     global.fetch = vi.fn(() =>
       Promise.resolve(jsonResponse({ items: [{ name: 'Dune (1984)', isDir: true }] }))
@@ -135,9 +219,40 @@ describe('runLibraryMappingScan', () => {
     });
   });
 
-  it('does not assign a year-scoped movie to a yearless folder', async () => {
+  it('allows a year-scoped movie to match a unique yearless folder', async () => {
     global.fetch = vi.fn(() =>
       Promise.resolve(jsonResponse({ items: [{ name: 'Dune', isDir: true }] }))
+    );
+    const fetchAllForLibrary = vi.fn().mockResolvedValue({
+      items: [
+        {
+          ratingKey: '2021',
+          title: 'Dune',
+          year: 2021,
+          type: 'movie',
+          assetReady: false,
+        },
+      ],
+    });
+
+    const result = await runLibraryMappingScan({ library: 'Movies', fetchAllForLibrary });
+
+    expect(result.entries[0]).toMatchObject({
+      matched: true,
+      matchedFolder: 'Dune',
+    });
+  });
+
+  it('does not assign a year-scoped movie to a yearless folder when another year conflicts', async () => {
+    global.fetch = vi.fn(() =>
+      Promise.resolve(
+        jsonResponse({
+          items: [
+            { name: 'Dune', isDir: true },
+            { name: 'Dune (1984) {tmdb-841} [Bluray-1080p]', isDir: true },
+          ],
+        })
+      )
     );
     const fetchAllForLibrary = vi.fn().mockResolvedValue({
       items: [
@@ -233,6 +348,34 @@ describe('runLibraryMappingScan', () => {
     expect(result.entries[0]).toMatchObject({
       matched: true,
       matchedFolder: 'Breaking Bad',
+    });
+  });
+
+  it('matches TV series folders with Sonarr IDs in mixed positions', async () => {
+    global.fetch = vi.fn(() =>
+      Promise.resolve(
+        jsonResponse({
+          items: [{ name: 'Breaking Bad [tvmaze-169] (2008) [imdb-tt0903747]', isDir: true }],
+        })
+      )
+    );
+    const fetchAllForLibrary = vi.fn().mockResolvedValue({
+      items: [
+        {
+          ratingKey: '401',
+          title: 'Breaking Bad',
+          year: 2008,
+          type: 'show',
+          assetReady: false,
+        },
+      ],
+    });
+
+    const result = await runLibraryMappingScan({ library: 'TV Shows', fetchAllForLibrary });
+
+    expect(result.entries[0]).toMatchObject({
+      matched: true,
+      matchedFolder: 'Breaking Bad [tvmaze-169] (2008) [imdb-tt0903747]',
     });
   });
 });

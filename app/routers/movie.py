@@ -53,7 +53,8 @@ def _resolve_existing_folder(
     candidates = []
     if year:
         candidates.append(f"{title} ({year})")
-    candidates.append(title)
+    else:
+        candidates.append(title)
 
     for cand in candidates:
         try:

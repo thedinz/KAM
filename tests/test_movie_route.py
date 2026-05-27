@@ -52,6 +52,8 @@ def movie_env(tmp_path, monkeypatch):
 
     # Another unrelated folder to ensure false positives are avoided
     (library_path / "Completely Different (2020)").mkdir()
+    (library_path / "Dune (1984)").mkdir()
+    (library_path / "Legacy Movie").mkdir()
 
     settings_module = importlib.reload(importlib.import_module("app.services.settings"))
     settings_module.set_settings_path(str(tmp_path / "settings.json"))
@@ -87,6 +89,8 @@ def movie_env(tmp_path, monkeypatch):
     items = {
         1: _DummyItem("Jurassic World: Fallen Kingdom", 2018),
         2: _DummyItem("Some Other Movie", 2021),
+        3: _DummyItem("Dune", 2021),
+        4: _DummyItem("Legacy Movie", 2020),
     }
     sections = [_DummySection(library)]
 
@@ -113,6 +117,18 @@ def test_movie_route_rejects_unrelated_folder(movie_env):
     data = movie_env.call(2)
     assert data["folderExists"] is False
     assert data["folderName"] == "Some Other Movie (2021)"
+
+
+def test_movie_route_rejects_different_year_folder(movie_env):
+    data = movie_env.call(3)
+    assert data["folderExists"] is False
+    assert data["folderName"] == "Dune (2021)"
+
+
+def test_movie_route_accepts_unique_yearless_folder(movie_env):
+    data = movie_env.call(4)
+    assert data["folderExists"] is True
+    assert data["folderName"] == "Legacy Movie"
 
 
 def test_movie_route_prefers_override(movie_env):
