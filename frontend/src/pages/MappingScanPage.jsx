@@ -76,6 +76,7 @@ function MappingScanPage() {
       });
       const nextResult = { ...result, entries: assignmentResult.entries };
       const unmatchedCountNext = nextResult.entries.filter((entry) => !entry.matched).length;
+      const notReadyCountNext = nextResult.entries.filter((entry) => entryIsNotReady(entry)).length;
       const assignmentErrors = assignmentResult.errors || [];
       const appliedText = assignmentResult.assignedCount
         ? ` Applied ${assignmentResult.assignedCount.toLocaleString()} folder assignment${

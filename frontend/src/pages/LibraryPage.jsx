@@ -52,6 +52,7 @@ function LibraryPage() {
     loading,
     error,
     reload,
+    refreshNotReadyCount,
     fetchAllForLibrary,
     updateItem,
   } = useLibraryItemsContext();
@@ -59,8 +60,17 @@ function LibraryPage() {
 
   const [searchInput, setSearchInput] = useState(query || '');
   const searchTimerRef = useRef();
+  const refreshedLibraryRef = useRef('');
 
   useEffect(() => setSearchInput(query || ''), [query]);
+
+  useEffect(() => {
+    const lib = (library || '').trim();
+    if (!lib) return;
+    if (refreshedLibraryRef.current === lib) return;
+    refreshedLibraryRef.current = lib;
+    refreshNotReadyCount?.(lib);
+  }, [library, refreshNotReadyCount]);
 
   useEffect(() => {
     if (!urlLibrary) return;
