@@ -209,11 +209,16 @@ The main files are:
 
 You can split state into another mounted directory by setting `KAM_STATE_ROOT`, or use
 the explicit file overrides `KAM_SETTINGS_PATH`, `KAM_FOLDER_OVERRIDES_PATH`, and
-`KAM_EXCLUSIONS_PATH`.
+`KAM_EXCLUSIONS_PATH`. If an older install kept per-item folder assignments in a
+separate location, set `KAM_LEGACY_STATE_ROOT` to that directory so KAM can still
+read the old `folder_overrides.json` while it writes new state to the current
+config location.
 
 > Upgrades from previous versions automatically reuse an existing
 > `/data/*.json` file if it is present and no newer `/config` file exists, so saved
 > settings, folder assignments, and exclusions are retained while migrating to `/config`.
+> Folder assignments are also merged from legacy fallback locations when the current
+> `folder_overrides.json` is missing entries.
 
 ---
 

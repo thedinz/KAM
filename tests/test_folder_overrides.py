@@ -32,6 +32,35 @@ def test_default_storage_path_prefers_existing_file(tmp_path, monkeypatch):
     assert module._get_storage_path() == existing
 
 
+def test_load_merges_legacy_data_file_when_primary_exists(tmp_path, monkeypatch):
+    state_dir = tmp_path / "state"
+    config_dir = tmp_path / "config"
+    data_dir = tmp_path / "data"
+    state_dir.mkdir()
+    config_dir.mkdir()
+    data_dir.mkdir()
+
+    (config_dir / "folder_overrides.json").write_text(
+        json.dumps({"Movies": {"1": "Config Movie"}}),
+        encoding="utf-8",
+    )
+    (data_dir / "folder_overrides.json").write_text(
+        json.dumps({"Movies": {"2": "Legacy Movie"}, "TV Shows": {"3": "Legacy Show"}}),
+        encoding="utf-8",
+    )
+
+    monkeypatch.delenv("KAM_FOLDER_OVERRIDES_PATH", raising=False)
+    monkeypatch.setenv("KAM_STATE_ROOT", str(state_dir))
+    monkeypatch.setenv("KAM_CONFIG_ROOT", str(config_dir))
+    monkeypatch.setenv("KAM_LEGACY_STATE_ROOT", str(data_dir))
+
+    module = _reload_overrides_module()
+
+    assert module.get_override("Movies", "1") == "Config Movie"
+    assert module.get_override("Movies", "2") == "Legacy Movie"
+    assert module.get_override("TV Shows", "3") == "Legacy Show"
+
+
 def test_default_storage_path_defaults_to_first_candidate(tmp_path, monkeypatch):
     state_dir = tmp_path / "state"
     state_dir.mkdir()
