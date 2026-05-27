@@ -36,6 +36,20 @@ function normalizeBranchName(value: string | undefined): string {
   );
 }
 
+function readGitHeadBranch(): string {
+  try {
+    const headPath = resolve(repoRoot, ".git/HEAD");
+    const head = readFileSync(headPath, "utf8").trim();
+    const refPrefix = "ref: refs/heads/";
+    if (head.startsWith(refPrefix)) {
+      return normalizeBranchName(head.slice(refPrefix.length));
+    }
+  } catch {
+    // Fall through to git executable or default.
+  }
+  return "";
+}
+
 function resolveKamBranch(): string {
   const envBranch =
     process.env.VITE_KAM_BRANCH ||
@@ -45,6 +59,11 @@ function resolveKamBranch(): string {
     process.env.BRANCH_NAME;
   if (envBranch) {
     return normalizeBranchName(envBranch);
+  }
+
+  const gitHeadBranch = readGitHeadBranch();
+  if (gitHeadBranch) {
+    return gitHeadBranch;
   }
 
   try {
