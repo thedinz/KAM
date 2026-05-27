@@ -429,12 +429,6 @@ function LibraryPage() {
             onScanMapping={handleScanMapping}
             scanDisabled={scanDisabled}
             scanTitle={scanTitle}
-            page={page || 1}
-            totalPages={totalPages || 1}
-            onFirst={handleFirst}
-            onPrev={handlePrev}
-            onNext={handleNext}
-            onLast={handleLast}
             countLabel={countLabel}
             onViewNotReady={handleViewNotReady}
             notReadyCount={notReadyCount}
@@ -461,6 +455,49 @@ function LibraryPage() {
           loading={loading}
           error={error}
         />
+        <nav className="library-pagination-footer" aria-label="Library pages">
+          <div className="pager" id="pager">
+            <button
+              type="button"
+              onClick={handleFirst}
+              disabled={(page || 1) <= 1}
+              aria-label="First page"
+              title="First page"
+            >
+              «
+            </button>
+            <button
+              type="button"
+              onClick={handlePrev}
+              disabled={(page || 1) <= 1}
+              aria-label="Previous page"
+              title="Previous page"
+            >
+              ‹
+            </button>
+            <span aria-live="polite" id="pageInfo">
+              Page {page || 1} / {totalPages || 1}
+            </span>
+            <button
+              type="button"
+              onClick={handleNext}
+              disabled={(page || 1) >= (totalPages || 1)}
+              aria-label="Next page"
+              title="Next page"
+            >
+              ›
+            </button>
+            <button
+              type="button"
+              onClick={handleLast}
+              disabled={(page || 1) >= (totalPages || 1)}
+              aria-label="Last page"
+              title="Last page"
+            >
+              »
+            </button>
+          </div>
+        </nav>
       </main>
       <FolderFinderModal
         isOpen={folderModalOpen}
