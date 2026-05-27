@@ -1,5 +1,6 @@
 import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
+import { execSync } from "node:child_process";
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { resolve, join } from "node:path";
 
@@ -22,6 +23,42 @@ const staticFiles: StaticFile[] = [
 
 const staticBuffers = new Map<string, Buffer>();
 const reportedMissing = new Set<string>();
+
+function normalizeBranchName(value: string | undefined): string {
+  const text = String(value || "").trim();
+  if (!text) return "dev";
+  return (
+    text
+      .replace(/^refs\/heads\//, "")
+      .replace(/^origin\//, "")
+      .replace(/[^0-9A-Za-z._-]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "dev"
+  );
+}
+
+function resolveKamBranch(): string {
+  const envBranch =
+    process.env.VITE_KAM_BRANCH ||
+    process.env.VITE_GIT_BRANCH ||
+    process.env.KAM_BRANCH ||
+    process.env.GITHUB_REF_NAME ||
+    process.env.BRANCH_NAME;
+  if (envBranch) {
+    return normalizeBranchName(envBranch);
+  }
+
+  try {
+    return normalizeBranchName(
+      execSync("git rev-parse --abbrev-ref HEAD", {
+        cwd: repoRoot,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+      })
+    );
+  } catch {
+    return "dev";
+  }
+}
 
 function refreshStaticBuffers(): void {
   for (const file of staticFiles) {
@@ -65,6 +102,9 @@ function copySharedStaticPlugin(): Plugin {
 }
 
 export default defineConfig({
+  define: {
+    __KAM_BRANCH__: JSON.stringify(resolveKamBranch()),
+  },
   build: {
     outDir: outputDir,
     emptyOutDir: true,
