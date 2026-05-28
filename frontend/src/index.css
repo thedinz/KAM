@@ -997,6 +997,65 @@ main {
   outline: none;
 }
 
+.import-options-dlg {
+  max-width: 460px;
+}
+
+.import-options-summary {
+  margin: -2px 0 14px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.import-options-list {
+  display: grid;
+  gap: 8px;
+}
+
+.import-option-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.import-option-row:hover,
+.import-option-row:focus-within {
+  border-color: var(--accent);
+}
+
+.import-option-row input {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  accent-color: var(--accent);
+}
+
+.import-options-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+@media (max-width: 520px) {
+  .import-options-actions {
+    flex-direction: column-reverse;
+  }
+
+  .import-options-actions button {
+    width: 100%;
+  }
+}
+
 .error-dlg {
   max-width: 520px;
 }

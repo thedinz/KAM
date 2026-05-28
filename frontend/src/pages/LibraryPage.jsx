@@ -29,6 +29,133 @@ const IMPORT_PREPARING_LABELS = [
   'Preparing import... Checking asset folders before import starts.',
 ];
 
+const PRIMARY_IMPORT_OPTIONS = [
+  { key: 'poster', label: 'Posters' },
+  { key: 'background', label: 'Backgrounds' },
+];
+
+const TV_IMPORT_OPTIONS = [
+  { key: 'seriesPoster', label: 'Series poster' },
+  { key: 'seasonPosters', label: 'Season posters' },
+  { key: 'seriesBackground', label: 'Series background' },
+  { key: 'seasonBackgrounds', label: 'Season backgrounds' },
+];
+
+function isTelevisionLibraryName(library) {
+  const lower = String(library || '').trim().toLowerCase();
+  return lower.includes('tv') || lower.includes('show') || lower.includes('series');
+}
+
+function importModeForLibrary(library) {
+  const lower = String(library || '').trim().toLowerCase();
+  if (lower === 'collections') return 'collection';
+  return isTelevisionLibraryName(library) ? 'tv' : 'movie';
+}
+
+function defaultImportOptionsForLibrary(library) {
+  if (importModeForLibrary(library) === 'tv') {
+    return {
+      seriesPoster: true,
+      seasonPosters: true,
+      seriesBackground: true,
+      seasonBackgrounds: true,
+    };
+  }
+  return {
+    poster: true,
+    background: true,
+  };
+}
+
+function normalizeImportOptionsForLibrary(library, options = {}) {
+  const defaults = defaultImportOptionsForLibrary(library);
+  return Object.fromEntries(
+    Object.keys(defaults).map((key) => [key, options[key] ?? defaults[key]])
+  );
+}
+
+function hasImportSelection(options) {
+  return Object.values(options || {}).some(Boolean);
+}
+
+function importChoicesForLibrary(library) {
+  return importModeForLibrary(library) === 'tv' ? TV_IMPORT_OPTIONS : PRIMARY_IMPORT_OPTIONS;
+}
+
+function ImportOptionsDialog({ isOpen, library, options, disabled, onChange, onClose, onSubmit }) {
+  if (!isOpen) return null;
+
+  const normalizedOptions = normalizeImportOptionsForLibrary(library, options);
+  const choices = importChoicesForLibrary(library);
+  const nothingSelected = !hasImportSelection(normalizedOptions);
+
+  const handleSubmit = (event) => {
+    event.preventDefault();
+    if (nothingSelected || disabled) return;
+    onSubmit(normalizedOptions);
+  };
+
+  return (
+    <div
+      className="dialog-backdrop import-options-backdrop"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <form
+        className="dialog-panel import-options-dlg"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="importOptionsTitle"
+        onSubmit={handleSubmit}
+      >
+        <div className="dialog-body">
+          <div className="dialog-heading">
+            <h2 id="importOptionsTitle">Import Assets</h2>
+            <button
+              type="button"
+              className="dialog-close"
+              onClick={onClose}
+              aria-label="Close import options"
+            >
+              x
+            </button>
+          </div>
+          <p className="import-options-summary">
+            Existing selected assets in mapped Kometa folders will be overwritten.
+          </p>
+          <div className="import-options-list">
+            {choices.map((choice) => (
+              <label className="import-option-row" key={choice.key}>
+                <input
+                  type="checkbox"
+                  checked={Boolean(normalizedOptions[choice.key])}
+                  onChange={() =>
+                    onChange({
+                      ...normalizedOptions,
+                      [choice.key]: !normalizedOptions[choice.key],
+                    })
+                  }
+                />
+                <span>{choice.label}</span>
+              </label>
+            ))}
+          </div>
+          <div className="import-options-actions">
+            <button type="button" className="toolbar-secondary-action" onClick={onClose}>
+              Cancel
+            </button>
+            <button type="submit" className="toolbar-primary-action" disabled={nothingSelected || disabled}>
+              Go
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+  );
+}
+
 function LibraryPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -124,7 +251,15 @@ function LibraryPage() {
   const hideTimerRef = useRef();
   const preparingTimerRef = useRef();
   const [isImporting, setIsImporting] = useState(false);
+  const [importOptionsOpen, setImportOptionsOpen] = useState(false);
+  const [importOptions, setImportOptions] = useState(() => defaultImportOptionsForLibrary(library));
   const unresolvedCount = Number(notReadyCount) || 0;
+
+  useEffect(() => {
+    if (!importOptionsOpen) {
+      setImportOptions(defaultImportOptionsForLibrary(library));
+    }
+  }, [importOptionsOpen, library]);
 
   const showStatus = useCallback(({ percent = 0, label = '', errors = [], receipt = null, active = true }) => {
     clearTimeout(hideTimerRef.current);
@@ -176,7 +311,7 @@ function LibraryPage() {
     [folderModalItem, updateItem, handleCloseFolderModal, isImporting, showStatus, hideStatus, reload]
   );
 
-  const handleImportAll = useCallback(async () => {
+  const runImportAll = useCallback(async (requestedOptions = null) => {
     if (!library) return;
     const lib = library.trim();
     if (!lib) return;
@@ -189,21 +324,16 @@ function LibraryPage() {
       });
       return;
     }
-    const confirmed =
-      typeof window === 'undefined' ||
-      typeof window.confirm !== 'function' ||
-      window.confirm(
-        `Import all Plex artwork for ${lib}? Existing assets in mapped Kometa folders will be overwritten.`
-      );
-    if (!confirmed) {
-      showStatus({ active: true, percent: 0, label: 'Import canceled.', errors: [] });
+    const selectedOptions = normalizeImportOptionsForLibrary(lib, requestedOptions || {});
+    if (!hasImportSelection(selectedOptions)) {
+      showStatus({ active: true, percent: 0, label: 'No asset types selected.', errors: [] });
       hideStatus(2000);
       return;
     }
     setIsImporting(true);
     const lower = lib.toLowerCase();
     const isCollections = lower === 'collections';
-    const isTVLib = lower.includes('tv');
+    const isTVLib = isTelevisionLibraryName(lib);
     const failures = [];
     const receipt = createImportReceipt();
     let preparingLabelIndex = 0;
@@ -312,7 +442,7 @@ function LibraryPage() {
 
         try {
           if (isCollections) {
-            const result = await importCollectionAssets(lib, ratingKey, folderName);
+            const result = await importCollectionAssets(lib, ratingKey, folderName, selectedOptions);
             addImportResultToReceipt(receipt, result);
             collectResultFailures(failures, context, result);
           } else if (isTVLib || isShowItem(item, lib)) {
@@ -332,17 +462,28 @@ function LibraryPage() {
             }
             const showFolder = showData?.folderName || folderName;
             const seasonsMeta = Array.isArray(showData?.seasons) ? showData.seasons : [];
-            const showResult = await importShowPosterPreferShowEndpoint(lib, ratingKey, showFolder);
+            const showResult = await importShowPosterPreferShowEndpoint(lib, ratingKey, showFolder, selectedOptions);
             addImportResultToReceipt(receipt, showResult);
             collectResultFailures(failures, context, showResult);
-            const hasSeasonResults = Array.isArray(showResult.seasons) && showResult.seasons.length > 0;
-            if (!hasSeasonResults && seasonsMeta.length) {
-              const seasonResult = await importAllSeasons(lib, showFolder, seasonsMeta, ratingKey);
+            const wantsSeasonPosters = Boolean(selectedOptions.seasonPosters);
+            const wantsSeasonBackgrounds = Boolean(selectedOptions.seasonBackgrounds);
+            const hasSeasonPosterResults = Array.isArray(showResult.seasons) && showResult.seasons.length > 0;
+            const hasSeasonBackgroundResults =
+              Array.isArray(showResult.seasonBackgrounds) && showResult.seasonBackgrounds.length > 0;
+            const needsSeasonFallback =
+              seasonsMeta.length &&
+              ((wantsSeasonPosters && !hasSeasonPosterResults) ||
+                (wantsSeasonBackgrounds && !hasSeasonBackgroundResults));
+            if (needsSeasonFallback) {
+              const seasonResult = await importAllSeasons(lib, showFolder, seasonsMeta, ratingKey, {
+                posters: wantsSeasonPosters && !hasSeasonPosterResults,
+                backgrounds: wantsSeasonBackgrounds && !hasSeasonBackgroundResults,
+              });
               addImportResultToReceipt(receipt, seasonResult);
               collectResultFailures(failures, context, seasonResult);
             }
           } else {
-            const result = await importMovieAssets(lib, ratingKey, folderName);
+            const result = await importMovieAssets(lib, ratingKey, folderName, selectedOptions);
             addImportResultToReceipt(receipt, result);
             collectResultFailures(failures, context, result);
           }
@@ -391,6 +532,46 @@ function LibraryPage() {
     }
   }, [library, fetchAllForLibrary, query, notReadyOnly, reload, showStatus, hideStatus, unresolvedCount]);
 
+  const handleImportAll = useCallback(() => {
+    if (!library) return;
+    const lib = library.trim();
+    if (!lib) return;
+    if (unresolvedCount > 0) {
+      showStatus({
+        active: true,
+        percent: 0,
+        label: `Import blocked. Resolve or exclude ${unresolvedCount} not-ready item${unresolvedCount === 1 ? '' : 's'} first.`,
+        errors: [],
+      });
+      return;
+    }
+    setImportOptions(defaultImportOptionsForLibrary(lib));
+    setImportOptionsOpen(true);
+  }, [library, showStatus, unresolvedCount]);
+
+  const handleImportOptionsChange = useCallback((nextOptions) => {
+    setImportOptions(nextOptions);
+  }, []);
+
+  const handleCloseImportOptions = useCallback(() => {
+    setImportOptionsOpen(false);
+  }, []);
+
+  const handleStartSelectedImport = useCallback(
+    (selectedOptions) => {
+      const lib = (library || '').trim();
+      const normalizedOptions = normalizeImportOptionsForLibrary(lib, selectedOptions);
+      if (!hasImportSelection(normalizedOptions)) {
+        showStatus({ active: true, percent: 0, label: 'No asset types selected.', errors: [] });
+        hideStatus(2000);
+        return;
+      }
+      setImportOptionsOpen(false);
+      void runImportAll(normalizedOptions);
+    },
+    [hideStatus, library, runImportAll, showStatus]
+  );
+
   const handleScanMapping = useCallback(() => {
     if (!library) return;
     const lib = library.trim();
@@ -409,8 +590,8 @@ function LibraryPage() {
     : unresolvedCount > 0
       ? `Resolve or exclude ${unresolvedCount} not-ready item${unresolvedCount === 1 ? '' : 's'} before importing.`
       : normalizedLibrary.toLowerCase() === 'collections'
-        ? 'Import all collection posters/backgrounds from Plex into Kometa asset folders. Existing assets are overwritten.'
-        : 'Import all posters/backgrounds and TV season artwork from Plex into Kometa asset folders. Existing assets are overwritten.';
+        ? 'Choose collection posters/backgrounds to import from Plex into Kometa asset folders.'
+        : 'Choose which posters/backgrounds and TV season artwork to import from Plex into Kometa asset folders.';
 
   const notReadyButtonDisabled = !library || (Number(notReadyCount) || 0) <= 0;
   const scanDisabled = !library || loading;
@@ -515,6 +696,15 @@ function LibraryPage() {
         library={library}
         onClose={handleCloseFolderModal}
         onFolderAssigned={handleFolderAssigned}
+      />
+      <ImportOptionsDialog
+        isOpen={importOptionsOpen}
+        library={library}
+        options={importOptions}
+        disabled={isImporting}
+        onChange={handleImportOptionsChange}
+        onClose={handleCloseImportOptions}
+        onSubmit={handleStartSelectedImport}
       />
     </div>
   );

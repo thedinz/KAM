@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { render, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import LibraryPage from '../LibraryPage.jsx';
 import { useLibraryItemsContext } from '../../hooks/LibraryItemsProvider.jsx';
@@ -58,5 +58,42 @@ describe('LibraryPage', () => {
       expect(context.refreshNotReadyCount).toHaveBeenCalledWith('Movies');
     });
     expect(context.refreshNotReadyCount).toHaveBeenCalledTimes(1);
+  });
+
+  it('opens poster/background choices for movie libraries', () => {
+    mockLibraryContext({ notReadyCount: 0 });
+
+    render(
+      <MemoryRouter initialEntries={['/libraries?lib=Movies']}>
+        <LibraryPage />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /import assets/i }));
+
+    expect(screen.getByRole('dialog', { name: /import assets/i })).toBeInTheDocument();
+    expect(screen.getByLabelText('Posters')).toBeChecked();
+    expect(screen.getByLabelText('Backgrounds')).toBeChecked();
+  });
+
+  it('opens series and season choices for TV libraries', () => {
+    mockLibraryContext({
+      libraries: ['TV Series'],
+      library: 'TV Series',
+      notReadyCount: 0,
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/libraries?lib=TV%20Series']}>
+        <LibraryPage />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /import assets/i }));
+
+    expect(screen.getByLabelText('Series poster')).toBeChecked();
+    expect(screen.getByLabelText('Season posters')).toBeChecked();
+    expect(screen.getByLabelText('Series background')).toBeChecked();
+    expect(screen.getByLabelText('Season backgrounds')).toBeChecked();
   });
 });
