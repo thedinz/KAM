@@ -24,7 +24,6 @@ import {
   pushFailureEntry,
   summarizeImportResult,
 } from '../utils/importers.js';
-import { isCertainItemFolderMatch } from '../utils/mappingScan.js';
 
 const IMPORT_PREPARING_LABELS = [
   'Preparing import...',
@@ -369,17 +368,8 @@ function LibraryPage() {
       stopPreparingStatus();
       const readyItems = allItems.filter((item) => item?.assetReady !== false);
       const skipped = allItems.filter((item) => item?.assetReady === false);
-      const uncertain = isCollections
-        ? []
-        : readyItems.filter((item) => {
-            const folderName = item?.folderName || item?.folder || '';
-            return !isCertainItemFolderMatch(item, folderName);
-          });
-      const uncertainItems = new Set(uncertain);
-      const importable = uncertain.length
-        ? readyItems.filter((item) => !uncertainItems.has(item))
-        : readyItems;
-      receipt.skipped = skipped.length + uncertain.length;
+      const importable = readyItems;
+      receipt.skipped = skipped.length;
 
       skipped.forEach((skip) => {
         const ratingKey = skip?.ratingKey ?? skip?.key ?? skip?.id;
@@ -393,20 +383,6 @@ function LibraryPage() {
           isShow: isShowItem(skip, lib),
         };
         pushFailureEntry(failures, context, 'Item', 'Skipped (asset folder missing)');
-      });
-
-      uncertain.forEach((skip) => {
-        const ratingKey = skip?.ratingKey ?? skip?.key ?? skip?.id;
-        const context = {
-          library: lib,
-          title: skip?.title || skip?.name || '(Untitled)',
-          folder: skip?.folderName || skip?.folder || '',
-          ratingKey,
-          type: skip?.type || '',
-          year: skip?.year ?? null,
-          isShow: isShowItem(skip, lib),
-        };
-        pushFailureEntry(failures, context, 'Item', 'Skipped (folder match needs manual confirmation)');
       });
 
       if (!importable.length) {
@@ -429,7 +405,7 @@ function LibraryPage() {
 
       let processed = 0;
       const total = importable.length;
-      const skippedCount = skipped.length + uncertain.length;
+      const skippedCount = skipped.length;
       const skipSuffix = skippedCount
         ? ` (skipping ${skippedCount} item${skippedCount === 1 ? '' : 's'} needing attention)`
         : '';
