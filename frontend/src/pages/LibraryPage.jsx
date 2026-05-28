@@ -7,6 +7,11 @@ import ItemGrid from '../components/ItemGrid.jsx';
 import LibraryToolbar from '../components/LibraryToolbar.jsx';
 import { useLibraryItemsContext } from '../hooks/LibraryItemsProvider.jsx';
 import { responseErrorMessage, safeJson } from '../utils/api.js';
+import {
+  buildImportErrorsPath,
+  clearImportErrorReport,
+  saveImportErrorReport,
+} from '../utils/importErrors.js';
 import { isShowItem } from '../utils/items.js';
 import {
   addImportResultToReceipt,
@@ -377,19 +382,29 @@ function LibraryPage() {
       receipt.skipped = skipped.length + uncertain.length;
 
       skipped.forEach((skip) => {
+        const ratingKey = skip?.ratingKey ?? skip?.key ?? skip?.id;
         const context = {
           library: lib,
           title: skip?.title || skip?.name || '(Untitled)',
           folder: skip?.folderName || skip?.folder || skip?.name || skip?.title || '',
+          ratingKey,
+          type: skip?.type || '',
+          year: skip?.year ?? null,
+          isShow: isShowItem(skip, lib),
         };
         pushFailureEntry(failures, context, 'Item', 'Skipped (asset folder missing)');
       });
 
       uncertain.forEach((skip) => {
+        const ratingKey = skip?.ratingKey ?? skip?.key ?? skip?.id;
         const context = {
           library: lib,
           title: skip?.title || skip?.name || '(Untitled)',
           folder: skip?.folderName || skip?.folder || '',
+          ratingKey,
+          type: skip?.type || '',
+          year: skip?.year ?? null,
+          isShow: isShowItem(skip, lib),
         };
         pushFailureEntry(failures, context, 'Item', 'Skipped (folder match needs manual confirmation)');
       });
@@ -397,6 +412,7 @@ function LibraryPage() {
       if (!importable.length) {
         if (failures.length) {
           const count = failures.length;
+          saveImportErrorReport(lib, failures, receipt);
           showStatus({
             active: true,
             percent: 0,
@@ -438,7 +454,15 @@ function LibraryPage() {
           folderName = item?.folder || item?.name || item?.title || '';
         }
         const ratingKey = item?.ratingKey ?? item?.key ?? item?.id;
-        const context = { library: lib, title, folder: folderName };
+        const context = {
+          library: lib,
+          title,
+          folder: folderName,
+          ratingKey,
+          type: item?.type || '',
+          year: item?.year ?? null,
+          isShow: isShowItem(item, lib),
+        };
 
         try {
           if (isCollections) {
@@ -499,6 +523,7 @@ function LibraryPage() {
       receipt.failed = Math.max(receipt.failed, failures.length);
 
       if (failures.length) {
+        saveImportErrorReport(lib, failures, receipt);
         showStatus({
           active: true,
           percent: 100,
@@ -514,11 +539,13 @@ function LibraryPage() {
           errors: [],
           receipt: { ...receipt },
         });
+        clearImportErrorReport(lib);
       }
     } catch (err) {
       const message = `Import failed: ${err?.message || err}`;
       pushFailureEntry(failures, { library: lib, title: '', folder: '' }, 'Import', message);
       receipt.failed = Math.max(receipt.failed, failures.length);
+      saveImportErrorReport(lib, failures, receipt);
       showStatus({
         active: true,
         percent: 0,
@@ -571,6 +598,13 @@ function LibraryPage() {
     },
     [hideStatus, library, runImportAll, showStatus]
   );
+
+  const handleViewImportErrors = useCallback(() => {
+    const lib = (library || '').trim();
+    if (!lib || !Array.isArray(importState.errors) || !importState.errors.length) return;
+    saveImportErrorReport(lib, importState.errors, importState.receipt);
+    navigate(buildImportErrorsPath(lib));
+  }, [importState.errors, importState.receipt, library, navigate]);
 
   const handleScanMapping = useCallback(() => {
     if (!library) return;
@@ -631,6 +665,7 @@ function LibraryPage() {
               label={importState.label}
               errors={importState.errors}
               receipt={importState.receipt}
+              onViewErrors={handleViewImportErrors}
             />
           </LibraryToolbar>
           <Link className="settings-link" to="/settings" aria-label="Open settings">
