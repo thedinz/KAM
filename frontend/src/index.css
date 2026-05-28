@@ -786,6 +786,130 @@ a.btn:focus,
   font-weight: 600;
 }
 
+.import-errors-header {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+
+.import-errors-heading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.import-errors-heading h1 {
+  margin: 0;
+}
+
+.import-errors-heading p {
+  margin: 4px 0 0;
+  color: var(--muted);
+}
+
+.import-errors-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.import-errors-page {
+  padding: 16px;
+}
+
+.import-errors-summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  color: var(--muted);
+}
+
+.import-errors-empty {
+  margin-top: 16px;
+}
+
+.import-errors-empty h2 {
+  margin: 0 0 8px;
+}
+
+.import-errors-empty p {
+  margin: 0 0 12px;
+  color: var(--muted);
+}
+
+.import-errors-table {
+  margin-top: 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.import-errors-row {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.5fr) minmax(180px, 1fr) minmax(260px, 2fr) minmax(140px, auto);
+  gap: 10px;
+  align-items: center;
+  padding: 10px 12px;
+  border-top: 1px solid var(--border);
+}
+
+.import-errors-row:first-child {
+  border-top: 0;
+}
+
+.import-errors-row-header {
+  background: color-mix(in oklab, var(--card) 85%, var(--border));
+  font-weight: 600;
+}
+
+.import-errors-row.is-resolved {
+  color: var(--muted);
+}
+
+.import-errors-media,
+.import-errors-message {
+  display: grid;
+  gap: 3px;
+}
+
+.import-errors-media span,
+.import-errors-message span:first-child {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.import-errors-action {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.import-errors-action button,
+.import-errors-action .btn-secondary {
+  min-height: 36px;
+}
+
+@media (max-width: 860px) {
+  .import-errors-row {
+    grid-template-columns: 1fr;
+    align-items: start;
+  }
+
+  .import-errors-row-header {
+    display: none;
+  }
+
+  .import-errors-action {
+    justify-content: flex-start;
+  }
+}
+
 main {
   min-height: 0;
 }

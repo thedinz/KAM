@@ -28,6 +28,10 @@ export function pushFailureEntry(list, context, asset, message) {
     library: context?.library || '',
     title: context?.title || '',
     folder: context?.folder || '',
+    ratingKey: context?.ratingKey ?? context?.key ?? context?.id ?? null,
+    type: context?.type || '',
+    year: context?.year ?? null,
+    isShow: context?.isShow === true,
     asset,
     message: message || 'Unknown error',
   });

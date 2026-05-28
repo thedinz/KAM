@@ -21,6 +21,7 @@ function ImportStatusPanel({
   errorHeading = 'Import Errors',
   errorNoun = 'import error',
   modalId = 'importErrorsDialog',
+  onViewErrors = null,
 }) {
   const formattedErrors = useMemo(() => {
     if (!Array.isArray(errors)) return [];
@@ -57,6 +58,15 @@ function ImportStatusPanel({
       setModalOpen(true);
     }
   }, [hasErrors]);
+
+  const handleViewErrors = useCallback(() => {
+    if (!hasErrors) return;
+    if (onViewErrors) {
+      onViewErrors();
+      return;
+    }
+    openModal();
+  }, [hasErrors, onViewErrors, openModal]);
 
   const handleBackdropClick = useCallback(
     (event) => {
@@ -120,15 +130,15 @@ function ImportStatusPanel({
         <button
           type="button"
           className="error-trigger"
-          onClick={openModal}
-          aria-haspopup="dialog"
-          aria-expanded={isModalOpen}
-          aria-controls={modalId}
+          onClick={handleViewErrors}
+          aria-haspopup={onViewErrors ? undefined : 'dialog'}
+          aria-expanded={onViewErrors ? undefined : isModalOpen}
+          aria-controls={onViewErrors ? undefined : modalId}
         >
           View {errorCountLabel}
         </button>
       ) : null}
-      {hasErrors && isModalOpen ? (
+      {hasErrors && isModalOpen && !onViewErrors ? (
         <div className="dialog-backdrop" role="presentation" onClick={handleBackdropClick}>
           <div
             className="dialog-panel error-dlg"
