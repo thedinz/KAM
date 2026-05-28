@@ -2,6 +2,7 @@ import { BrowserRouter, Navigate, Outlet, Route, Routes } from 'react-router-dom
 import BrandLockup from './components/BrandLockup.jsx';
 import LoginPage from './pages/LoginPage.jsx';
 import CollectionDetailPage from './pages/CollectionDetailPage.jsx';
+import ImportErrorsPage from './pages/ImportErrorsPage.jsx';
 import LibraryPage from './pages/LibraryPage.jsx';
 import MovieDetailPage from './pages/MovieDetailPage.jsx';
 import MappingScanPage from './pages/MappingScanPage.jsx';
@@ -60,6 +61,7 @@ function App() {
                     <Route path="/" element={<Navigate to="/libraries" replace />} />
                     <Route path="/libraries" element={<LibraryPage />} />
                     <Route path="/libraries/:library" element={<LibraryPage />} />
+                    <Route path="/libraries/:library/import-errors" element={<ImportErrorsPage />} />
                     <Route path="/libraries/:library/not-ready" element={<NotReadyPage />} />
                     <Route path="/libraries/:library/mapping" element={<MappingScanPage />} />
                     <Route path="/libraries/:library/movies/:ratingKey" element={<MovieDetailPage />} />
