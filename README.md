@@ -157,6 +157,7 @@ services:
     environment:
       KAM_ASSETS_ROOT: /assets
       COLLECTIONS_ROOT: /assets/Collections
+      PLEX_VERIFY_SSL: "true"
     volumes:
       - /mnt/user/appdata/kam:/config
       - /mnt/user/media/assets:/assets
@@ -169,29 +170,23 @@ Bring it up:
 docker compose up -d
 ```
 
-Optional environment variables:
+Set `PLEX_VERIFY_SSL=false` if your Plex server uses a self-signed certificate and you need KAM to skip TLS verification when contacting Plex.
 
-Sample .env
-```dotenv
-# Example environment file for KAM
-# Copy to .env and edit values before running
+### Migrating older Compose installs
 
-# Main assets root inside the container
-KAM_ASSETS_ROOT=/assets
+Older Compose examples used `env_file: .env`. That still works because Docker passes
+those values into KAM as normal environment variables.
 
-# Shared collection artwork root
-COLLECTIONS_ROOT=/assets/Collections
+To remove the extra file, copy any values you still use from `.env` into the
+`environment:` block shown above, remove the `env_file:` block from your Compose
+file, then run:
 
-# Plex server certificate handling (set to "false" for self-signed HTTPS)
-PLEX_VERIFY_SSL=true
-
-# Optional auth overrides. The Settings UI can manage these instead.
-# KAM_AUTH_MODE=builtin
-# KAM_AUTH_PASSWORD=change-me
-# KAM_AUTH_MODE=reverse_proxy
+```bash
+docker compose up -d
 ```
 
-Set `PLEX_VERIFY_SSL=false` if your Plex server uses a self-signed certificate and you need KAM to skip TLS verification when contacting Plex.
+After the container starts with the inline values, the old `.env` file is no longer
+needed.
 
 ---
 
@@ -241,7 +236,8 @@ from another browser tab.
 Kometa Asset Manager can now be found in the Unraid app store. Mount both your Kometa
 asset directory **and** a persistent config directory (e.g., `/mnt/user/appdata/kam ->
 /config`), set `KAM_ASSETS_ROOT` and `COLLECTIONS_ROOT` to match the container paths,
-edit the template variables, and GO!
+set `PLEX_VERIFY_SSL=false` only if your Plex server uses a self-signed HTTPS
+certificate, edit the template variables, and GO!
 
 ---
 

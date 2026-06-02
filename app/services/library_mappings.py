@@ -290,7 +290,12 @@ def get_asset_path(library: str) -> Optional[str]:
 
 
 def _default_collections_root() -> Optional[str]:
-    return None
+    env_root = _normalize_env_path(os.environ.get("COLLECTIONS_ROOT"))
+    if env_root:
+        return env_root
+
+    assets_root = _EXPECTED_ASSETS_ROOT or "/assets"
+    return _normalize_env_path(os.path.join(assets_root, "Collections"))
 
 
 def _section_override_path(entry: Dict[str, Any], library: str) -> Optional[str]:
