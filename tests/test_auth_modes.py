@@ -82,3 +82,20 @@ def test_auth_mode_env_overrides_saved_mode(auth_modules, monkeypatch):
 
     assert auth_service.auth_mode() == "reverse_proxy"
     assert auth_service.is_enabled() is False
+
+
+def test_blank_cookie_secure_env_keeps_auto_detection(auth_modules, monkeypatch):
+    _, auth_service, _ = auth_modules
+    request = SimpleNamespace(
+        headers={"x-forwarded-proto": "https"},
+        url=SimpleNamespace(scheme="http"),
+    )
+
+    monkeypatch.setenv("KAM_AUTH_COOKIE_SECURE", "")
+    assert auth_service.cookie_secure(request) is True
+
+    monkeypatch.setenv("KAM_AUTH_COOKIE_SECURE", "auto")
+    assert auth_service.cookie_secure(request) is True
+
+    monkeypatch.setenv("KAM_AUTH_COOKIE_SECURE", "false")
+    assert auth_service.cookie_secure(request) is False

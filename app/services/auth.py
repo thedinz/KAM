@@ -91,7 +91,9 @@ def token_ttl_seconds() -> int:
 def cookie_secure(request: Request) -> bool:
     raw = os.getenv(_COOKIE_SECURE_ENV)
     if raw is not None:
-        return raw.strip().lower() in {"1", "true", "yes", "on"}
+        normalized = raw.strip().lower()
+        if normalized and normalized != "auto":
+            return normalized in {"1", "true", "yes", "on"}
     forwarded_proto = request.headers.get("x-forwarded-proto")
     if forwarded_proto:
         return forwarded_proto.split(",")[0].strip().lower() == "https"

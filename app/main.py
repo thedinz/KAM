@@ -98,13 +98,15 @@ async def enforce_auth(request: Request, call_next):
         return RedirectResponse(url="/login")
     return JSONResponse(status_code=401, content={"detail": "Unauthorized"})
 
-# ---- SAFE assets mount (env-driven) ----
-# Prefer explicit envs if you set them; otherwise infer from COLLECTIONS_ROOT.
+# ---- SAFE assets mount ----
+# Prefer explicit envs if you set them; otherwise infer from COLLECTIONS_ROOT
+# or use the standard container mount.
 ASSETS_ROOT = os.getenv("KAM_ASSETS_ROOT") or os.getenv("ASSETS_ROOT")
 if not ASSETS_ROOT:
     cr = os.getenv("COLLECTIONS_ROOT")
     if cr:
         ASSETS_ROOT = os.path.dirname(cr)
+ASSETS_ROOT = ASSETS_ROOT or "/assets"
 
 if ASSETS_ROOT and os.path.isdir(ASSETS_ROOT):
     # Serve files at the URL path /assets (matches your .env paths)
