@@ -17,8 +17,11 @@ from urllib.parse import quote
 
 router = APIRouter()
 
-# Container paths (must match your docker-compose volume mounts)
-ASSETS_ROOT = os.environ.get("KAM_ASSETS_ROOT") or os.environ.get("ASSETS_ROOT") or ""
+# Container paths (must match your docker-compose/Unraid volume mounts)
+ASSETS_ROOT = os.environ.get("KAM_ASSETS_ROOT") or os.environ.get("ASSETS_ROOT")
+if not ASSETS_ROOT:
+    collections_root = os.environ.get("COLLECTIONS_ROOT")
+    ASSETS_ROOT = os.path.dirname(collections_root) if collections_root else "/assets"
 
 # Try lots of common names (Kometa variants differ)
 LOCAL_FILENAMES = (
