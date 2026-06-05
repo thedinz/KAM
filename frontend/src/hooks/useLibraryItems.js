@@ -74,6 +74,7 @@ export function useLibraryItems({ initialLibrary, enabled = true } = {}) {
   const [sortMode, setSortModeState] = useState('title');
   const [notReadyOnly, setNotReadyOnlyState] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [notReadyCountLoading, setNotReadyCountLoading] = useState(false);
   const [error, setError] = useState(null);
 
   const fetchAbort = useRef(null);
@@ -146,6 +147,9 @@ export function useLibraryItems({ initialLibrary, enabled = true } = {}) {
       if (notReady) {
         params.set('not_ready_only', 'true');
       }
+      if (!notReady) {
+        params.set('include_counts', 'false');
+      }
 
       if (fetchAbort.current) {
         fetchAbort.current.abort();
@@ -165,7 +169,10 @@ export function useLibraryItems({ initialLibrary, enabled = true } = {}) {
         setRawItems(Array.isArray(data?.items) ? data.items : []);
         setTotalPages(data?.total_pages || 1);
         setTotalCount(data?.total_count || (Array.isArray(data?.items) ? data.items.length : 0));
-        setNotReadyCount(data?.not_ready_count || 0);
+        if (typeof data?.not_ready_count === 'number') {
+          setNotReadyCount(data.not_ready_count);
+          setNotReadyCountLoading(false);
+        }
       } catch (err) {
         if (err.name === 'AbortError') return;
         setRawItems([]);
@@ -199,6 +206,8 @@ export function useLibraryItems({ initialLibrary, enabled = true } = {}) {
 
   const changeLibrary = useCallback((next) => {
     setPage(1);
+    setNotReadyCount(0);
+    setNotReadyCountLoading(Boolean(next));
     setLibrary(next);
   }, []);
 
@@ -267,7 +276,14 @@ export function useLibraryItems({ initialLibrary, enabled = true } = {}) {
   const refreshNotReadyCount = useCallback(
     async (targetLibrary) => {
       const lib = targetLibrary ?? library;
-      if (!lib) return 0;
+      if (!lib) {
+        setNotReadyCountLoading(false);
+        return 0;
+      }
+      if (!canFetch) {
+        setNotReadyCountLoading(false);
+        return notReadyCount;
+      }
       const normalized = lib.trim().toLowerCase();
       const base = normalized === 'collections' ? '/collections' : '/api/items';
       const params = new URLSearchParams();
@@ -276,6 +292,8 @@ export function useLibraryItems({ initialLibrary, enabled = true } = {}) {
       }
       params.set('page', '1');
       params.set('page_size', '1');
+      params.set('counts_only', 'true');
+      setNotReadyCountLoading(true);
       try {
         const response = await fetch(`${base}?${params.toString()}`);
         const data = await safeJson(response);
@@ -294,9 +312,11 @@ export function useLibraryItems({ initialLibrary, enabled = true } = {}) {
       } catch (err) {
         console.warn('Failed to refresh not-ready count', err);
         return notReadyCount;
+      } finally {
+        setNotReadyCountLoading(false);
       }
     },
-    [library, notReadyCount]
+    [canFetch, library, notReadyCount]
   );
 
   const fetchAllForLibrary = useCallback(
@@ -423,6 +443,7 @@ export function useLibraryItems({ initialLibrary, enabled = true } = {}) {
       totalPages,
       totalCount,
       notReadyCount,
+      notReadyCountLoading,
       items: filteredItems,
       query,
       setQuery: changeQuery,
@@ -448,6 +469,7 @@ export function useLibraryItems({ initialLibrary, enabled = true } = {}) {
       totalPages,
       totalCount,
       notReadyCount,
+      notReadyCountLoading,
       filteredItems,
       query,
       changeQuery,

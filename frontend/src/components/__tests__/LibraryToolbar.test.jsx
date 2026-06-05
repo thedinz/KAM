@@ -45,4 +45,15 @@ describe('LibraryToolbar', () => {
 
     expect(screen.getByLabelText('Sort library items')).toHaveValue('title');
   });
+
+  it('shows when the not-ready count is still loading', () => {
+    renderToolbar({
+      onViewNotReady: vi.fn(),
+      notReadyLoading: true,
+      notReadyCount: 0,
+    });
+
+    expect(screen.getByRole('button', { name: /Not Ready/i })).toBeDisabled();
+    expect(screen.getByLabelText('Checking not-ready items')).toHaveTextContent('...');
+  });
 });
