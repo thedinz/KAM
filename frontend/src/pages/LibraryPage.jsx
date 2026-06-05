@@ -174,6 +174,7 @@ function LibraryPage() {
     totalPages,
     totalCount,
     notReadyCount,
+    notReadyCountLoading,
     items,
     query,
     setQuery,
@@ -597,13 +598,15 @@ function LibraryPage() {
   const normalizedLibrary = (library || '').trim();
   const importTooltip = !normalizedLibrary
     ? 'Choose a library first.'
+    : notReadyCountLoading
+      ? 'Checking not-ready items before import is available.'
     : unresolvedCount > 0
       ? `Resolve or exclude ${unresolvedCount} not-ready item${unresolvedCount === 1 ? '' : 's'} before importing.`
       : normalizedLibrary.toLowerCase() === 'collections'
         ? 'Choose collection posters/backgrounds to import from Plex into Kometa asset folders.'
         : 'Choose which posters/backgrounds and TV season artwork to import from Plex into Kometa asset folders.';
 
-  const notReadyButtonDisabled = !library || (Number(notReadyCount) || 0) <= 0;
+  const notReadyButtonDisabled = !library || notReadyCountLoading || (Number(notReadyCount) || 0) <= 0;
   const scanDisabled = !library || loading;
   const scanTitle = library
     ? 'Scan the mapped asset folders and Plex library to find missing matches.'
@@ -625,7 +628,7 @@ function LibraryPage() {
             sortValue={sortMode}
             onSortChange={setSortMode}
             onImportAll={handleImportAll}
-            importDisabled={!library || isImporting || loading || unresolvedCount > 0}
+            importDisabled={!library || isImporting || loading || notReadyCountLoading || unresolvedCount > 0}
             importTitle={importTooltip}
             onScanMapping={handleScanMapping}
             scanDisabled={scanDisabled}
@@ -633,6 +636,7 @@ function LibraryPage() {
             countLabel={countLabel}
             onViewNotReady={handleViewNotReady}
             notReadyCount={notReadyCount}
+            notReadyLoading={notReadyCountLoading}
             notReadyDisabled={notReadyButtonDisabled}
           >
             <ImportStatusPanel

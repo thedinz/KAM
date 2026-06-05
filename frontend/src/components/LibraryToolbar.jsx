@@ -16,14 +16,17 @@ function LibraryToolbar({
   notReadyControl,
   onViewNotReady = null,
   notReadyCount = 0,
+  notReadyLoading = false,
   notReadyDisabled = false,
   children,
 }) {
   const showNotReadyButton = typeof onViewNotReady === 'function';
   const showSortControl = typeof onSortChange === 'function';
   const notReadyDisplay = Number(notReadyCount) || 0;
-  const disableNotReady = Boolean(notReadyDisabled) || notReadyDisplay <= 0;
-  const notReadyTitle = disableNotReady
+  const disableNotReady = Boolean(notReadyDisabled) || Boolean(notReadyLoading) || notReadyDisplay <= 0;
+  const notReadyTitle = notReadyLoading
+    ? 'Checking not-ready items...'
+    : disableNotReady
     ? 'No not-ready items to review yet.'
     : 'Show only items missing asset folders.';
 
@@ -102,9 +105,13 @@ function LibraryToolbar({
               Not Ready
               <span
                 className="badge"
-                aria-label={`${notReadyDisplay.toLocaleString()} not-ready items`}
+                aria-label={
+                  notReadyLoading
+                    ? 'Checking not-ready items'
+                    : `${notReadyDisplay.toLocaleString()} not-ready items`
+                }
               >
-                {notReadyDisplay.toLocaleString()}
+                {notReadyLoading ? '...' : notReadyDisplay.toLocaleString()}
               </span>
             </button>
           ) : null}
