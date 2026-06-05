@@ -76,6 +76,7 @@ function SettingsPage() {
   const [healthReport, setHealthReport] = useState(null);
   const [healthLoading, setHealthLoading] = useState(false);
   const [healthError, setHealthError] = useState('');
+  const autoRefreshLibrariesKeyRef = useRef('');
   const selectAllRef = useRef(null);
   const previousLoadingFlagsRef = useRef({
     loading,
@@ -202,6 +203,20 @@ function SettingsPage() {
   useEffect(() => {
     void refreshHealth();
   }, [refreshHealth]);
+
+  useEffect(() => {
+    const savedCredentialsKey =
+      savedPlexUrl && savedPlexToken ? `${savedPlexUrl}::${savedPlexToken}` : '';
+    if (!savedCredentialsKey) {
+      autoRefreshLibrariesKeyRef.current = '';
+      return;
+    }
+    if (autoRefreshLibrariesKeyRef.current === savedCredentialsKey) {
+      return;
+    }
+    autoRefreshLibrariesKeyRef.current = savedCredentialsKey;
+    refreshLibraries().catch(() => {});
+  }, [savedPlexUrl, savedPlexToken, refreshLibraries]);
 
   const includingSet = useMemo(() => new Set(includingKeys), [includingKeys]);
 
