@@ -15,6 +15,7 @@ router = APIRouter()
 # exposes music libraries with types like "artist"/"audio" which KAM cannot
 # currently map.
 IGNORED_SECTION_TYPES = {"artist", "audio"}
+COLLECTIONS_LIBRARY_NAME = "Collections"
 
 
 def _is_supported_section(section_type: Optional[str]) -> bool:
@@ -50,6 +51,11 @@ def _ensure_any_mapped() -> Dict[str, str]:
     return mapping
 
 
+def _library_sort_key(name: str) -> tuple[bool, str]:
+    normalized = str(name or "").strip()
+    return (normalized.casefold() == COLLECTIONS_LIBRARY_NAME.casefold(), normalized.casefold())
+
+
 # --- Endpoints ---------------------------------------------------------------
 
 @router.get("/api/libraries", response_model=List[str])
@@ -59,12 +65,11 @@ def get_libraries() -> List[str]:
     This prevents showing unsupported sections like Music, etc.
     """
     mapping = _ensure_any_mapped()
-    names = sorted(mapping.keys())
+    names = sorted(mapping.keys(), key=_library_sort_key)
     # Surface "Collections" when any per-library collections path exists.
     collections_root = library_mappings_service.get_collections_path()
-    if collections_root and "Collections" not in names:
-        names.append("Collections")
-        names.sort()
+    if collections_root and COLLECTIONS_LIBRARY_NAME not in names:
+        names.append(COLLECTIONS_LIBRARY_NAME)
     return names
 
 
