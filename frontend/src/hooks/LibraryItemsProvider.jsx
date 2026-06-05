@@ -4,11 +4,21 @@ import { useLibraryItems } from './useLibraryItems.js';
 
 const LibraryItemsContext = createContext(null);
 
+function shouldLoadLibraryGrid(pathname) {
+  const path = String(pathname || '').replace(/\/+$/, '') || '/';
+  if (path === '/libraries') return true;
+  const segments = path.split('/').filter(Boolean);
+  return segments.length === 2 && segments[0] === 'libraries';
+}
+
 export function LibraryItemsProvider({ children }) {
   const location = useLocation();
   const searchParams = new URLSearchParams(location.search);
   const initialLibrary = searchParams.get('lib') || undefined;
-  const value = useLibraryItems({ initialLibrary });
+  const value = useLibraryItems({
+    initialLibrary,
+    enabled: shouldLoadLibraryGrid(location.pathname),
+  });
 
   return <LibraryItemsContext.Provider value={value}>{children}</LibraryItemsContext.Provider>;
 }

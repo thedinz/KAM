@@ -574,11 +574,6 @@ export function ThemeProvider({ children }) {
 
   useEffect(() => {
     if (!canFetch) return;
-    refreshLibraries().catch(() => {});
-  }, [canFetch, refreshLibraries]);
-
-  useEffect(() => {
-    if (!canFetch) return;
     refreshExclusions().catch(() => {});
   }, [canFetch, refreshExclusions]);
 
