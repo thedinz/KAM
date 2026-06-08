@@ -84,7 +84,7 @@ async def enforce_auth(request: Request, call_next):
 
     path = request.url.path
     exempt_prefixes = ("/spa-assets", "/assets", "/auth/")
-    exempt_exact = {"/login", "/favicon.ico"}
+    exempt_exact = {"/login", "/favicon.ico", "/favicon.svg"}
 
     if path in exempt_exact or path.startswith(exempt_prefixes):
         return await call_next(request)
