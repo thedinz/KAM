@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import ArtworkCard from '../components/ArtworkCard.jsx';
 import { useLibraryItemsContext } from '../hooks/LibraryItemsProvider.jsx';
@@ -21,6 +21,14 @@ function seasonOperationKey(index, kind) {
   return `${String(index)}:${kind === 'background' ? 'background' : 'poster'}`;
 }
 
+function titleCardOperationKey(seasonIndex, episodeIndex) {
+  return `${String(seasonIndex)}:${String(episodeIndex)}:title-card`;
+}
+
+function episodeCode(seasonIndex, episodeIndex) {
+  return `S${String(seasonIndex).padStart(2, '0')}E${String(episodeIndex).padStart(2, '0')}`;
+}
+
 function ShowDetailPage() {
   const params = useParams();
   const [searchParams] = useSearchParams();
@@ -39,17 +47,28 @@ function ShowDetailPage() {
   const [operations, setOperations] = useState({
     poster: createOperation(),
     background: createOperation(),
+    mediux: createOperation(),
     seasons: {},
+    titleCards: {},
   });
+  const [expandedSeasons, setExpandedSeasons] = useState(() => new Set());
   const [exclusionPending, setExclusionPending] = useState(false);
 
   const backgroundInputRef = useRef(null);
+  const mediuxZipInputRef = useRef(null);
 
   useEffect(() => {
     setDetail(null);
     setError(null);
     setStatusMessage('');
-    setOperations({ poster: createOperation(), background: createOperation(), seasons: {} });
+    setOperations({
+      poster: createOperation(),
+      background: createOperation(),
+      mediux: createOperation(),
+      seasons: {},
+      titleCards: {},
+    });
+    setExpandedSeasons(new Set());
   }, [library, ratingKey]);
 
   const updateOperation = useCallback((kind, nextState) => {
@@ -90,6 +109,27 @@ function ShowDetailPage() {
     });
   }, []);
 
+  const updateTitleCardOperation = useCallback((seasonIndex, episodeIndex, nextState) => {
+    const key = titleCardOperationKey(seasonIndex, episodeIndex);
+    setOperations((prev) => {
+      const current = prev.titleCards?.[key] ?? createOperation();
+      const next = typeof nextState === 'function' ? nextState(current) : nextState;
+      if (
+        current.uploading === next.uploading &&
+        current.importing === next.importing &&
+        current.success === next.success &&
+        current.error === next.error &&
+        current.lastAction === next.lastAction
+      ) {
+        return prev;
+      }
+      return {
+        ...prev,
+        titleCards: { ...prev.titleCards, [key]: next },
+      };
+    });
+  }, []);
+
   const fetchDetails = useCallback(async () => {
     if (!library || !ratingKey) {
       setError('Missing library or rating key.');
@@ -125,7 +165,9 @@ function ShowDetailPage() {
       });
       setOperations((prev) => {
         const seasonsMap = { ...(prev.seasons || {}) };
+        const titleCardsMap = { ...(prev.titleCards || {}) };
         const nextKeys = new Set();
+        const nextTitleCardKeys = new Set();
         (Array.isArray(data?.seasons) ? data.seasons : []).forEach((season) => {
           const key = season?.index != null ? seasonOperationKey(season.index, 'poster') : null;
           const backgroundKey = season?.index != null ? seasonOperationKey(season.index, 'background') : null;
@@ -138,16 +180,30 @@ function ShowDetailPage() {
           if (!seasonsMap[backgroundKey]) {
             seasonsMap[backgroundKey] = createOperation();
           }
+          (Array.isArray(season?.episodes) ? season.episodes : []).forEach((episode) => {
+            if (episode?.index == null) return;
+            const titleCardKey = titleCardOperationKey(season.index, episode.index);
+            nextTitleCardKeys.add(titleCardKey);
+            if (!titleCardsMap[titleCardKey]) {
+              titleCardsMap[titleCardKey] = createOperation();
+            }
+          });
         });
         Object.keys(seasonsMap).forEach((key) => {
           if (!nextKeys.has(key)) {
             delete seasonsMap[key];
           }
         });
+        Object.keys(titleCardsMap).forEach((key) => {
+          if (!nextTitleCardKeys.has(key)) {
+            delete titleCardsMap[key];
+          }
+        });
         return {
           poster: prev.poster ?? createOperation(),
           background: prev.background ?? createOperation(),
           seasons: seasonsMap,
+          titleCards: titleCardsMap,
         };
       });
     } catch (err) {
@@ -186,6 +242,9 @@ function ShowDetailPage() {
     if (!folderExists && backgroundInputRef.current) {
       backgroundInputRef.current.value = '';
     }
+    if (!folderExists && mediuxZipInputRef.current) {
+      mediuxZipInputRef.current.value = '';
+    }
   }, [folderExists]);
 
   const showPosterExists = useMemo(() => {
@@ -205,6 +264,9 @@ function ShowDetailPage() {
   const backgroundUploading = Boolean(backgroundOperation.uploading);
   const backgroundImporting = Boolean(backgroundOperation.importing);
   const backgroundBusy = backgroundUploading || backgroundImporting;
+  const mediuxOperation = operations.mediux ?? createOperation();
+  const mediuxImporting = Boolean(mediuxOperation.importing);
+  const mediuxBusy = Boolean(mediuxOperation.uploading || mediuxOperation.importing);
   const backgroundStatus = (() => {
     if (backgroundOperation.error) {
       return { text: backgroundOperation.error, className: 'status-text error' };
@@ -241,6 +303,34 @@ function ShowDetailPage() {
         const backgroundExists = typeof season.backgroundExists === 'boolean'
           ? season.backgroundExists
           : Boolean(backgroundUrl && backgroundUrl.startsWith('/fileproxy'));
+        const episodes = (Array.isArray(season.episodes) ? season.episodes : [])
+          .filter((episode) => episode && episode.index != null)
+          .map((episode) => {
+            const episodeIndex = episode.index;
+            const episodeTitle = episode.title || `Episode ${String(episodeIndex).padStart(2, '0')}`;
+            const titleCardUrl = episode.titleCardUrl || episode.posterUrl || episode.url || null;
+            const plexTitleCardUrl = episode.plexTitleCardUrl || episode.plexPosterUrl || episode.urlPlex || null;
+            const titleCardExists = typeof episode.titleCardExists === 'boolean'
+              ? episode.titleCardExists
+              : typeof episode.exists === 'boolean'
+                ? episode.exists
+                : Boolean(titleCardUrl && titleCardUrl.startsWith('/fileproxy'));
+            return {
+              index: episodeIndex,
+              seasonIndex: episode.seasonIndex ?? idx,
+              title: episodeTitle,
+              ratingKey: episode.ratingKey != null ? String(episode.ratingKey) : '',
+              titleCardUrl,
+              plexTitleCardUrl,
+              titleCardExists,
+            };
+          })
+          .sort((a, b) => {
+            if (a.index === b.index) {
+              return a.title.localeCompare(b.title, undefined, { numeric: true, sensitivity: 'base' });
+            }
+            return a.index - b.index;
+          });
         return {
           index: idx,
           title,
@@ -250,6 +340,7 @@ function ShowDetailPage() {
           backgroundUrl,
           plexBackgroundUrl,
           backgroundExists,
+          episodes,
         };
       });
 
@@ -262,6 +353,18 @@ function ShowDetailPage() {
 
     return normalized;
   }, [detail]);
+
+  const toggleSeasonExpanded = useCallback((index) => {
+    setExpandedSeasons((prev) => {
+      const next = new Set(prev);
+      if (next.has(index)) {
+        next.delete(index);
+      } else {
+        next.add(index);
+      }
+      return next;
+    });
+  }, []);
 
   const handleShowUpload = useCallback(
     async (kind, file) => {
@@ -493,6 +596,183 @@ function ShowDetailPage() {
     [folderExists, library, folderName, effectiveRatingKey, fetchDetails, updateSeasonOperation]
   );
 
+  const handleTitleCardUpload = useCallback(
+    async (seasonIndex, episodeIndex, file) => {
+      if (!folderExists) {
+        setStatusMessage(MISSING_FOLDER_MESSAGE);
+        throw new Error(MISSING_FOLDER_MESSAGE);
+      }
+      const seasonIdx = Number(seasonIndex);
+      const episodeIdx = Number(episodeIndex);
+      updateTitleCardOperation(seasonIdx, episodeIdx, {
+        uploading: true,
+        importing: false,
+        success: false,
+        error: null,
+        lastAction: 'upload',
+      });
+      setStatusMessage(`Uploading ${episodeCode(seasonIdx, episodeIdx)} title card…`);
+
+      const form = new FormData();
+      form.append('library', library);
+      if (folderName) form.append('folderName', folderName);
+      form.append('season', String(seasonIdx));
+      form.append('episode', String(episodeIdx));
+      form.append('file', file);
+
+      try {
+        const response = await fetch('/api/upload_title_card', { method: 'POST', body: form });
+        const data = await safeJson(response);
+        if (!response.ok) {
+          throw new Error(responseErrorMessage(response, data));
+        }
+        updateTitleCardOperation(seasonIdx, episodeIdx, {
+          uploading: false,
+          importing: false,
+          success: true,
+          error: null,
+          lastAction: 'upload',
+        });
+        setStatusMessage('Upload complete.');
+        await fetchDetails();
+      } catch (err) {
+        const message = err?.message || String(err);
+        updateTitleCardOperation(seasonIdx, episodeIdx, {
+          uploading: false,
+          importing: false,
+          success: false,
+          error: message,
+          lastAction: 'upload',
+        });
+        setStatusMessage(message);
+        throw err;
+      }
+    },
+    [folderExists, library, folderName, fetchDetails, updateTitleCardOperation]
+  );
+
+  const handleTitleCardImport = useCallback(
+    async (seasonIndex, episode) => {
+      if (!folderExists) {
+        setStatusMessage(MISSING_FOLDER_MESSAGE);
+        return;
+      }
+      const seasonIdx = Number(seasonIndex);
+      const episodeIdx = Number(episode?.index);
+      updateTitleCardOperation(seasonIdx, episodeIdx, {
+        uploading: false,
+        importing: true,
+        success: false,
+        error: null,
+        lastAction: 'import',
+      });
+      setStatusMessage(`Importing ${episodeCode(seasonIdx, episodeIdx)} title card…`);
+
+      const form = new FormData();
+      form.append('library', library);
+      if (folderName) form.append('folderName', folderName);
+      form.append('season', String(seasonIdx));
+      form.append('episode', String(episodeIdx));
+      if (episode?.ratingKey) form.append('ratingKey', episode.ratingKey);
+      if (episode?.plexTitleCardUrl) form.append('url', episode.plexTitleCardUrl);
+
+      try {
+        const response = await fetch('/api/import/title-card', { method: 'POST', body: form });
+        const data = await safeJson(response);
+        if (!response.ok || !(data && (data.ok || data.path || data.src))) {
+          throw new Error(responseErrorMessage(response, data));
+        }
+        updateTitleCardOperation(seasonIdx, episodeIdx, {
+          uploading: false,
+          importing: false,
+          success: true,
+          error: null,
+          lastAction: 'import',
+        });
+        setStatusMessage('Import complete.');
+        await fetchDetails();
+      } catch (err) {
+        const message = err?.message || String(err);
+        updateTitleCardOperation(seasonIdx, episodeIdx, {
+          uploading: false,
+          importing: false,
+          success: false,
+          error: message,
+          lastAction: 'import',
+        });
+        setStatusMessage(message);
+      }
+    },
+    [folderExists, library, folderName, fetchDetails, updateTitleCardOperation]
+  );
+
+  const handleMediuxZipImport = useCallback(
+    async (file) => {
+      if (!folderExists) {
+        setStatusMessage(MISSING_FOLDER_MESSAGE);
+        throw new Error(MISSING_FOLDER_MESSAGE);
+      }
+
+      updateOperation('mediux', {
+        uploading: false,
+        importing: true,
+        success: false,
+        error: null,
+        lastAction: 'import',
+      });
+      setStatusMessage('Importing Mediux zip…');
+
+      const form = new FormData();
+      form.append('library', library);
+      if (folderName) form.append('folderName', folderName);
+      form.append('file', file);
+
+      try {
+        const response = await fetch('/api/import/mediux-zip', { method: 'POST', body: form });
+        const data = await safeJson(response);
+        if (!response.ok) {
+          throw new Error(responseErrorMessage(response, data));
+        }
+
+        const importedCount = Number(data?.importedCount ?? data?.imported?.length ?? 0);
+        const replacedCount = Number(data?.replacedCount ?? 0);
+        const skippedCount = Number(data?.skippedCount ?? data?.skipped?.length ?? 0);
+        const errorCount = Number(data?.errorCount ?? data?.errors?.length ?? 0);
+        if (!importedCount) {
+          const firstError = Array.isArray(data?.errors) && data.errors[0]?.error ? data.errors[0].error : null;
+          throw new Error(firstError || 'No recognizable Mediux assets found in that zip.');
+        }
+
+        updateOperation('mediux', {
+          uploading: false,
+          importing: false,
+          success: true,
+          error: null,
+          lastAction: 'import',
+        });
+        const importedLabel = `${importedCount} Mediux asset${importedCount === 1 ? '' : 's'}`;
+        const replacedLabel = replacedCount ? `, replaced ${replacedCount}` : '';
+        const skippedLabel = skippedCount ? `, skipped ${skippedCount}` : '';
+        const errorLabel = errorCount ? `, ${errorCount} failed` : '';
+        setStatusMessage(`Imported ${importedLabel}${replacedLabel}${skippedLabel}${errorLabel}.`);
+        reloadLibraryItems();
+        await fetchDetails();
+      } catch (err) {
+        const message = err?.message || String(err);
+        updateOperation('mediux', {
+          uploading: false,
+          importing: false,
+          success: false,
+          error: message,
+          lastAction: 'import',
+        });
+        setStatusMessage(message);
+        throw err;
+      }
+    },
+    [folderExists, library, folderName, fetchDetails, reloadLibraryItems, updateOperation]
+  );
+
   const handleExclude = useCallback(async () => {
     if (!library || !effectiveRatingKey) return;
     setExclusionPending(true);
@@ -555,6 +835,24 @@ function ShowDetailPage() {
   const handleBackgroundImportClick = () => {
     if (!folderExists || backgroundBusy) return;
     const result = handleShowImport('background');
+    if (result && typeof result.catch === 'function') {
+      result.catch(() => {});
+    }
+  };
+
+  const handleMediuxZipClick = () => {
+    if (!folderExists || mediuxBusy) return;
+    if (mediuxZipInputRef.current) {
+      mediuxZipInputRef.current.value = '';
+      mediuxZipInputRef.current.click();
+    }
+  };
+
+  const handleMediuxZipChange = (event) => {
+    if (!folderExists || mediuxBusy) return;
+    const file = event.target.files && event.target.files[0] ? event.target.files[0] : null;
+    if (!file) return;
+    const result = handleMediuxZipImport(file);
     if (result && typeof result.catch === 'function') {
       result.catch(() => {});
     }
@@ -661,13 +959,34 @@ function ShowDetailPage() {
                 <span>{MISSING_FOLDER_MESSAGE}</span>
               </div>
             ) : null}
-            <div className="detail-folder" aria-live="polite">
-              Asset folder:
-              <span className="detail-folder-name">{folderDisplay}</span>
+            <div className="detail-asset-bar">
+              <div className="detail-folder" aria-live="polite">
+                Asset folder:
+                <span className="detail-folder-name">{folderDisplay}</span>
+              </div>
+              <div className="detail-asset-actions">
+                <input
+                  ref={mediuxZipInputRef}
+                  type="file"
+                  accept=".zip,application/zip,application/x-zip-compressed"
+                  className="asset-file-input"
+                  aria-label="Mediux zip file"
+                  disabled={!folderExists || mediuxBusy}
+                  onChange={handleMediuxZipChange}
+                />
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={handleMediuxZipClick}
+                  disabled={!folderExists || mediuxBusy}
+                >
+                  {mediuxImporting ? 'Importing Mediux zip…' : 'Import Mediux zip'}
+                </button>
+              </div>
             </div>
             <section className="detail-series-cards">
-              <h2 className="detail-section-title">Series &amp; Seasons</h2>
-              <div className="asset-card-grid asset-card-grid--seasons">
+              <h2 className="detail-section-title">Series Poster</h2>
+              <div className="asset-card-grid asset-card-grid--series">
                 <ArtworkCard
                   label="Series Poster"
                   variant="poster"
@@ -678,36 +997,110 @@ function ShowDetailPage() {
                   onUpload={(file) => handleShowUpload('poster', file)}
                   onImport={() => handleShowImport('poster')}
                 />
+              </div>
+            </section>
+            <section className="detail-seasons">
+              <h2 className="detail-section-title">Seasons</h2>
+              {seasons.length ? (
+                <div className="season-panel-grid">
                 {seasons.map((season) => {
+                  const isExpanded = expandedSeasons.has(season.index);
                   const posterOp = operations.seasons?.[seasonOperationKey(season.index, 'poster')] ?? createOperation();
                   const backgroundOp = operations.seasons?.[seasonOperationKey(season.index, 'background')] ?? createOperation();
                   return (
-                    <Fragment key={season.index}>
-                      <ArtworkCard
-                        label={`${season.title} Poster`}
-                        variant="poster"
-                        exists={season.posterExists}
-                        imageUrl={season.posterUrl}
-                        folderExists={folderExists}
-                        operation={posterOp}
-                        onUpload={(file) => handleSeasonUpload(season.index, 'poster', file)}
-                        onImport={() => handleSeasonImport(season.index, 'poster', season.plexPosterUrl)}
-                      />
-                      <ArtworkCard
-                        label={`${season.title} Background`}
-                        variant="landscape"
-                        exists={season.backgroundExists}
-                        imageUrl={season.backgroundUrl}
-                        folderExists={folderExists}
-                        operation={backgroundOp}
-                        onUpload={(file) => handleSeasonUpload(season.index, 'background', file)}
-                        onImport={() => handleSeasonImport(season.index, 'background', season.plexBackgroundUrl)}
-                      />
-                    </Fragment>
+                    <article
+                      className={`season-panel ${isExpanded ? 'is-expanded' : ''}`}
+                      key={season.index}
+                    >
+                      <button
+                        type="button"
+                        className="season-summary-card"
+                        aria-expanded={isExpanded}
+                        aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${season.title} assets`}
+                        onClick={() => toggleSeasonExpanded(season.index)}
+                      >
+                        <div className="asset-image-wrapper asset-image-wrapper--poster season-summary-image">
+                          {season.posterUrl ? (
+                            <img className="asset-image" src={season.posterUrl} alt="" loading="lazy" />
+                          ) : (
+                            <div className="asset-placeholder" aria-hidden="true">
+                              No preview available
+                            </div>
+                          )}
+                        </div>
+                        <span className="season-summary-body">
+                          <span className="season-summary-title">{season.title}</span>
+                          <span className={`asset-flag ${season.posterExists ? 'exists' : 'missing'}`}>
+                            {season.posterExists ? 'exists' : 'missing'}
+                          </span>
+                          <span className="season-summary-count">
+                            {season.episodes.length} title card{season.episodes.length === 1 ? '' : 's'}
+                          </span>
+                        </span>
+                        <span className="season-summary-toggle" aria-hidden="true">
+                          {isExpanded ? '-' : '+'}
+                        </span>
+                      </button>
+                      {isExpanded ? (
+                        <div className="season-detail-panel">
+                          <div className="asset-card-grid asset-card-grid--season-detail">
+                            <ArtworkCard
+                              label={`${season.title} Poster`}
+                              variant="poster"
+                              exists={season.posterExists}
+                              imageUrl={season.posterUrl}
+                              folderExists={folderExists}
+                              operation={posterOp}
+                              onUpload={(file) => handleSeasonUpload(season.index, 'poster', file)}
+                              onImport={() => handleSeasonImport(season.index, 'poster', season.plexPosterUrl)}
+                            />
+                            <ArtworkCard
+                              label={`${season.title} Background`}
+                              variant="landscape"
+                              exists={season.backgroundExists}
+                              imageUrl={season.backgroundUrl}
+                              folderExists={folderExists}
+                              operation={backgroundOp}
+                              onUpload={(file) => handleSeasonUpload(season.index, 'background', file)}
+                              onImport={() => handleSeasonImport(season.index, 'background', season.plexBackgroundUrl)}
+                            />
+                          </div>
+                          <div className="season-title-card-group">
+                            <h3 className="detail-subsection-title">Title Cards</h3>
+                            {season.episodes.length ? (
+                              <div className="asset-card-grid asset-card-grid--title-cards">
+                                {season.episodes.map((episode) => {
+                                  const titleCardOp =
+                                    operations.titleCards?.[titleCardOperationKey(season.index, episode.index)] ??
+                                    createOperation();
+                                  return (
+                                    <ArtworkCard
+                                      key={episode.index}
+                                      label={`${episodeCode(season.index, episode.index)} - ${episode.title}`}
+                                      variant="landscape"
+                                      exists={episode.titleCardExists}
+                                      imageUrl={episode.titleCardUrl}
+                                      folderExists={folderExists}
+                                      operation={titleCardOp}
+                                      onUpload={(file) => handleTitleCardUpload(season.index, episode.index, file)}
+                                      onImport={() => handleTitleCardImport(season.index, episode)}
+                                    />
+                                  );
+                                })}
+                              </div>
+                            ) : (
+                              <div className="status-text" aria-live="polite">
+                                No episodes found for this season.
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ) : null}
+                    </article>
                   );
                 })}
-              </div>
-              {seasons.length ? null : (
+                </div>
+              ) : (
                 <div className="status-text" aria-live="polite">
                   No seasons found for this series.
                 </div>
