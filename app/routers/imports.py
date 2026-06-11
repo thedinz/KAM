@@ -128,6 +128,15 @@ def _download_result(path: str, src: str) -> Dict[str, Any]:
     _download_to(path, src)
     return {"ok": True, "path": path, "src": src, "error": None, "replaced": replaced}
 
+def _parse_asset_index(value: str, label: str) -> int:
+    try:
+        idx = int(str(value).strip())
+    except Exception:
+        raise HTTPException(status_code=422, detail=f"Invalid {label}: {value!r}")
+    if idx < 0:
+        raise HTTPException(status_code=422, detail=f"Invalid {label}: {value!r}")
+    return idx
+
 def _json_or_xml(path: str) -> Dict[str, Any] | str:
     """
     Return JSON dict if server answered JSON; otherwise return XML text.
@@ -458,6 +467,64 @@ def import_season_get(
         folderName=folderName,
         season=season,
         kind=kind,
+        ratingKey=ratingKey,
+        url=url,
+    )
+
+@router.post("/api/import/title-card")
+def import_title_card_post(
+    library: str = Form(...),
+    folderName: str = Form(...),
+    season: str = Form(...),
+    episode: str = Form(...),
+    ratingKey: Optional[str] = Form(None),  # episode ratingKey; required if url not supplied
+    url: Optional[str] = Form(None),
+):
+    logger.debug(
+        "Import title card POST library=%s folder=%s season=%s episode=%s ratingKey=%s url=%s",
+        library,
+        folderName,
+        season,
+        episode,
+        ratingKey,
+        _safe_url(url),
+    )
+    season_idx = _parse_asset_index(season, "season")
+    episode_idx = _parse_asset_index(episode, "episode")
+    dest_dir = _dest_dir_or_422(library, folderName)
+    path = os.path.join(dest_dir, f"S{season_idx:02d}E{episode_idx:02d}.jpg")
+
+    if url:
+        src = url
+    else:
+        if not ratingKey:
+            raise HTTPException(status_code=422, detail="ratingKey is required when url is not provided")
+        src = _poster_url_for_rating_key(ratingKey)
+
+    logger.debug(
+        "Title card source resolved for library=%s folder=%s season=%s episode=%s: %s",
+        library,
+        folderName,
+        season_idx,
+        episode_idx,
+        _safe_url(src),
+    )
+    return _download_result(path, src)
+
+@router.get("/api/import/title-card")
+def import_title_card_get(
+    library: str = Query(...),
+    folderName: str = Query(...),
+    season: str = Query(...),
+    episode: str = Query(...),
+    ratingKey: Optional[str] = Query(None),
+    url: Optional[str] = Query(None),
+):
+    return import_title_card_post(
+        library=library,
+        folderName=folderName,
+        season=season,
+        episode=episode,
         ratingKey=ratingKey,
         url=url,
     )

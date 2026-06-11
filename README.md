@@ -2,9 +2,10 @@
 
 KAM is a small web app that makes Kometa/Plex artwork management painless. It lets you upload artwork for **movies, TV series, seasons, and collections** and will:
 
-* **Import existing Plex assets** — movie posters/backgrounds, series posters/backgrounds, and **season posters/backgrounds** — into your mapped Kometa assets structure
+* **Import existing Plex assets** — movie posters/backgrounds, series posters/backgrounds, **season posters/backgrounds**, and title cards — into your mapped Kometa assets structure
+* **Import Mediux series zip files** from a show page and map the files into Kometa names automatically
 * Convert uploads to **`.jpg`**
-* **Replace** existing `poster.*`, `background.*`, `SeasonNN.*`, or `SeasonNN_background.*` in the correct asset folder
+* **Replace** existing `poster.*`, `background.*`, `SeasonNN.*`, `SeasonNN_background.*`, or `SNNENN.*` in the correct asset folder
 * Keep everything in the **same structure Kometa expects**
 * Provide a simple web UI with a **fallback** image to quickly spot missing artwork
 * Let you **exclude** specific movies, shows, or collections from KAM until you re-include them
@@ -87,6 +88,8 @@ KAM only cares about the **internal** path (e.g., `/assets`). You choose what ho
       Season02_background.jpg
       Season03.jpg
       Season03_background.jpg
+      S01E01.jpg
+      S01E02.jpg
 
   /Collections
     /Batman Collection
@@ -94,7 +97,7 @@ KAM only cares about the **internal** path (e.g., `/assets`). You choose what ho
       background.jpg
 ```
 
-> ✅ **Season posters and backgrounds** are stored as flat files **in the series folder** (`Season01.jpg`, `Season01_background.jpg`, …).
+> ✅ **Season posters, season backgrounds, and title cards** are stored as flat files **in the series folder** (`Season01.jpg`, `Season01_background.jpg`, `S01E01.jpg`, …).
 > ❌ No `Season 01/` subfolders are used by KAM.
 
 ### Collection directory overrides
@@ -245,15 +248,17 @@ certificate, edit the template variables, and GO!
 
 1. Open the web UI.
 2. Open **Settings → Setup Check** if you want to verify Plex, asset paths, collection folders, and config persistence before importing artwork.
-3. Choose the item (movie, series, collection, or season) you want to update.
+3. Choose the item (movie, series, collection, season, or title card) you want to update.
 4. If the item shows a red “Not Ready” badge, activate it to open the **folder finder** dialog, browse/search your Kometa assets, and assign the correct folder. Once paired the badge flips to ✔ Ready.
 5. Upload artwork. KAM will:
 
    * Convert to `.jpg`
-   * Remove any existing `poster.*`, `background.*`, `SeasonNN.*`, or `SeasonNN_background.*` for that item
+   * Remove any existing `poster.*`, `background.*`, `SeasonNN.*`, `SeasonNN_background.*`, or `SNNENN.*` for that item
    * Save the new file with the correct name
 
 If an item has **no** artwork yet, KAM shows a **fallback** image in the UI so you can spot what’s missing fast.
+
+On a TV series page, **Import Mediux zip** accepts files such as `Show (2024).jpg`, `Show (2024) - Backdrop.jpg`, `Show (2024) - Season 1.jpg`, and `Show (2024) - S1 E1.jpg`, then saves them as `poster.jpg`, `background.jpg`, `Season01.jpg`, and `S01E01.jpg`.
 
 ---
 
@@ -269,7 +274,7 @@ KAM follows Kometa’s layout and **does not** invent proprietary paths.
     background.jpg
   ```
 
-* **TV Series** (series poster/background + seasons)
+* **TV Series** (series poster/background + seasons + title cards)
 
   ```
   TV Shows/<Show Name>/
@@ -281,6 +286,9 @@ KAM follows Kometa’s layout and **does not** invent proprietary paths.
     Season02_background.jpg
     Season03.jpg
     Season03_background.jpg
+    S01E01.jpg
+    S01E02.jpg
+    S02E01.jpg
     ...
     # (Optionally Season00.jpg if you use Specials)
   ```
@@ -369,7 +377,7 @@ docker stop kam && docker rm kam
 
 * Plex may cache images. Try “Refresh Metadata” or give it time.
 * Confirm the file exists and is correctly named in the expected asset folder.
-* For **seasons**, verify the file names are `Season01.jpg`, `Season02.jpg`, `Season01_background.jpg`, etc. (no subfolders).
+* For **seasons/title cards**, verify the file names are `Season01.jpg`, `Season02.jpg`, `Season01_background.jpg`, `S01E01.jpg`, etc. (no subfolders).
 
 **Nothing changes after upload**
 
@@ -384,7 +392,7 @@ docker stop kam && docker rm kam
 
 **Fallback image shows**
 
-* That item has no `poster.jpg` or `background.jpg` (or `SeasonNN.jpg` / `SeasonNN_background.jpg` for seasons).
+* That item has no `poster.jpg` or `background.jpg` (or `SeasonNN.jpg` / `SeasonNN_background.jpg` for seasons, `SNNENN.jpg` for title cards).
 * Upload the file, or confirm the item’s folder/filename matches exactly.
 
 **Collections missing**
@@ -403,10 +411,10 @@ A: Yes. Bind-mount any host folder to the container’s internal assets path (ex
 You could map `/mnt/user/kometa/assets` to `/assets` or map `/mystuff` to `/assets` — KAM doesn’t care.
 
 **Q: What artwork types does KAM handle?**  
-A: `poster.jpg` and `background.jpg` for movies, series, and collections; `SeasonNN.jpg` and `SeasonNN_background.jpg` for seasons (in the series folder).
+A: `poster.jpg` and `background.jpg` for movies, series, and collections; `SeasonNN.jpg` and `SeasonNN_background.jpg` for seasons; `SNNENN.jpg` for episode title cards (in the series folder).
 
 **Q: Does KAM keep the old files?**  
-A: No. It **replaces** any existing `poster.*`, `background.*`, `SeasonNN.*`, or `SeasonNN_background.*` for the selected item.
+A: No. It **replaces** any existing `poster.*`, `background.*`, `SeasonNN.*`, `SeasonNN_background.*`, or `SNNENN.*` for the selected item.
 
 **Q: Which image formats can I upload?**  
 A: Any common format; KAM converts to `.jpg` on save.
