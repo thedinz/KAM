@@ -120,12 +120,24 @@ function ArtworkCard({
           />
         ) : null}
         {hasUpload ? (
-          <button type="button" className="btn" onClick={handleUploadClick} disabled={uploadDisabled}>
+          <button
+            type="button"
+            className="btn"
+            aria-label={`Upload ${label}`}
+            onClick={handleUploadClick}
+            disabled={uploadDisabled}
+          >
             {uploading ? 'Uploading…' : uploadLabel}
           </button>
         ) : null}
         {hasImport ? (
-          <button type="button" className="btn" onClick={handleImportClick} disabled={importDisabled}>
+          <button
+            type="button"
+            className="btn"
+            aria-label={`Import ${label}`}
+            onClick={handleImportClick}
+            disabled={importDisabled}
+          >
             {importing ? 'Importing…' : importLabel}
           </button>
         ) : null}
