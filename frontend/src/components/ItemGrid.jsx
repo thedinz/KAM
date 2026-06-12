@@ -1,7 +1,11 @@
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { buildDetailPath, normalizePoster } from '../utils/items.js';
+import { currentPathWithSearch } from '../utils/navigation.js';
 
 function ItemGrid({ items, library, onRequestFolder, loading, error }) {
+  const location = useLocation();
+  const returnTo = currentPathWithSearch(location);
+
   if (loading) {
     return <div className="loading-state">Loading items…</div>;
   }
@@ -19,13 +23,21 @@ function ItemGrid({ items, library, onRequestFolder, loading, error }) {
       {items.map((item, index) => {
         const rawKey = item?.ratingKey ?? item?.key ?? item?.id ?? item?.title ?? index;
         const key = typeof rawKey === 'string' ? rawKey : String(rawKey);
-        return <ItemCard key={key} item={item} library={library} onRequestFolder={onRequestFolder} />;
+        return (
+          <ItemCard
+            key={key}
+            item={item}
+            library={library}
+            onRequestFolder={onRequestFolder}
+            returnTo={returnTo}
+          />
+        );
       })}
     </div>
   );
 }
 
-function ItemCard({ item, library, onRequestFolder }) {
+function ItemCard({ item, library, onRequestFolder, returnTo }) {
   const ready = item?.assetReady !== false;
   const title = item?.title || item?.name || '(Untitled)';
   const year = item?.year;
@@ -83,7 +95,13 @@ function ItemCard({ item, library, onRequestFolder }) {
 
   if (detailPath) {
     return (
-      <Link className="card" data-ready={ready ? 'true' : 'false'} title={cardTitle} to={detailPath}>
+      <Link
+        className="card"
+        data-ready={ready ? 'true' : 'false'}
+        title={cardTitle}
+        to={detailPath}
+        state={{ returnTo }}
+      >
         {content}
       </Link>
     );

@@ -77,9 +77,9 @@ const showDetail = {
 
 let currentShowDetail = showDetail;
 
-function renderShowDetailPage() {
+function renderShowDetailPage(initialEntry = '/libraries/TV%20Shows/shows/101') {
   return render(
-    <MemoryRouter initialEntries={['/libraries/TV%20Shows/shows/101']}>
+    <MemoryRouter initialEntries={[initialEntry]}>
       <Routes>
         <Route path="/libraries/:library/shows/:ratingKey" element={<ShowDetailPage />} />
       </Routes>
@@ -180,5 +180,19 @@ describe('ShowDetailPage title cards', () => {
     expect(screen.getByText('Season 1 Poster')).toBeInTheDocument();
     expect(screen.queryByText('Season 1 Background')).not.toBeInTheDocument();
     expect(screen.getByText('S01E01 - Pilot')).toBeInTheDocument();
+  });
+
+  it('uses the remembered library page for the back link', async () => {
+    renderShowDetailPage({
+      pathname: '/libraries/TV%20Shows/shows/101',
+      state: {
+        returnTo: '/libraries?lib=TV%20Shows&page=3&query=agatha',
+      },
+    });
+
+    expect(await screen.findByRole('link', { name: /back/i })).toHaveAttribute(
+      'href',
+      '/libraries?lib=TV%20Shows&page=3&query=agatha'
+    );
   });
 });
