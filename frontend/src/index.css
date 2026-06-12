@@ -1316,99 +1316,6 @@ main {
   gap: 16px;
 }
 
-.detail-hero {
-  display: flex;
-  flex-direction: column;
-  border-radius: 16px;
-  overflow: hidden;
-  border: 1px solid var(--border);
-  background: var(--card);
-}
-
-.detail-hero-image {
-  position: relative;
-  width: 100%;
-  background: rgba(255, 255, 255, 0.04);
-}
-
-.detail-hero-image::before {
-  content: '';
-  display: block;
-  width: 100%;
-  padding-bottom: 42%;
-}
-
-@supports (aspect-ratio: 1 / 1) {
-  .detail-hero-image {
-    aspect-ratio: 16 / 9;
-  }
-
-  .detail-hero-image::before {
-    display: none;
-  }
-}
-
-.detail-hero-image-src,
-.detail-hero-placeholder {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-}
-
-.detail-hero-image-src {
-  object-fit: cover;
-}
-
-.detail-hero-placeholder {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--muted);
-  font-size: 15px;
-  padding: 16px;
-  text-align: center;
-}
-
-.detail-hero-body {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 16px;
-  border-top: 1px solid var(--border);
-}
-
-.detail-hero-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 13px;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  color: var(--muted);
-}
-
-.detail-hero-title {
-  font-weight: 600;
-}
-
-.detail-hero-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-.detail-hero-actions .btn {
-  flex: 0 0 auto;
-  min-width: 120px;
-}
-
-.detail-series-cards {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
 .detail-warning {
   display: flex;
   align-items: flex-start;
@@ -1553,10 +1460,6 @@ main {
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }
 
-.asset-card-grid--series {
-  grid-template-columns: minmax(220px, 320px);
-}
-
 .detail-seasons {
   display: flex;
   flex-direction: column;
@@ -1570,9 +1473,10 @@ main {
 
 .season-panel-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(220px, 300px));
   gap: 16px;
   align-items: start;
+  justify-content: start;
 }
 
 .season-panel {
@@ -1674,6 +1578,10 @@ main {
 }
 
 @media (max-width: 760px) {
+  .season-panel-grid {
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  }
+
   .season-panel.is-expanded {
     grid-template-columns: 1fr;
   }
