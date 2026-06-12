@@ -915,6 +915,7 @@ function ShowDetailPage() {
                 <div className="season-panel-grid">
                 {seasons.map((season) => {
                   const isExpanded = expandedSeasons.has(season.index);
+                  const showSeasonBackground = seasons.length > 1 || season.backgroundExists;
                   const posterOp = operations.seasons?.[seasonOperationKey(season.index, 'poster')] ?? createOperation();
                   const backgroundOp = operations.seasons?.[seasonOperationKey(season.index, 'background')] ?? createOperation();
                   return (
@@ -953,7 +954,11 @@ function ShowDetailPage() {
                       </button>
                       {isExpanded ? (
                         <div className="season-detail-panel">
-                          <div className="asset-card-grid asset-card-grid--season-detail">
+                          <div
+                            className={`asset-card-grid asset-card-grid--season-detail ${
+                              showSeasonBackground ? '' : 'asset-card-grid--season-detail-single'
+                            }`}
+                          >
                             <ArtworkCard
                               label={`${season.title} Poster`}
                               variant="poster"
@@ -964,16 +969,18 @@ function ShowDetailPage() {
                               onUpload={(file) => handleSeasonUpload(season.index, 'poster', file)}
                               onImport={() => handleSeasonImport(season.index, 'poster', season.plexPosterUrl)}
                             />
-                            <ArtworkCard
-                              label={`${season.title} Background`}
-                              variant="landscape"
-                              exists={season.backgroundExists}
-                              imageUrl={season.backgroundUrl}
-                              folderExists={folderExists}
-                              operation={backgroundOp}
-                              onUpload={(file) => handleSeasonUpload(season.index, 'background', file)}
-                              onImport={() => handleSeasonImport(season.index, 'background', season.plexBackgroundUrl)}
-                            />
+                            {showSeasonBackground ? (
+                              <ArtworkCard
+                                label={`${season.title} Background`}
+                                variant="landscape"
+                                exists={season.backgroundExists}
+                                imageUrl={season.backgroundUrl}
+                                folderExists={folderExists}
+                                operation={backgroundOp}
+                                onUpload={(file) => handleSeasonUpload(season.index, 'background', file)}
+                                onImport={() => handleSeasonImport(season.index, 'background', season.plexBackgroundUrl)}
+                              />
+                            ) : null}
                           </div>
                           <div className="season-title-card-group">
                             <h3 className="detail-subsection-title">Title Cards</h3>

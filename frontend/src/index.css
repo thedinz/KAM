@@ -1566,6 +1566,10 @@ main {
   grid-template-columns: minmax(220px, 300px) minmax(280px, 1fr);
 }
 
+.asset-card-grid--season-detail-single {
+  grid-template-columns: minmax(220px, 300px);
+}
+
 .season-title-card-group {
   display: flex;
   flex-direction: column;
