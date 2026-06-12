@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom';
 import ArtworkCard from '../components/ArtworkCard.jsx';
 import { useLibraryItemsContext } from '../hooks/LibraryItemsProvider.jsx';
 import { responseErrorMessage, safeJson } from '../utils/api.js';
 import { useTheme } from '../theme/ThemeProvider.jsx';
+import { buildLibraryBackLink, detailBackLink } from '../utils/navigation.js';
 
 const MISSING_FOLDER_MESSAGE = 'Create the Kometa asset folder first.';
 
@@ -32,6 +33,7 @@ function episodeCode(seasonIndex, episodeIndex) {
 function ShowDetailPage() {
   const params = useParams();
   const [searchParams] = useSearchParams();
+  const location = useLocation();
   const rawLibrary = params.library ?? searchParams.get('library') ?? searchParams.get('lib') ?? '';
   const rawRatingKey = params.ratingKey ?? searchParams.get('ratingKey') ?? searchParams.get('id') ?? '';
   const library = rawLibrary ? String(rawLibrary) : '';
@@ -788,7 +790,7 @@ function ShowDetailPage() {
     }
   }, [library, effectiveRatingKey, includeItem]);
 
-  const backLink = library ? `/libraries?lib=${encodeURIComponent(library)}` : '/libraries';
+  const backLink = detailBackLink(location, buildLibraryBackLink(library));
   const folderDisplay = folderName || 'Not assigned';
 
   const handleMediuxZipClick = () => {
