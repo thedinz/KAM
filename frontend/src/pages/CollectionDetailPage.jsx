@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom';
 import ArtworkCard from '../components/ArtworkCard.jsx';
 import { useLibraryItemsContext } from '../hooks/LibraryItemsProvider.jsx';
 import { responseErrorMessage, safeJson } from '../utils/api.js';
 import { useTheme } from '../theme/ThemeProvider.jsx';
+import { buildLibraryBackLink, detailBackLink } from '../utils/navigation.js';
 
 const MISSING_FOLDER_MESSAGE = 'Create the Kometa collections folder first.';
 
@@ -20,6 +21,7 @@ function createOperation() {
 function CollectionDetailPage() {
   const params = useParams();
   const [searchParams] = useSearchParams();
+  const location = useLocation();
   const rawLibrary = params.library ?? searchParams.get('library') ?? searchParams.get('lib') ?? '';
   const rawRatingKey = params.ratingKey ?? searchParams.get('ratingKey') ?? searchParams.get('id') ?? '';
   const sourceParam = searchParams.get('source') ?? searchParams.get('sourceLibrary') ?? '';
@@ -310,7 +312,7 @@ function CollectionDetailPage() {
     }
   }, [exclusionLibrary, effectiveRatingKey, includeItem]);
 
-  const backLink = library ? `/libraries?lib=${encodeURIComponent(library)}` : '/libraries';
+  const backLink = detailBackLink(location, buildLibraryBackLink(library));
   const folderDisplay = folderName || 'Not assigned';
   const displaySource = detail?.sourceLibrary || sourceLibrary || '';
 

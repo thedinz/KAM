@@ -60,6 +60,23 @@ describe('LibraryPage', () => {
     expect(context.refreshNotReadyCount).toHaveBeenCalledTimes(1);
   });
 
+  it('honors the URL library when cached state still has another library selected', async () => {
+    const context = mockLibraryContext({
+      libraries: ['Kids Movies', 'TV Shows'],
+      library: 'Kids Movies',
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/libraries?lib=TV%20Shows']}>
+        <LibraryPage />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(context.setLibrary).toHaveBeenCalledWith('TV Shows');
+    });
+  });
+
   it('opens poster/background choices for movie libraries', () => {
     mockLibraryContext({ notReadyCount: 0 });
 

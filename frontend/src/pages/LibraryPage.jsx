@@ -164,7 +164,8 @@ function LibraryPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const urlLibrary = searchParams.get('lib') || '';
-  const lastUrlLibraryRef = useRef(urlLibrary);
+  const lastUrlLibraryRef = useRef('');
+  const pendingUrlLibraryRef = useRef('');
   const {
     libraries,
     library,
@@ -211,14 +212,23 @@ function LibraryPage() {
     lastUrlLibraryRef.current = urlLibrary;
 
     if (urlLibrary !== library) {
+      pendingUrlLibraryRef.current = urlLibrary;
       setLibrary(urlLibrary);
     }
   }, [urlLibrary, library, setLibrary]);
 
   useEffect(() => {
     if (!library) return;
-    setSearchParams({ lib: library });
-  }, [library, setSearchParams]);
+    if (pendingUrlLibraryRef.current) {
+      if (pendingUrlLibraryRef.current !== library) return;
+      pendingUrlLibraryRef.current = '';
+    }
+    const nextSearchParams = new URLSearchParams(searchParams);
+    nextSearchParams.set('lib', library);
+    if (nextSearchParams.toString() !== searchParams.toString()) {
+      setSearchParams(nextSearchParams, { replace: true });
+    }
+  }, [library, searchParams, setSearchParams]);
 
   useEffect(() => () => clearTimeout(searchTimerRef.current), []);
 
