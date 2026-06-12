@@ -75,6 +75,8 @@ const showDetail = {
   ],
 };
 
+let currentShowDetail = showDetail;
+
 function renderShowDetailPage() {
   return render(
     <MemoryRouter initialEntries={['/libraries/TV%20Shows/shows/101']}>
@@ -87,10 +89,11 @@ function renderShowDetailPage() {
 
 describe('ShowDetailPage title cards', () => {
   beforeEach(() => {
+    currentShowDetail = showDetail;
     useLibraryItemsContext.mockReturnValue({ reload: vi.fn() });
     global.fetch = vi.fn((url, options = {}) => {
       if (String(url).startsWith('/api/show?')) {
-        return Promise.resolve(jsonResponse(showDetail));
+        return Promise.resolve(jsonResponse(currentShowDetail));
       }
       if (url === '/api/import/title-card') {
         return Promise.resolve(jsonResponse({ ok: true, path: '/assets/TV Shows/Example Show (2024)/S01E01.jpg' }));
@@ -115,6 +118,7 @@ describe('ShowDetailPage title cards', () => {
     fireEvent.click(screen.getByRole('button', { name: /Expand Season 1 assets/i }));
 
     expect(await screen.findByText('S01E01 - Pilot')).toBeInTheDocument();
+    expect(screen.getByText('Season 1 Background')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Import S01E01 - Pilot' }));
 
@@ -155,5 +159,26 @@ describe('ShowDetailPage title cards', () => {
     expect(body.get('folderName')).toBe('Example Show (2024)');
     expect(body.get('file')).toBe(zipFile);
     expect(await screen.findByText('Imported 4 Mediux assets, replaced 1, skipped 1.')).toBeInTheDocument();
+  });
+
+  it('hides a missing season background for single-season shows', async () => {
+    currentShowDetail = {
+      ...showDetail,
+      seasons: [
+        {
+          ...showDetail.seasons[0],
+          backgroundExists: false,
+          backgroundUrl: showDetail.backgroundUrl,
+        },
+      ],
+    };
+
+    renderShowDetailPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: /Expand Season 1 assets/i }));
+
+    expect(screen.getByText('Season 1 Poster')).toBeInTheDocument();
+    expect(screen.queryByText('Season 1 Background')).not.toBeInTheDocument();
+    expect(screen.getByText('S01E01 - Pilot')).toBeInTheDocument();
   });
 });
