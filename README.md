@@ -2,6 +2,10 @@
 
 KAM is a small web app that makes Kometa/Plex artwork management painless. It lets you upload artwork for **movies, TV series, seasons, and collections** and will:
 
+> ## KAM 6.0 released, now with title card support!
+>
+> KAM 6.0 adds full TV episode title-card management from the series page. Expand a season to upload or import `SNNENN.jpg` title cards, keep season posters and backgrounds organized in the same view, and use **Import Mediux zip** to map Mediux series packs into Kometa-ready filenames automatically.
+
 * **Import existing Plex assets** — movie posters/backgrounds, series posters/backgrounds, **season posters/backgrounds**, and title cards — into your mapped Kometa assets structure
 * **Import Mediux series zip files** from a show page and map the files into Kometa names automatically
 * Convert uploads to **`.jpg`**
