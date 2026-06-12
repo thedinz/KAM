@@ -54,7 +54,6 @@ function ShowDetailPage() {
   const [expandedSeasons, setExpandedSeasons] = useState(() => new Set());
   const [exclusionPending, setExclusionPending] = useState(false);
 
-  const backgroundInputRef = useRef(null);
   const mediuxZipInputRef = useRef(null);
 
   useEffect(() => {
@@ -239,9 +238,6 @@ function ShowDetailPage() {
   const headerYear = detail?.year;
 
   useEffect(() => {
-    if (!folderExists && backgroundInputRef.current) {
-      backgroundInputRef.current.value = '';
-    }
     if (!folderExists && mediuxZipInputRef.current) {
       mediuxZipInputRef.current.value = '';
     }
@@ -261,28 +257,9 @@ function ShowDetailPage() {
   const showBackgroundImage = detail?.backgroundUrl || detail?.backgroundUrlPlex || detail?.plexBackgroundUrl || null;
 
   const backgroundOperation = operations.background ?? createOperation();
-  const backgroundUploading = Boolean(backgroundOperation.uploading);
-  const backgroundImporting = Boolean(backgroundOperation.importing);
-  const backgroundBusy = backgroundUploading || backgroundImporting;
   const mediuxOperation = operations.mediux ?? createOperation();
   const mediuxImporting = Boolean(mediuxOperation.importing);
   const mediuxBusy = Boolean(mediuxOperation.uploading || mediuxOperation.importing);
-  const backgroundStatus = (() => {
-    if (backgroundOperation.error) {
-      return { text: backgroundOperation.error, className: 'status-text error' };
-    }
-    if (backgroundOperation.success) {
-      const label = backgroundOperation.lastAction === 'upload' ? 'Upload complete.' : 'Import complete.';
-      return { text: label, className: 'status-text success' };
-    }
-    if (backgroundUploading) {
-      return { text: 'Uploading…', className: 'status-text' };
-    }
-    if (backgroundImporting) {
-      return { text: 'Importing…', className: 'status-text' };
-    }
-    return { text: '\u00a0', className: 'status-text' };
-  })();
 
   const seasons = useMemo(() => {
     if (!Array.isArray(detail?.seasons)) return [];
@@ -814,32 +791,6 @@ function ShowDetailPage() {
   const backLink = library ? `/libraries?lib=${encodeURIComponent(library)}` : '/libraries';
   const folderDisplay = folderName || 'Not assigned';
 
-  const handleBackgroundUploadClick = () => {
-    if (!folderExists || backgroundBusy) return;
-    if (backgroundInputRef.current) {
-      backgroundInputRef.current.value = '';
-      backgroundInputRef.current.click();
-    }
-  };
-
-  const handleBackgroundFileChange = (event) => {
-    if (!folderExists || backgroundBusy) return;
-    const file = event.target.files && event.target.files[0] ? event.target.files[0] : null;
-    if (!file) return;
-    const result = handleShowUpload('background', file);
-    if (result && typeof result.catch === 'function') {
-      result.catch(() => {});
-    }
-  };
-
-  const handleBackgroundImportClick = () => {
-    if (!folderExists || backgroundBusy) return;
-    const result = handleShowImport('background');
-    if (result && typeof result.catch === 'function') {
-      result.catch(() => {});
-    }
-  };
-
   const handleMediuxZipClick = () => {
     if (!folderExists || mediuxBusy) return;
     if (mediuxZipInputRef.current) {
@@ -905,54 +856,6 @@ function ShowDetailPage() {
           </div>
         ) : detail ? (
           <div className="detail-container">
-            <section className="detail-hero">
-              <div className="detail-hero-image">
-                {showBackgroundImage ? (
-                  <img className="detail-hero-image-src" src={showBackgroundImage} alt="Series background" loading="lazy" />
-                ) : (
-                  <div className="detail-hero-placeholder" aria-hidden="true">
-                    No background available
-                  </div>
-                )}
-              </div>
-              <div className="detail-hero-body">
-                <div className="detail-hero-header">
-                  <span className="detail-hero-title">Background</span>
-                  <span className={`asset-flag ${showBackgroundExists ? 'exists' : 'missing'}`}>
-                    {showBackgroundExists ? 'exists' : 'missing'}
-                  </span>
-                </div>
-                <div className="detail-hero-actions">
-                  <input
-                    ref={backgroundInputRef}
-                    type="file"
-                    accept="image/*"
-                    className="asset-file-input"
-                    disabled={!folderExists || backgroundBusy}
-                    onChange={handleBackgroundFileChange}
-                  />
-                  <button
-                    type="button"
-                    className="btn"
-                    onClick={handleBackgroundUploadClick}
-                    disabled={!folderExists || backgroundBusy}
-                  >
-                    {backgroundUploading ? 'Uploading…' : 'Upload'}
-                  </button>
-                  <button
-                    type="button"
-                    className="btn"
-                    onClick={handleBackgroundImportClick}
-                    disabled={!folderExists || backgroundBusy}
-                  >
-                    {backgroundImporting ? 'Importing…' : 'Import'}
-                  </button>
-                </div>
-                <div className={backgroundStatus.className} aria-live="polite">
-                  {backgroundStatus.text}
-                </div>
-              </div>
-            </section>
             {!folderExists ? (
               <div className="detail-warning" role="alert">
                 <strong>✖</strong>
@@ -984,20 +887,27 @@ function ShowDetailPage() {
                 </button>
               </div>
             </div>
-            <section className="detail-series-cards">
-              <h2 className="detail-section-title">Series Poster</h2>
-              <div className="asset-card-grid asset-card-grid--series">
-                <ArtworkCard
-                  label="Series Poster"
-                  variant="poster"
-                  exists={showPosterExists}
-                  imageUrl={showPosterImage}
-                  folderExists={folderExists}
-                  operation={operations.poster}
-                  onUpload={(file) => handleShowUpload('poster', file)}
-                  onImport={() => handleShowImport('poster')}
-                />
-              </div>
+            <section className="asset-card-grid">
+              <ArtworkCard
+                label="Series Poster"
+                variant="poster"
+                exists={showPosterExists}
+                imageUrl={showPosterImage}
+                folderExists={folderExists}
+                operation={operations.poster}
+                onUpload={(file) => handleShowUpload('poster', file)}
+                onImport={() => handleShowImport('poster')}
+              />
+              <ArtworkCard
+                label="Series Background"
+                variant="landscape"
+                exists={showBackgroundExists}
+                imageUrl={showBackgroundImage}
+                folderExists={folderExists}
+                operation={backgroundOperation}
+                onUpload={(file) => handleShowUpload('background', file)}
+                onImport={() => handleShowImport('background')}
+              />
             </section>
             <section className="detail-seasons">
               <h2 className="detail-section-title">Seasons</h2>
