@@ -18,6 +18,20 @@ KAM is a small web app that makes Kometa/Plex artwork management painless. It le
 
 ---
 
+## Latest release
+
+**Download the latest stable release:** [github.com/thedinz/KAM/releases/latest](https://github.com/thedinz/KAM/releases/latest)
+
+For Docker installs, pull the current stable image:
+
+```bash
+docker pull ghcr.io/thedinz/kam:latest
+```
+
+Older releases remain available for rollbacks and pinned installs, but start with the latest release unless you specifically need an older version.
+
+---
+
 ## ⚠️ Important constraints
 
 > **KAM maps each Plex library to a single assets directory inside the container (e.g., Kids Movies → `/assets/Kids Movies`).**
