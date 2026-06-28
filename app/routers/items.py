@@ -62,6 +62,41 @@ def _section_key_by_name(lib_name: str) -> str:
     key, _section_type = _section_info_by_name(lib_name)
     return key
 
+
+def _xml_video_row(node: ET.Element) -> Dict[str, Any]:
+    media: List[Dict[str, Any]] = []
+    for media_node in node.findall("./Media"):
+        parts = [
+            {"file": part.attrib.get("file")}
+            for part in media_node.findall("./Part")
+            if part.attrib.get("file")
+        ]
+        if parts:
+            media.append({"Part": parts})
+
+    locations = [
+        {"path": location.attrib.get("path")}
+        for location in node.findall("./Location")
+        if location.attrib.get("path")
+    ]
+
+    row: Dict[str, Any] = {
+        "type": node.attrib.get("type"),
+        "title": node.attrib.get("title"),
+        "year": _to_int(node.attrib.get("year")),
+        "ratingKey": node.attrib.get("ratingKey"),
+        "thumb": node.attrib.get("thumb"),
+        "addedAt": _to_int(node.attrib.get("addedAt")),
+        "originalTitle": node.attrib.get("originalTitle"),
+        "titleSort": node.attrib.get("titleSort"),
+    }
+    if media:
+        row["Media"] = media
+    if locations:
+        row["Location"] = locations
+    return row
+
+
 def _plex_list(path: str, params: Optional[dict] = None) -> List[Dict[str, Any]]:
     plex_url, plex_token = _require_plex()
     url = f"{plex_url}{path}"
@@ -81,14 +116,7 @@ def _plex_list(path: str, params: Optional[dict] = None) -> List[Dict[str, Any]]
     for node in root.findall(".//Video"):
         typ = node.attrib.get("type")
         if typ not in ("movie", "show"): continue
-        out.append({
-            "type": typ,
-            "title": node.attrib.get("title"),
-            "year": _to_int(node.attrib.get("year")),
-            "ratingKey": node.attrib.get("ratingKey"),
-            "thumb": node.attrib.get("thumb"),
-            "addedAt": _to_int(node.attrib.get("addedAt")),
-        })
+        out.append(_xml_video_row(node))
     return out
 
 
@@ -120,14 +148,7 @@ def _plex_list_page(path: str, params: Optional[dict] = None) -> Tuple[List[Dict
         typ = node.attrib.get("type")
         if typ not in ("movie", "show"):
             continue
-        out.append({
-            "type": typ,
-            "title": node.attrib.get("title"),
-            "year": _to_int(node.attrib.get("year")),
-            "ratingKey": node.attrib.get("ratingKey"),
-            "thumb": node.attrib.get("thumb"),
-            "addedAt": _to_int(node.attrib.get("addedAt")),
-        })
+        out.append(_xml_video_row(node))
     return out, (total if total is not None else len(out))
 
 def _to_int(x) -> Optional[int]:
@@ -166,6 +187,82 @@ def _plex_sort_param(sort_mode: Optional[str]) -> str:
     return "titleSort:asc"
 
 
+def _as_list(value: Any) -> List[Any]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return value
+    return [value]
+
+
+def _clean_title_candidate(value: Any) -> Optional[str]:
+    text = str(value or "").strip()
+    return text or None
+
+
+def _metadata_file_paths(it: Dict[str, Any]) -> List[str]:
+    paths: List[str] = []
+    for media in _as_list(it.get("Media")):
+        if not isinstance(media, dict):
+            continue
+        for part in _as_list(media.get("Part")):
+            if isinstance(part, dict):
+                path = _clean_title_candidate(part.get("file"))
+                if path:
+                    paths.append(path)
+
+    for location in _as_list(it.get("Location")):
+        if isinstance(location, dict):
+            path = _clean_title_candidate(location.get("path"))
+            if path:
+                paths.append(path)
+    return paths
+
+
+def _path_title_candidates(path: str) -> List[str]:
+    normalized = str(path or "").replace("\\", "/").strip()
+    parts = [part.strip() for part in normalized.split("/") if part.strip()]
+    if not parts:
+        return []
+
+    candidates: List[str] = []
+    leaf = parts[-1]
+    stem, ext = os.path.splitext(leaf)
+    if ext:
+        if len(parts) > 1:
+            candidates.append(parts[-2])
+        if stem:
+            candidates.append(stem)
+    else:
+        candidates.append(leaf)
+    return [candidate for candidate in candidates if candidate]
+
+
+def _metadata_title_candidates(it: Dict[str, Any]) -> List[str]:
+    candidates: List[str] = []
+    seen: set[str] = set()
+
+    def add(value: Any) -> None:
+        candidate = _clean_title_candidate(value)
+        if not candidate:
+            return
+        key = candidate.casefold()
+        if key in seen:
+            return
+        seen.add(key)
+        candidates.append(candidate)
+
+    add(it.get("originalTitle"))
+    add(it.get("titleSort"))
+
+    if (it.get("type") or "").casefold() == "movie":
+        for path in _metadata_file_paths(it):
+            for candidate in _path_title_candidates(path):
+                add(candidate)
+
+    return candidates
+
+
 def _rows_from_metadata(md: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     rows: List[Dict[str, Any]] = []
     for it in md:
@@ -176,6 +273,7 @@ def _rows_from_metadata(md: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             "type": (it.get("type") or "").strip(),
             "thumb": it.get("thumb"),
             "addedAt": _to_int(it.get("addedAt")),
+            "titleCandidates": _metadata_title_candidates(it),
         })
     return rows
 
@@ -270,16 +368,7 @@ def _library_rows(
         shows  = _plex_list(f"/library/sections/{section_key}/all", {"type": 2})
         md = movies + shows
 
-    rows: List[Dict[str, Any]] = []
-    for it in md:
-        rows.append({
-            "title": (it.get("title") or "").strip(),
-            "year": _to_int(it.get("year")),
-            "ratingKey": str(it.get("ratingKey") or "").strip(),
-            "type": (it.get("type") or "").strip(),
-            "thumb": it.get("thumb"),
-            "addedAt": _to_int(it.get("addedAt")),
-        })
+    rows = _rows_from_metadata(md)
     _sort_item_rows(rows, sort)
     return rows
 
@@ -330,19 +419,26 @@ def _try_existing_asset_folder(
     year: Optional[int],
     item_type: Optional[str] = None,
     resolver: Optional[_RequestDirectoryResolver] = None,
+    alternate_titles: Optional[List[str]] = None,
 ) -> Tuple[Optional[str], Optional[str]]:
     """
     Use the resolver to find an actual, existing Kometa folder.
     Movies with a Plex year resolve through 'Title (Year)' so the shared
     resolver can enforce safe year-aware matching without a bare-title guess.
     """
-    if not title:
+    title_values = [value for value in [title, *(alternate_titles or [])] if value]
+    if not title_values:
         return None, None
     candidates: List[str] = []
-    if year:
-        candidates.append(f"{title} ({year})")
-    if not (year and (item_type or "").casefold() == "movie"):
-        candidates.append(title)
+    for title_value in title_values:
+        clean_title = str(title_value or "").strip()
+        if not clean_title:
+            continue
+        has_year = resolve_service._has_release_year(clean_title)
+        if year and not has_year:
+            candidates.append(f"{clean_title} ({year})")
+        if not (year and (item_type or "").casefold() == "movie" and not has_year):
+            candidates.append(clean_title)
     candidates = list(dict.fromkeys(candidates))
     for cand in candidates:
         try:
@@ -408,7 +504,12 @@ def _enrich_item(
     folder_name, folder_path = _resolve_override_folder(library, override, resolver)
     if not folder_path:
         auto_name, auto_path = _try_existing_asset_folder(
-            library, it["title"], it["year"], it["type"], resolver
+            library,
+            it["title"],
+            it["year"],
+            it["type"],
+            resolver,
+            it.get("titleCandidates"),
         )
         if auto_name:
             folder_name = folder_name or auto_name
@@ -582,6 +683,7 @@ def list_items_for_mapping_scan(
             "title": it["title"],
             "year": it["year"],
             "type": it["type"],
+            "titleCandidates": it.get("titleCandidates") or [],
             "folder": override or "",
             "folderName": override or "",
             "assetReady": bool(override),

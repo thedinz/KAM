@@ -26,6 +26,33 @@ def test_movie_with_year_does_not_try_bare_title_fallback(monkeypatch):
     assert calls == [("Movies", "Movie 2 (2015)")]
 
 
+def test_movie_alternate_titles_are_fallback_only(monkeypatch):
+    calls = []
+
+    def fake_resolve(library, folder_name):
+        calls.append((library, folder_name))
+        if folder_name == "Leon The Professional (1994)":
+            return "/assets/Movies/Leon The Professional (1994)"
+        raise FileNotFoundError(folder_name)
+
+    monkeypatch.setattr(items, "resolve_existing_dir_or_422", fake_resolve)
+
+    folder_name, folder_path = items._try_existing_asset_folder(
+        "Movies",
+        "Leon - Der Profi",
+        1994,
+        "movie",
+        alternate_titles=["Leon The Professional"],
+    )
+
+    assert folder_name == "Leon The Professional (1994)"
+    assert folder_path == "/assets/Movies/Leon The Professional (1994)"
+    assert calls == [
+        ("Movies", "Leon - Der Profi (1994)"),
+        ("Movies", "Leon The Professional (1994)"),
+    ]
+
+
 def test_show_with_year_can_still_try_title_folder(monkeypatch):
     calls = []
 
