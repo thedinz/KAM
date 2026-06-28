@@ -72,6 +72,12 @@ const ROMAN_NUMERALS = new Map([
   ['x', '10'],
 ]);
 
+function foldDiacritics(value) {
+  return String(value || '')
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '');
+}
+
 function looksLikeMetadataContent(value) {
   const text = String(value || '')
     .normalize('NFKC')
@@ -178,7 +184,7 @@ function normalizeTitle(value) {
   const titlePart = yearMatch ? String(yearMatch[1] || '').trim() : normalized;
   const year = yearMatch ? yearMatch[2] || yearMatch[3] || null : null;
   const tokens = normalized
-    ? titlePart
+    ? foldDiacritics(titlePart)
         .toLowerCase()
         .split(/[^0-9a-z]+/)
         .filter(Boolean)
@@ -327,17 +333,33 @@ function buildMatchCandidates(item) {
   const type = String(item?.type || '').trim().toLowerCase();
   const assetReady = item?.assetReady !== false;
   const candidates = [];
+  const seen = new Set();
+  const addCandidate = (value, source) => {
+    const cleanValue = String(value || '').trim();
+    if (!cleanValue) return;
+    const key = cleanValue.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    candidates.push({ value: cleanValue, source });
+  };
+  const addTitleCandidates = (value, source) => {
+    const cleanTitle = String(value || '').trim();
+    if (!cleanTitle) return;
+    const candidateHasYear = Boolean(normalizeTitle(cleanTitle).year);
+    if (year && !candidateHasYear) {
+      addCandidate(`${cleanTitle} (${year})`, source === 'title' ? 'titleYear' : `${source}Year`);
+    }
+    if (!(year && type === 'movie' && !candidateHasYear)) {
+      addCandidate(cleanTitle, source);
+    }
+  };
+
   if (folderName && (assetReady || !(year && type === 'movie') || normalizeTitle(folderName).year)) {
-    candidates.push({ value: folderName, source: 'currentFolder' });
+    addCandidate(folderName, 'currentFolder');
   }
-  if (title) {
-    if (year) {
-      candidates.push({ value: `${title} (${year})`, source: 'titleYear' });
-    }
-    if (!(year && type === 'movie')) {
-      candidates.push({ value: title, source: 'title' });
-    }
-  }
+  addTitleCandidates(title, 'title');
+  const alternateTitles = Array.isArray(item?.titleCandidates) ? item.titleCandidates : [];
+  alternateTitles.forEach((candidate) => addTitleCandidates(candidate, 'alternateTitle'));
   return candidates;
 }
 
