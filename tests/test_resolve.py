@@ -95,6 +95,28 @@ def test_resolve_ignores_radarr_metadata_tags(tmp_path, monkeypatch):
     assert os.path.basename(resolved) == existing
 
 
+def test_resolve_folds_diacritics_for_title_matching(tmp_path, monkeypatch):
+    assets_root = tmp_path / "assets"
+    library = "Movies"
+    target = "Léon The Professional (1994)"
+    existing = "Leon The Professional (1994)"
+
+    library_path = assets_root / library
+    library_path.mkdir(parents=True)
+    (library_path / existing).mkdir()
+
+    monkeypatch.setenv("KAM_ASSETS_ROOT", str(assets_root))
+
+    settings_module = importlib.reload(importlib.import_module("app.services.settings"))
+    settings_module.set_settings_path(str(tmp_path / "settings.json"))
+    settings_module.save_library_mappings([])
+
+    resolve_module = _reload_with_assets_root(str(assets_root))
+
+    resolved = resolve_module.resolve_existing_dir_or_422(library, target)
+    assert os.path.basename(resolved) == existing
+
+
 def test_resolve_ignores_bare_folder_ids_after_year(tmp_path, monkeypatch):
     assets_root = tmp_path / "assets"
     library = "Movies"
