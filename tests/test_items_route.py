@@ -148,6 +148,47 @@ def test_items_route_reports_not_ready_count_and_filters(items_env):
     assert filtered["items"][0]["ratingKey"] == "22"
 
 
+def test_items_route_uses_alternate_title_candidates(items_env, monkeypatch):
+    localized_folder = items_env.folder.parent / "Leon The Professional (1994)"
+    localized_folder.mkdir()
+
+    def fake_plex_list(path, params=None):
+        if params and params.get("type") == 1:
+            return [
+                {
+                    "title": "Léon - Der Profi",
+                    "originalTitle": "Léon The Professional",
+                    "year": 1994,
+                    "ratingKey": "44",
+                    "type": "movie",
+                    "thumb": "/thumb4",
+                    "Media": [
+                        {
+                            "Part": [
+                                {
+                                    "file": (
+                                        "/movies/Léon - The Professional (1994)/"
+                                        "Léon The Professional (1994) {tmdb-101} "
+                                        "{edition-Remastered} [Bluray-1080p].mkv"
+                                    )
+                                }
+                            ]
+                        }
+                    ],
+                }
+            ]
+        return []
+
+    monkeypatch.setattr(items_env.items_router, "_plex_list", fake_plex_list)
+
+    data = items_env.call()
+    item = data["items"][0]
+
+    assert data["not_ready_count"] == 0
+    assert item["assetReady"] is True
+    assert item["folderName"] == "Leon The Professional (1994)"
+
+
 def test_items_route_fast_page_does_not_scan_full_library(items_env, monkeypatch):
     calls = []
 

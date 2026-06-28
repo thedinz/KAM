@@ -147,6 +147,32 @@ describe('runLibraryMappingScan', () => {
     expect(result.entries[0].matchedFolder).toContain('{tmdb-351286}');
   });
 
+  it('uses alternate title candidates for localized Plex titles', async () => {
+    global.fetch = vi.fn(() =>
+      Promise.resolve(jsonResponse({ items: [{ name: 'Leon The Professional (1994)', isDir: true }] }))
+    );
+    const fetchAllForLibrary = vi.fn().mockResolvedValue({
+      items: [
+        {
+          ratingKey: '101',
+          title: 'Léon - Der Profi',
+          titleCandidates: ['Léon The Professional'],
+          year: 1994,
+          type: 'movie',
+          assetReady: false,
+        },
+      ],
+    });
+
+    const result = await runLibraryMappingScan({ library: 'Movies', fetchAllForLibrary });
+
+    expect(result.entries[0]).toMatchObject({
+      matched: true,
+      matchedFolder: 'Leon The Professional (1994)',
+      matchedFrom: 'alternateTitleYear',
+    });
+  });
+
   it('keeps real leading bracketed title text while ignoring trailing quality tags', async () => {
     global.fetch = vi.fn(() =>
       Promise.resolve(jsonResponse({ items: [{ name: '[REC] (2007) [Bluray-1080p]', isDir: true }] }))

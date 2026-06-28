@@ -221,6 +221,11 @@ def _strip_folder_metadata(value: str) -> str:
     return text
 
 
+def _fold_diacritics(value: str) -> str:
+    text = unicodedata.normalize("NFKD", str(value or ""))
+    return "".join(ch for ch in text if not unicodedata.combining(ch))
+
+
 def _extract_trailing_year(s: str) -> tuple[str, Optional[str]]:
     """Split a folder/title into title text and a trailing release year."""
 
@@ -245,7 +250,7 @@ def _tokenize_title(s: str) -> tuple[list[str], Optional[str]]:
         return [], None
 
     title_part, year = _extract_trailing_year(s)
-    normalized = title_part.casefold()
+    normalized = _fold_diacritics(title_part).casefold()
 
     raw_tokens = [tok for tok in re.split(r"[^0-9a-z]+", normalized) if tok]
     filtered_tokens = [tok for tok in raw_tokens if tok not in _STOPWORDS]
