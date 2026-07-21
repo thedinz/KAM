@@ -1353,6 +1353,9 @@ main {
   gap: 6px;
   align-items: baseline;
   min-width: 0;
+}
+
+.detail-asset-bar .detail-folder {
   flex: 1 1 260px;
 }
 
