@@ -11,6 +11,7 @@ from zipfile import BadZipFile, ZipFile
 
 from PIL import Image
 
+from ..services import plex_artwork as plex_artwork_service
 from ..services.resolve import resolve_existing_dir_or_422
 
 router = APIRouter()
@@ -101,6 +102,24 @@ def _asset_label(base_name: str, asset_kind: str) -> str:
     if asset_kind == "season":
         return f"{base_name} poster"
     return f"{base_name} title card"
+
+
+async def _upload_response(
+    path: str,
+    *,
+    rating_key: Optional[str],
+    kind: str,
+) -> Dict[str, Any]:
+    response: Dict[str, Any] = {"ok": True, "path": path}
+    plex_result = await run_in_threadpool(
+        plex_artwork_service.auto_apply_result,
+        rating_key,
+        path,
+        kind,
+    )
+    if plex_result is not None:
+        response["plex"] = plex_result
+    return response
 
 def _classify_mediux_asset(filename: str) -> Optional[Dict[str, str]]:
     basename = posixpath.basename(filename or "").strip()
@@ -206,6 +225,7 @@ async def upload_movie_asset(
     folderName: str = Form(...),
     file: UploadFile = File(...),
     kind: Optional[str] = Form("poster"),  # "poster" or "background"
+    ratingKey: Optional[str] = Form(None),
 ):
     """
     Movie upload: write ONLY into an existing Kometa folder.
@@ -219,7 +239,12 @@ async def upload_movie_asset(
     filename = "background.jpg" if (kind or "").lower() == "background" else "poster.jpg"
     dest_path = os.path.join(dest_dir, filename)
     await run_in_threadpool(_write_file, dest_path, file)
-    return {"ok": True, "path": dest_path}
+    normalized_kind = "background" if filename == "background.jpg" else "poster"
+    return await _upload_response(
+        dest_path,
+        rating_key=ratingKey,
+        kind=normalized_kind,
+    )
 
 @router.post("/api/upload_show")
 async def upload_show_asset(
@@ -227,6 +252,7 @@ async def upload_show_asset(
     folderName: str = Form(...),
     kind: str = Form(...),                  # "poster" | "background"
     file: UploadFile = File(...),
+    ratingKey: Optional[str] = Form(None),
 ):
     """
     Series upload: write ONLY into an existing Kometa folder.
@@ -239,10 +265,15 @@ async def upload_show_asset(
     except FileNotFoundError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
-    dest_name = "poster.jpg" if kind == "poster" else "background.jpg"
+    normalized_kind = "poster" if kind == "poster" else "background"
+    dest_name = "poster.jpg" if normalized_kind == "poster" else "background.jpg"
     dest_path = os.path.join(dest_dir, dest_name)
     await run_in_threadpool(_write_file, dest_path, file)
-    return {"ok": True, "path": dest_path}
+    return await _upload_response(
+        dest_path,
+        rating_key=ratingKey,
+        kind=normalized_kind,
+    )
 
 @router.post("/api/upload_season")
 async def upload_season_asset(
@@ -251,6 +282,7 @@ async def upload_season_asset(
     season: str = Form(...),                # numeric string (e.g., "1", "02")
     kind: Optional[str] = Form("poster"),   # "poster" | "background"
     file: UploadFile = File(...),
+    ratingKey: Optional[str] = Form(None),
 ):
     """
     Season upload: write ONLY into an existing Kometa folder.
@@ -276,7 +308,11 @@ async def upload_season_asset(
     )
     dest_path = os.path.join(dest_dir, dest_name)
     await run_in_threadpool(_write_file, dest_path, file)
-    return {"ok": True, "path": dest_path}
+    return await _upload_response(
+        dest_path,
+        rating_key=ratingKey,
+        kind=normalized_kind,
+    )
 
 @router.post("/api/upload_title_card")
 async def upload_title_card_asset(
@@ -285,6 +321,7 @@ async def upload_title_card_asset(
     season: str = Form(...),
     episode: str = Form(...),
     file: UploadFile = File(...),
+    ratingKey: Optional[str] = Form(None),
 ):
     """
     Episode title card upload: write SxxEyy.jpg into an existing Kometa show folder.
@@ -300,7 +337,7 @@ async def upload_title_card_asset(
     dest_name = f"S{season_idx:02d}E{episode_idx:02d}.jpg"
     dest_path = os.path.join(dest_dir, dest_name)
     await run_in_threadpool(_write_file, dest_path, file)
-    return {"ok": True, "path": dest_path}
+    return await _upload_response(dest_path, rating_key=ratingKey, kind="poster")
 
 @router.post("/api/import/mediux-zip")
 async def import_mediux_zip_asset(
