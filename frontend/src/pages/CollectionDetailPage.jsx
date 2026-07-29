@@ -3,6 +3,7 @@ import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom'
 import ArtworkCard from '../components/ArtworkCard.jsx';
 import { useLibraryItemsContext } from '../hooks/LibraryItemsProvider.jsx';
 import { responseErrorMessage, safeJson } from '../utils/api.js';
+import { sendSavedArtworkToPlex, uploadStatusMessage } from '../utils/plexArtwork.js';
 import { useTheme } from '../theme/ThemeProvider.jsx';
 import { buildLibraryBackLink, detailBackLink } from '../utils/navigation.js';
 
@@ -191,7 +192,7 @@ function CollectionDetailPage() {
           error: null,
           lastAction: 'upload',
         });
-        setStatusMessage('Upload complete.');
+        setStatusMessage(uploadStatusMessage(data));
         if (kind === 'poster') {
           reloadLibraryItems();
         }
@@ -210,6 +211,27 @@ function CollectionDetailPage() {
       }
     },
     [folderExists, library, effectiveRatingKey, folderName, fetchDetails, reloadLibraryItems, updateOperation]
+  );
+
+  const handleSendToPlex = useCallback(
+    async (kind) => {
+      const label = kind === 'background' ? 'background' : 'poster';
+      setStatusMessage(`Sending ${label} to Plex…`);
+      try {
+        await sendSavedArtworkToPlex({
+          library,
+          folderName,
+          ratingKey: effectiveRatingKey,
+          kind,
+        });
+        setStatusMessage(`${label === 'poster' ? 'Poster' : 'Background'} sent to Plex.`);
+      } catch (err) {
+        const message = err?.message || `Failed to send ${label} to Plex.`;
+        setStatusMessage(message);
+        throw err;
+      }
+    },
+    [library, folderName, effectiveRatingKey]
   );
 
   const handleImport = useCallback(
@@ -383,6 +405,7 @@ function CollectionDetailPage() {
                 operation={operations.poster}
                 onUpload={(file) => handleUpload('poster', file)}
                 onImport={() => handleImport('poster')}
+                onSendToPlex={() => handleSendToPlex('poster')}
               />
               <ArtworkCard
                 label="Background"
@@ -392,6 +415,7 @@ function CollectionDetailPage() {
                 operation={operations.background}
                 onUpload={(file) => handleUpload('background', file)}
                 onImport={() => handleImport('background')}
+                onSendToPlex={() => handleSendToPlex('background')}
               />
             </section>
             <div className="detail-status" aria-live="polite">

@@ -42,6 +42,7 @@ function SettingsPage() {
     savedTheme,
     plexUrl,
     plexToken,
+    autoApplyToPlex,
     authMode,
     authPassword,
     savedSettings,
@@ -87,6 +88,7 @@ function SettingsPage() {
 
   const savedPlexUrl = savedSettings?.plexUrl || '';
   const savedPlexToken = savedSettings?.plexToken || '';
+  const savedAutoApplyToPlex = Boolean(savedSettings?.autoApplyToPlex);
   const savedAuthMode = savedSettings?.authMode || 'builtin';
   const savedAuthPassword = savedSettings?.authPassword || '';
   const effectiveAuthMode = authMode === 'reverse_proxy' ? 'reverse_proxy' : 'builtin';
@@ -215,7 +217,7 @@ function SettingsPage() {
       return;
     }
     autoRefreshLibrariesKeyRef.current = savedCredentialsKey;
-    refreshLibraries().catch(() => {});
+    Promise.resolve(refreshLibraries()).catch(() => {});
   }, [savedPlexUrl, savedPlexToken, refreshLibraries]);
 
   const includingSet = useMemo(() => new Set(includingKeys), [includingKeys]);
@@ -452,6 +454,7 @@ function SettingsPage() {
       theme !== savedTheme ||
       plexUrl !== savedPlexUrl ||
       plexToken !== savedPlexToken ||
+      Boolean(autoApplyToPlex) !== savedAutoApplyToPlex ||
       effectiveAuthMode !== savedAuthMode ||
       effectiveAuthPassword !== savedAuthPassword;
     return settingsChanged || mappingsDirty;
@@ -463,6 +466,8 @@ function SettingsPage() {
     savedPlexUrl,
     plexToken,
     savedPlexToken,
+    autoApplyToPlex,
+    savedAutoApplyToPlex,
     effectiveAuthMode,
     savedAuthMode,
     effectiveAuthPassword,
@@ -487,6 +492,11 @@ function SettingsPage() {
 
   const handlePlexTokenChange = (event) => {
     updateSettings({ plexToken: event.target.value });
+    setStatus(null);
+  };
+
+  const handleAutoApplyToPlexChange = (event) => {
+    updateSettings({ autoApplyToPlex: event.target.checked });
     setStatus(null);
   };
 
@@ -1082,6 +1092,21 @@ function SettingsPage() {
                 disabled={busy}
               />
             </label>
+            <label className="settings-radio">
+              <input
+                type="checkbox"
+                name="autoApplyToPlex"
+                checked={Boolean(autoApplyToPlex)}
+                onChange={handleAutoApplyToPlexChange}
+                disabled={busy}
+              />
+              <span>Send artwork to Plex automatically after uploads</span>
+            </label>
+            <p className="settings-help">
+              KAM always keeps the Kometa asset file. When enabled, it also sends direct uploads
+              to Plex immediately using the URL and token above; Kometa can reapply overlays
+              during its next run.
+            </p>
           </section>
         </form>
 

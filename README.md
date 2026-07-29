@@ -10,6 +10,7 @@ KAM is a small web app that makes Kometa/Plex artwork management painless. It le
 * **Import Mediux series zip files** from a show page and map the files into Kometa names automatically
 * Convert uploads to **`.jpg`**
 * **Replace** existing `poster.*`, `background.*`, `SeasonNN.*`, `SeasonNN_background.*`, or `SNNENN.*` in the correct asset folder
+* **Send saved artwork directly to Plex** on demand, or automatically after uploads when enabled
 * Keep everything in the **same structure Kometa expects**
 * Provide a simple web UI with a **fallback** image to quickly spot missing artwork
 * Let you **exclude** specific movies, shows, or collections from KAM until you re-include them
@@ -249,6 +250,23 @@ To re-include an item, visit **Settings → Exclusions**. The page lists every e
 item, including its library and type, with a one-click **Include** button that restores
 it immediately. You can also refresh the list from the same screen if you make changes
 from another browser tab.
+
+---
+
+## Sending artwork to Plex
+
+Every saved poster, background, season image, and episode title card has a
+**Send to Plex** action on its detail page. KAM uploads the existing local asset to the
+matching Plex item while leaving the Kometa asset file unchanged.
+
+To send new uploads to Plex immediately, enable **Send artwork to Plex automatically
+after uploads** in **Settings → Plex**. This setting is off by default so upgrades do not
+unexpectedly change Plex artwork.
+
+If the Plex update fails, the KAM upload still succeeds and the asset remains available
+for a manual retry or a later Kometa run. When Kometa overlays are configured, the
+direct Plex update shows the clean asset first; Kometa can rebuild the overlaid version
+during its next normal run.
 
 ---
 
