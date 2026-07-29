@@ -98,6 +98,42 @@ def test_upload_movie_writes_file(tmp_path, monkeypatch):
     assert poster_path.read_bytes() == b"poster-bytes"
 
 
+def test_upload_movie_reports_automatic_plex_result(tmp_path, monkeypatch):
+    upload_module, target_dir, library, folder = _setup_env(tmp_path, monkeypatch)
+
+    monkeypatch.setattr(
+        upload_module.plex_artwork_service,
+        "auto_apply_result",
+        lambda rating_key, path, kind: {
+            "attempted": True,
+            "ok": True,
+            "ratingKey": rating_key,
+            "path": path,
+            "kind": kind,
+        },
+    )
+    upload_file = UploadFile(filename="poster.jpg", file=io.BytesIO(b"poster-bytes"))
+
+    response = asyncio.run(
+        upload_module.upload_movie_asset(
+            library=library,
+            folderName=folder,
+            file=upload_file,
+            kind="poster",
+            ratingKey="42",
+        )
+    )
+
+    assert response["ok"] is True
+    assert response["plex"] == {
+        "attempted": True,
+        "ok": True,
+        "ratingKey": "42",
+        "path": str(target_dir / "poster.jpg"),
+        "kind": "poster",
+    }
+
+
 def test_upload_movie_rejects_empty_file(tmp_path, monkeypatch):
     upload_module, target_dir, library, folder = _setup_env(tmp_path, monkeypatch)
 

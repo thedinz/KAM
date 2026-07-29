@@ -34,6 +34,7 @@ def test_get_settings_returns_defaults_when_missing_file(settings_modules):
         "theme": "dark",
         "plexUrl": "",
         "plexToken": "",
+        "autoApplyToPlex": False,
         "authMode": "builtin",
         "authPassword": "",
         "libraryMappings": [],
@@ -68,6 +69,7 @@ def test_get_settings_returns_stored_values(settings_modules):
         "theme": "dark",
         "plexUrl": "http://plex.example:32400",
         "plexToken": "initial-token",
+        "autoApplyToPlex": False,
         "authMode": "builtin",
         "authPassword": "",
         "libraryMappings": [
@@ -125,6 +127,7 @@ def test_put_settings_updates_file(settings_modules):
         "theme": "light",
         "plexUrl": "http://plex.changed",
         "plexToken": "updated-token",
+        "autoApplyToPlex": False,
         "authMode": "builtin",
         "authPassword": "",
         "libraryMappings": [
@@ -148,6 +151,7 @@ def test_put_settings_updates_file(settings_modules):
         "theme": "light",
         "plexUrl": "http://plex.changed",
         "plexToken": "updated-token",
+        "autoApplyToPlex": False,
         "authMode": "builtin",
         "authPassword": "",
         "libraryMappings": [
@@ -169,6 +173,7 @@ def test_put_settings_updates_file(settings_modules):
         "theme": "light",
         "plexUrl": "http://plex.changed",
         "plexToken": "updated-token",
+        "autoApplyToPlex": False,
         "authMode": "builtin",
         "authPassword": "",
         "libraryMappings": [
@@ -191,6 +196,17 @@ def test_put_settings_rejects_invalid_theme(settings_modules):
 
     with pytest.raises(ValidationError):
         router.SettingsPayload(theme="blue")
+
+
+def test_put_settings_persists_automatic_plex_artwork_choice(settings_modules):
+    router, service, path, _ = settings_modules
+
+    payload = router.SettingsPayload(theme="dark", autoApplyToPlex=True)
+    response = router.update_settings(payload)
+
+    assert response.autoApplyToPlex is True
+    assert service.load_settings()["autoApplyToPlex"] is True
+    assert json.loads(path.read_text(encoding="utf-8"))["autoApplyToPlex"] is True
 
 
 def test_put_settings_rejects_invalid_plex_url(settings_modules):

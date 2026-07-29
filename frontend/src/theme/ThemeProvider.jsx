@@ -15,6 +15,7 @@ const ThemeContext = createContext({
     theme: 'dark',
     plexUrl: '',
     plexToken: '',
+    autoApplyToPlex: false,
     authMode: 'builtin',
     authPassword: '',
     libraryMappings: [],
@@ -23,6 +24,7 @@ const ThemeContext = createContext({
     theme: 'dark',
     plexUrl: '',
     plexToken: '',
+    autoApplyToPlex: false,
     authMode: 'builtin',
     authPassword: '',
     libraryMappings: [],
@@ -31,10 +33,12 @@ const ThemeContext = createContext({
   savedTheme: 'dark',
   plexUrl: '',
   plexToken: '',
+  autoApplyToPlex: false,
   authMode: 'builtin',
   authPassword: '',
   savedPlexUrl: '',
   savedPlexToken: '',
+  savedAutoApplyToPlex: false,
   savedAuthMode: 'builtin',
   savedAuthPassword: '',
   libraryMappings: [],
@@ -132,6 +136,7 @@ const sanitizeSettings = (raw = {}) => {
   const themeValue = normalizeTheme(raw.theme);
   const plexUrlValue = raw.plexUrl;
   const plexTokenValue = raw.plexToken;
+  const autoApplyToPlexValue = raw.autoApplyToPlex;
   const authModeValue = normalizeAuthMode(raw.authMode);
   const authPasswordValue = raw.authPassword;
 
@@ -149,6 +154,7 @@ const sanitizeSettings = (raw = {}) => {
         : plexTokenValue
         ? String(plexTokenValue)
         : '',
+    autoApplyToPlex: Boolean(autoApplyToPlexValue),
     authMode: authModeValue,
     authPassword:
       typeof authPasswordValue === 'string'
@@ -602,6 +608,7 @@ export function ThemeProvider({ children }) {
       settings.theme !== savedSettings.theme ||
       settings.plexUrl !== savedSettings.plexUrl ||
       settings.plexToken !== savedSettings.plexToken ||
+      settings.autoApplyToPlex !== savedSettings.autoApplyToPlex ||
       settings.authMode !== savedSettings.authMode ||
       settings.authPassword !== savedSettings.authPassword,
     [settings, savedSettings]
@@ -706,10 +713,12 @@ export function ThemeProvider({ children }) {
       savedTheme: savedSettings.theme,
       plexUrl: settings.plexUrl,
       plexToken: settings.plexToken,
+      autoApplyToPlex: settings.autoApplyToPlex,
       authMode: settings.authMode,
       authPassword: settings.authPassword,
       savedPlexUrl: savedSettings.plexUrl,
       savedPlexToken: savedSettings.plexToken,
+      savedAutoApplyToPlex: savedSettings.autoApplyToPlex,
       savedAuthMode: savedSettings.authMode,
       savedAuthPassword: savedSettings.authPassword,
       libraryMappings: settings.libraryMappings,

@@ -230,14 +230,16 @@ def get_show(library: str = Query(...), ratingKey: str = Query(...)):
 
     # Local-first with cache-busting
     poster_local = os.path.join(series_dir_fs, "poster.jpg")
-    if _local_exists(poster_local):
+    poster_exists = _local_exists(poster_local)
+    if poster_exists:
         poster_url = _fileproxy_abs_path(library, folder, "poster.jpg", _mtime(poster_local))
     else:
         poster_url = _plex_thumb_proxy_url(thumb, ratingKey)
     plex_poster_url = _plex_thumb_url(thumb, ratingKey)
 
     bg_local = os.path.join(series_dir_fs, "background.jpg")
-    if _local_exists(bg_local):
+    background_exists = _local_exists(bg_local)
+    if background_exists:
         background_url = _fileproxy_abs_path(library, folder, "background.jpg", _mtime(bg_local))
     else:
         background_url = _plex_art_proxy_url(art, ratingKey)
@@ -305,6 +307,8 @@ def get_show(library: str = Query(...), ratingKey: str = Query(...)):
         "year": year,
         "folderName": folder,
         "folderExists": folder_exists,
+        "posterExists": poster_exists,
+        "backgroundExists": background_exists,
         "posterUrl": poster_url,
         "backgroundUrl": background_url,
         "plexPosterUrl": plex_poster_url,

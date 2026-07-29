@@ -17,6 +17,7 @@ _DEFAULT_SETTINGS: Dict[str, Any] = {
     "theme": "dark",
     "plexUrl": "",
     "plexToken": "",
+    "autoApplyToPlex": False,
     "authMode": "builtin",
     "authPassword": "",
     "libraryMappings": [],
@@ -74,6 +75,12 @@ def _normalize_auth_mode(value: Any) -> str:
     if text in {"reverse_proxy", "proxy"}:
         return "reverse_proxy"
     return "builtin"
+
+
+def _normalize_bool(value: Any) -> bool:
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+    return bool(value)
 
 
 def set_settings_path(path: str) -> None:
@@ -137,9 +144,11 @@ def _sanitize_payload(data: Dict[str, Any] | None) -> Dict[str, Any]:
         return {}
 
     sanitized: Dict[str, Any] = {}
-    for key in ("theme", "plexUrl", "plexToken", "authPassword"):
+    for key in ("theme", "plexUrl", "plexToken", "autoApplyToPlex", "authPassword"):
         if key in data:
-            sanitized[key] = data[key]
+            sanitized[key] = (
+                _normalize_bool(data[key]) if key == "autoApplyToPlex" else data[key]
+            )
 
     if "authMode" in data:
         sanitized["authMode"] = _normalize_auth_mode(data.get("authMode"))

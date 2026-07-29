@@ -89,6 +89,7 @@ class SettingsPayload(BaseModel):
     theme: Literal["light", "dark"]
     plexUrl: str = Field(default="")
     plexToken: str = Field(default="")
+    autoApplyToPlex: bool = Field(default=False)
     authMode: Literal["builtin", "reverse_proxy"] = Field(default="builtin")
     authPassword: str = Field(default="")
     libraryMappings: List[LibraryMappingPayload] = Field(default_factory=list)

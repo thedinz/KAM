@@ -3,6 +3,7 @@ import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom'
 import ArtworkCard from '../components/ArtworkCard.jsx';
 import { useLibraryItemsContext } from '../hooks/LibraryItemsProvider.jsx';
 import { responseErrorMessage, safeJson } from '../utils/api.js';
+import { sendSavedArtworkToPlex, uploadStatusMessage } from '../utils/plexArtwork.js';
 import { useTheme } from '../theme/ThemeProvider.jsx';
 import { buildLibraryBackLink, detailBackLink } from '../utils/navigation.js';
 
@@ -313,6 +314,7 @@ function ShowDetailPage() {
         return {
           index: idx,
           title,
+          ratingKey: season.ratingKey != null ? String(season.ratingKey) : '',
           posterUrl,
           plexPosterUrl,
           posterExists,
@@ -364,6 +366,7 @@ function ShowDetailPage() {
       const form = new FormData();
       form.append('library', library);
       if (folderName) form.append('folderName', folderName);
+      if (effectiveRatingKey) form.append('ratingKey', effectiveRatingKey);
       form.append('kind', kind);
       form.append('file', file);
 
@@ -380,7 +383,7 @@ function ShowDetailPage() {
           error: null,
           lastAction: 'upload',
         });
-        setStatusMessage('Upload complete.');
+        setStatusMessage(uploadStatusMessage(data));
         if (kind === 'poster') {
           reloadLibraryItems();
         }
@@ -398,7 +401,7 @@ function ShowDetailPage() {
         throw err;
       }
     },
-    [folderExists, library, folderName, fetchDetails, reloadLibraryItems, updateOperation]
+    [folderExists, library, folderName, effectiveRatingKey, fetchDetails, reloadLibraryItems, updateOperation]
   );
 
   const handleShowImport = useCallback(
@@ -464,7 +467,7 @@ function ShowDetailPage() {
   );
 
   const handleSeasonUpload = useCallback(
-    async (index, kind, file) => {
+    async (index, kind, file, seasonRatingKey) => {
       if (!folderExists) {
         setStatusMessage(MISSING_FOLDER_MESSAGE);
         throw new Error(MISSING_FOLDER_MESSAGE);
@@ -486,6 +489,7 @@ function ShowDetailPage() {
       if (folderName) form.append('folderName', folderName);
       form.append('season', String(index));
       form.append('kind', normalizedKind);
+      if (seasonRatingKey) form.append('ratingKey', seasonRatingKey);
       form.append('file', file);
 
       try {
@@ -501,7 +505,7 @@ function ShowDetailPage() {
           error: null,
           lastAction: 'upload',
         });
-        setStatusMessage('Upload complete.');
+        setStatusMessage(uploadStatusMessage(data));
         await fetchDetails();
       } catch (err) {
         const message = err?.message || String(err);
@@ -576,7 +580,7 @@ function ShowDetailPage() {
   );
 
   const handleTitleCardUpload = useCallback(
-    async (seasonIndex, episodeIndex, file) => {
+    async (seasonIndex, episodeIndex, file, episodeRatingKey) => {
       if (!folderExists) {
         setStatusMessage(MISSING_FOLDER_MESSAGE);
         throw new Error(MISSING_FOLDER_MESSAGE);
@@ -597,6 +601,7 @@ function ShowDetailPage() {
       if (folderName) form.append('folderName', folderName);
       form.append('season', String(seasonIdx));
       form.append('episode', String(episodeIdx));
+      if (episodeRatingKey) form.append('ratingKey', episodeRatingKey);
       form.append('file', file);
 
       try {
@@ -612,7 +617,7 @@ function ShowDetailPage() {
           error: null,
           lastAction: 'upload',
         });
-        setStatusMessage('Upload complete.');
+        setStatusMessage(uploadStatusMessage(data));
         await fetchDetails();
       } catch (err) {
         const message = err?.message || String(err);
@@ -628,6 +633,29 @@ function ShowDetailPage() {
       }
     },
     [folderExists, library, folderName, fetchDetails, updateTitleCardOperation]
+  );
+
+  const handleSendToPlex = useCallback(
+    async ({ kind = 'poster', ratingKey: targetRatingKey, season = null, episode = null }) => {
+      const targetKind = kind === 'background' ? 'background' : 'poster';
+      setStatusMessage('Sending artwork to Plex…');
+      try {
+        await sendSavedArtworkToPlex({
+          library,
+          folderName,
+          ratingKey: targetRatingKey,
+          kind: targetKind,
+          season,
+          episode,
+        });
+        setStatusMessage('Artwork sent to Plex.');
+      } catch (err) {
+        const message = err?.message || 'Failed to send artwork to Plex.';
+        setStatusMessage(message);
+        throw err;
+      }
+    },
+    [library, folderName]
   );
 
   const handleTitleCardImport = useCallback(
@@ -899,6 +927,9 @@ function ShowDetailPage() {
                 operation={operations.poster}
                 onUpload={(file) => handleShowUpload('poster', file)}
                 onImport={() => handleShowImport('poster')}
+                onSendToPlex={() =>
+                  handleSendToPlex({ kind: 'poster', ratingKey: effectiveRatingKey })
+                }
               />
               <ArtworkCard
                 label="Series Background"
@@ -909,6 +940,9 @@ function ShowDetailPage() {
                 operation={backgroundOperation}
                 onUpload={(file) => handleShowUpload('background', file)}
                 onImport={() => handleShowImport('background')}
+                onSendToPlex={() =>
+                  handleSendToPlex({ kind: 'background', ratingKey: effectiveRatingKey })
+                }
               />
             </section>
             <section className="detail-seasons">
@@ -968,8 +1002,20 @@ function ShowDetailPage() {
                               imageUrl={season.posterUrl}
                               folderExists={folderExists}
                               operation={posterOp}
-                              onUpload={(file) => handleSeasonUpload(season.index, 'poster', file)}
+                              onUpload={(file) =>
+                                handleSeasonUpload(season.index, 'poster', file, season.ratingKey)
+                              }
                               onImport={() => handleSeasonImport(season.index, 'poster', season.plexPosterUrl)}
+                              onSendToPlex={
+                                season.ratingKey
+                                  ? () =>
+                                      handleSendToPlex({
+                                        kind: 'poster',
+                                        ratingKey: season.ratingKey,
+                                        season: season.index,
+                                      })
+                                  : undefined
+                              }
                             />
                             {showSeasonBackground ? (
                               <ArtworkCard
@@ -979,8 +1025,20 @@ function ShowDetailPage() {
                                 imageUrl={season.backgroundUrl}
                                 folderExists={folderExists}
                                 operation={backgroundOp}
-                                onUpload={(file) => handleSeasonUpload(season.index, 'background', file)}
+                                onUpload={(file) =>
+                                  handleSeasonUpload(season.index, 'background', file, season.ratingKey)
+                                }
                                 onImport={() => handleSeasonImport(season.index, 'background', season.plexBackgroundUrl)}
+                                onSendToPlex={
+                                  season.ratingKey
+                                    ? () =>
+                                        handleSendToPlex({
+                                          kind: 'background',
+                                          ratingKey: season.ratingKey,
+                                          season: season.index,
+                                        })
+                                    : undefined
+                                }
                               />
                             ) : null}
                           </div>
@@ -1001,8 +1059,26 @@ function ShowDetailPage() {
                                       imageUrl={episode.titleCardUrl}
                                       folderExists={folderExists}
                                       operation={titleCardOp}
-                                      onUpload={(file) => handleTitleCardUpload(season.index, episode.index, file)}
+                                      onUpload={(file) =>
+                                        handleTitleCardUpload(
+                                          season.index,
+                                          episode.index,
+                                          file,
+                                          episode.ratingKey
+                                        )
+                                      }
                                       onImport={() => handleTitleCardImport(season.index, episode)}
+                                      onSendToPlex={
+                                        episode.ratingKey
+                                          ? () =>
+                                              handleSendToPlex({
+                                                kind: 'poster',
+                                                ratingKey: episode.ratingKey,
+                                                season: season.index,
+                                                episode: episode.index,
+                                              })
+                                          : undefined
+                                      }
                                     />
                                   );
                                 })}
