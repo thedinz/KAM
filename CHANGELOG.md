@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 6.1.0 — 2026-07-29
 
 - Add optional automatic Plex artwork updates after uploads.
 - Add manual **Send to Plex** controls for movies, collections, series, seasons,
