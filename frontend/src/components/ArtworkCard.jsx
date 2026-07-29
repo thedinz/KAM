@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 const IDLE_OPERATION = Object.freeze({
   uploading: false,
@@ -17,10 +17,14 @@ function ArtworkCard({
   operation = IDLE_OPERATION,
   onUpload,
   onImport,
+  onSendToPlex,
   uploadLabel = 'Upload',
   importLabel = 'Import',
 }) {
   const inputRef = useRef(null);
+  const [sendingToPlex, setSendingToPlex] = useState(false);
+  const [plexSuccess, setPlexSuccess] = useState(false);
+  const [plexError, setPlexError] = useState(null);
 
   const uploading = Boolean(operation?.uploading);
   const importing = Boolean(operation?.importing);
@@ -28,9 +32,10 @@ function ArtworkCard({
   const error = operation?.error || null;
   const lastAction = operation?.lastAction || null;
 
-  const busy = uploading || importing;
+  const busy = uploading || importing || sendingToPlex;
   const hasImport = typeof onImport === 'function';
   const hasUpload = typeof onUpload === 'function';
+  const hasSendToPlex = typeof onSendToPlex === 'function';
 
   useEffect(() => {
     if (!folderExists && inputRef.current) {
@@ -40,6 +45,8 @@ function ArtworkCard({
 
   const handleUploadClick = () => {
     if (!hasUpload || busy || !folderExists) return;
+    setPlexSuccess(false);
+    setPlexError(null);
     if (inputRef.current) {
       inputRef.current.value = '';
       inputRef.current.click();
@@ -58,9 +65,26 @@ function ArtworkCard({
 
   const handleImportClick = () => {
     if (!hasImport) return;
+    setPlexSuccess(false);
+    setPlexError(null);
     const result = onImport();
     if (result && typeof result.catch === 'function') {
       result.catch(() => {});
+    }
+  };
+
+  const handleSendToPlexClick = async () => {
+    if (!hasSendToPlex || busy || !folderExists || !exists) return;
+    setSendingToPlex(true);
+    setPlexSuccess(false);
+    setPlexError(null);
+    try {
+      await onSendToPlex();
+      setPlexSuccess(true);
+    } catch (err) {
+      setPlexError(err?.message || String(err));
+    } finally {
+      setSendingToPlex(false);
     }
   };
 
@@ -69,7 +93,15 @@ function ArtworkCard({
 
   let statusText = '\u00a0';
   let statusClass = 'status-text';
-  if (error) {
+  if (plexError) {
+    statusText = plexError;
+    statusClass = 'status-text error';
+  } else if (sendingToPlex) {
+    statusText = 'Sending to Plex…';
+  } else if (plexSuccess) {
+    statusText = 'Sent to Plex.';
+    statusClass = 'status-text success';
+  } else if (error) {
     statusText = error;
     statusClass = 'status-text error';
   } else if (success) {
@@ -139,6 +171,17 @@ function ArtworkCard({
             disabled={importDisabled}
           >
             {importing ? 'Importing…' : importLabel}
+          </button>
+        ) : null}
+        {hasSendToPlex ? (
+          <button
+            type="button"
+            className="btn"
+            aria-label={`Send ${label} to Plex`}
+            onClick={handleSendToPlexClick}
+            disabled={!folderExists || !exists || busy}
+          >
+            {sendingToPlex ? 'Sending…' : 'Send to Plex'}
           </button>
         ) : null}
       </div>

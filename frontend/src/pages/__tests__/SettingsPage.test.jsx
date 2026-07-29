@@ -40,12 +40,18 @@ describe('SettingsPage', () => {
     const mockSave = vi.fn().mockResolvedValue({});
     const mockRefresh = vi.fn().mockResolvedValue([]);
     const mockRefreshExclusions = vi.fn().mockResolvedValue([]);
+    const updateSettings = vi.fn();
     useTheme.mockReturnValue({
       theme: 'dark',
       savedTheme: 'dark',
       plexUrl: 'http://plex.local',
       plexToken: 'token',
-      savedSettings: { plexUrl: 'http://plex.local', plexToken: 'token' },
+      autoApplyToPlex: false,
+      savedSettings: {
+        plexUrl: 'http://plex.local',
+        plexToken: 'token',
+        autoApplyToPlex: false,
+      },
       libraryMappings: [
         { library: 'Movies', assetPath: '/assets/Movies', collectionsPath: '' },
       ],
@@ -64,7 +70,7 @@ describe('SettingsPage', () => {
       libraryMappingsDirty: false,
       hasUnsavedChanges: false,
       applyTheme: vi.fn(),
-      updateSettings: vi.fn(),
+      updateSettings,
       saveSettings: mockSave,
       revertSettings: vi.fn(),
       refreshLibraries: mockRefresh,
@@ -86,6 +92,11 @@ describe('SettingsPage', () => {
 
     expect(screen.getByRole('heading', { name: /Plex Libraries/i })).toBeInTheDocument();
     expect(screen.getByText('Movies')).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByLabelText('Send artwork to Plex automatically after uploads')
+    );
+    expect(updateSettings).toHaveBeenCalledWith({ autoApplyToPlex: true });
 
     const bulkButton = screen.getByRole('button', { name: /Set asset folder for selected/i });
     expect(bulkButton).toBeDisabled();
