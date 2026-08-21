@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 6.2.0 — 2026-08-21
 
 - Add username-and-password built-in authentication with username configuration
   in Settings.

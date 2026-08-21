@@ -2,9 +2,9 @@
 
 KAM is a small web app that makes Kometa/Plex artwork management painless. It lets you upload artwork for **movies, TV series, seasons, and collections** and will:
 
-> ## KAM 6.1 released, now with instant Plex artwork updates!
+> ## KAM 6.2 released with username-and-password login!
 >
-> KAM 6.1 can send saved posters, backgrounds, season artwork, and episode title cards directly to Plex. Push individual assets on demand, or enable automatic Plex updates after uploads while keeping the Kometa asset files ready for future overlay runs.
+> KAM 6.2 adds configurable usernames to built-in authentication. Existing password-only installations get a safe one-time username setup on their next login without losing access.
 
 * **Import existing Plex assets** — movie posters/backgrounds, series posters/backgrounds, **season posters/backgrounds**, and title cards — into your mapped Kometa assets structure
 * **Import Mediux series zip files** from a show page and map the files into Kometa names automatically
