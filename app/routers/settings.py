@@ -1,7 +1,7 @@
 """Settings API endpoints."""
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from typing import List, Literal
 from urllib.parse import urlparse
@@ -91,6 +91,7 @@ class SettingsPayload(BaseModel):
     plexToken: str = Field(default="")
     autoApplyToPlex: bool = Field(default=False)
     authMode: Literal["builtin", "reverse_proxy"] = Field(default="builtin")
+    authUsername: str = Field(default="", max_length=128)
     authPassword: str = Field(default="")
     libraryMappings: List[LibraryMappingPayload] = Field(default_factory=list)
 
@@ -151,6 +152,16 @@ class SettingsPayload(BaseModel):
             value = str(value)
         return value.strip()
 
+    @field_validator("authUsername", mode="before")
+    @classmethod
+    def _validate_auth_username(cls, value: str | None) -> str:
+        if value in (None, ""):
+            return ""
+        if not isinstance(value, str):
+            value = str(value)
+        return value.strip()
+
+
 @router.get("/api/settings", response_model=SettingsPayload)
 def get_settings() -> SettingsPayload:
     data = settings_service.load_settings()
@@ -159,6 +170,11 @@ def get_settings() -> SettingsPayload:
 
 @router.put("/api/settings", response_model=SettingsPayload)
 def update_settings(payload: SettingsPayload) -> SettingsPayload:
+    if payload.authMode == "builtin" and payload.authPassword and not payload.authUsername:
+        raise HTTPException(
+            status_code=422,
+            detail="A login username is required when a login password is configured",
+        )
     stored = settings_service.save_settings(payload.model_dump())
     return SettingsPayload(**stored)
 

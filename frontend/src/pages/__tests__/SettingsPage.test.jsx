@@ -231,11 +231,13 @@ describe('SettingsPage', () => {
       plexUrl: '',
       plexToken: '',
       authMode: 'builtin',
+      authUsername: 'admin',
       authPassword: 'secret',
       savedSettings: {
         plexUrl: '',
         plexToken: '',
         authMode: 'builtin',
+        authUsername: 'admin',
         authPassword: 'secret',
       },
       libraryMappings: [],
@@ -272,6 +274,11 @@ describe('SettingsPage', () => {
     fireEvent.click(screen.getByRole('radio', { name: 'Reverse proxy auth' }));
 
     expect(updateSettings).toHaveBeenCalledWith({ authMode: 'reverse_proxy' });
+
+    fireEvent.change(screen.getByLabelText('Login username'), {
+      target: { value: 'new-admin' },
+    });
+    expect(updateSettings).toHaveBeenCalledWith({ authUsername: 'new-admin' });
   });
 
   it('hides the password field in reverse proxy authentication mode', () => {
@@ -281,11 +288,13 @@ describe('SettingsPage', () => {
       plexUrl: '',
       plexToken: '',
       authMode: 'reverse_proxy',
+      authUsername: 'admin',
       authPassword: 'stored-password',
       savedSettings: {
         plexUrl: '',
         plexToken: '',
         authMode: 'reverse_proxy',
+        authUsername: 'admin',
         authPassword: 'stored-password',
       },
       libraryMappings: [],
@@ -320,6 +329,7 @@ describe('SettingsPage', () => {
     );
 
     expect(screen.getByRole('radio', { name: 'Reverse proxy auth' })).toBeChecked();
+    expect(screen.queryByLabelText('Login username')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Login password')).not.toBeInTheDocument();
     expect(screen.getByText('KAM will skip built-in login and trust the upstream proxy.')).toBeInTheDocument();
   });

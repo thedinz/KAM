@@ -220,7 +220,7 @@ across image updates, container recreation, and Unraid upgrades.
 
 The main files are:
 
-* `settings.json` — theme, Plex URL/token, auth mode/password, and library mappings.
+* `settings.json` — theme, Plex URL/token, auth mode/username/password, and library mappings.
 * `folder_overrides.json` — per-item folder assignments made by the folder finder.
 * `exclusions.json` — movies, shows, and collections hidden from KAM until re-included.
 
@@ -354,8 +354,10 @@ Collections can share a single `/assets/Collections` directory, or you can map s
 
 KAM supports two authentication modes:
 
-* **Built-in auth** — set **Settings → Login → Built-in auth** and enter a login password. You can also provide `KAM_AUTH_PASSWORD` as an environment variable.
+* **Built-in auth** — set **Settings → Login → Built-in auth** and enter a username and password. You can also provide `KAM_AUTH_USERNAME` and `KAM_AUTH_PASSWORD` as environment variables.
 * **Reverse proxy auth** — set **Settings → Login → Reverse proxy auth** or `KAM_AUTH_MODE=reverse_proxy`. In this mode KAM skips its own login screen and trusts the upstream proxy.
+
+Existing password-only installations remain compatible. On the first login after upgrading, KAM asks the user to choose a username and verifies the existing password before saving it. Older integrations that post only a password continue to work until a username is configured.
 
 Additional auth environment variables:
 
