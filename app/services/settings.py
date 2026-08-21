@@ -19,6 +19,7 @@ _DEFAULT_SETTINGS: Dict[str, Any] = {
     "plexToken": "",
     "autoApplyToPlex": False,
     "authMode": "builtin",
+    "authUsername": "",
     "authPassword": "",
     "libraryMappings": [],
 }
@@ -128,6 +129,21 @@ def save_library_mappings(mappings: List[Dict[str, Any]]) -> Dict[str, Any]:
         return copy.deepcopy(current)
 
 
+def claim_auth_username(username: str) -> str:
+    """Atomically save the first built-in-auth username and return the winner."""
+    normalized = str(username).strip()
+    if not normalized:
+        return ""
+    with _LOCK:
+        current = _load_locked()
+        existing = str(current.get("authUsername") or "").strip()
+        if existing:
+            return existing
+        current["authUsername"] = normalized
+        _write_locked(current)
+        return normalized
+
+
 def _merge_with_defaults(data: Dict[str, Any] | None) -> Dict[str, Any]:
     merged = copy.deepcopy(_DEFAULT_SETTINGS)
     if data:
@@ -144,7 +160,14 @@ def _sanitize_payload(data: Dict[str, Any] | None) -> Dict[str, Any]:
         return {}
 
     sanitized: Dict[str, Any] = {}
-    for key in ("theme", "plexUrl", "plexToken", "autoApplyToPlex", "authPassword"):
+    for key in (
+        "theme",
+        "plexUrl",
+        "plexToken",
+        "autoApplyToPlex",
+        "authUsername",
+        "authPassword",
+    ):
         if key in data:
             sanitized[key] = (
                 _normalize_bool(data[key]) if key == "autoApplyToPlex" else data[key]

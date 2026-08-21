@@ -4,6 +4,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from fastapi import HTTPException
 from pydantic import ValidationError
 
 
@@ -36,6 +37,7 @@ def test_get_settings_returns_defaults_when_missing_file(settings_modules):
         "plexToken": "",
         "autoApplyToPlex": False,
         "authMode": "builtin",
+        "authUsername": "",
         "authPassword": "",
         "libraryMappings": [],
     }
@@ -71,6 +73,7 @@ def test_get_settings_returns_stored_values(settings_modules):
         "plexToken": "initial-token",
         "autoApplyToPlex": False,
         "authMode": "builtin",
+        "authUsername": "",
         "authPassword": "",
         "libraryMappings": [
             {
@@ -129,6 +132,7 @@ def test_put_settings_updates_file(settings_modules):
         "plexToken": "updated-token",
         "autoApplyToPlex": False,
         "authMode": "builtin",
+        "authUsername": "",
         "authPassword": "",
         "libraryMappings": [
             {
@@ -153,6 +157,7 @@ def test_put_settings_updates_file(settings_modules):
         "plexToken": "updated-token",
         "autoApplyToPlex": False,
         "authMode": "builtin",
+        "authUsername": "",
         "authPassword": "",
         "libraryMappings": [
             {
@@ -175,6 +180,7 @@ def test_put_settings_updates_file(settings_modules):
         "plexToken": "updated-token",
         "autoApplyToPlex": False,
         "authMode": "builtin",
+        "authUsername": "",
         "authPassword": "",
         "libraryMappings": [
             {
@@ -232,6 +238,36 @@ def test_put_settings_accepts_reverse_proxy_auth_mode(settings_modules):
     stored = json.loads(path.read_text(encoding="utf-8"))
     assert stored["authMode"] == "reverse_proxy"
     assert service.load_settings()["authMode"] == "reverse_proxy"
+
+
+def test_put_settings_persists_builtin_username(settings_modules):
+    router, service, _, _ = settings_modules
+
+    payload = router.SettingsPayload(
+        theme="dark",
+        authMode="builtin",
+        authUsername="  admin  ",
+        authPassword="  keep-existing-secret  ",
+    )
+
+    response = router.update_settings(payload)
+
+    assert response.authUsername == "admin"
+    assert service.load_settings()["authUsername"] == "admin"
+
+
+def test_put_settings_rejects_password_without_username(settings_modules):
+    router, _, _, _ = settings_modules
+    payload = router.SettingsPayload(
+        theme="dark",
+        authMode="builtin",
+        authPassword="keep-existing-secret",
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        router.update_settings(payload)
+
+    assert exc.value.status_code == 422
 
 
 def test_put_settings_rejects_invalid_auth_mode(settings_modules):
