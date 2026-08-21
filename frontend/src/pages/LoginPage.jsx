@@ -5,7 +5,8 @@ import { useAuth } from '../hooks/AuthProvider.jsx';
 
 function LoginPage() {
   const navigate = useNavigate();
-  const { enabled, authenticated, loading, login } = useAuth();
+  const { enabled, authenticated, loading, usernameRequired, login } = useAuth();
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -21,7 +22,7 @@ function LoginPage() {
     setError('');
     setSubmitting(true);
     try {
-      await login(password);
+      await login(username.trim(), password);
       navigate('/libraries', { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed');
@@ -36,8 +37,25 @@ function LoginPage() {
         <h1 className="login-brand-title">
           <BrandLockup compact />
         </h1>
-        <p className="login-subtitle">Enter your password to continue.</p>
+        <p className="login-subtitle">
+          {usernameRequired
+            ? 'One-time update: create a username and enter your existing password.'
+            : 'Enter your username and password to continue.'}
+        </p>
         <form onSubmit={handleSubmit} className="login-form">
+          <label className="login-label" htmlFor="username">
+            Username
+          </label>
+          <input
+            id="username"
+            type="text"
+            value={username}
+            onChange={(event) => setUsername(event.target.value)}
+            placeholder={usernameRequired ? 'Create a username' : 'Username'}
+            autoComplete="username"
+            autoFocus
+            required
+          />
           <label className="login-label" htmlFor="password">
             Password
           </label>
@@ -51,7 +69,11 @@ function LoginPage() {
             required
           />
           {error ? <div className="login-error">{error}</div> : null}
-          <button type="submit" className="btn" disabled={submitting || !password}>
+          <button
+            type="submit"
+            className="btn"
+            disabled={submitting || !username.trim() || !password}
+          >
             {submitting ? 'Signing in…' : 'Sign in'}
           </button>
         </form>

@@ -7,6 +7,7 @@ export function AuthProvider({ children }) {
     mode: 'builtin',
     enabled: false,
     authenticated: true,
+    usernameRequired: false,
     loading: true,
   });
 
@@ -19,6 +20,7 @@ export function AuthProvider({ children }) {
             mode: 'builtin',
             enabled: false,
             authenticated: true,
+            usernameRequired: false,
             loading: false,
           };
           setAuthState(nextState);
@@ -31,6 +33,7 @@ export function AuthProvider({ children }) {
         mode: data.mode === 'reverse_proxy' ? 'reverse_proxy' : 'builtin',
         enabled: Boolean(data.enabled),
         authenticated: Boolean(data.authenticated),
+        usernameRequired: Boolean(data.usernameRequired),
         loading: false,
       };
       setAuthState(nextState);
@@ -40,6 +43,7 @@ export function AuthProvider({ children }) {
         mode: 'builtin',
         enabled: false,
         authenticated: true,
+        usernameRequired: false,
         loading: false,
       };
       setAuthState(nextState);
@@ -51,12 +55,12 @@ export function AuthProvider({ children }) {
     refresh();
   }, [refresh]);
 
-  const login = useCallback(async (password) => {
+  const login = useCallback(async (username, password) => {
     const response = await fetch('/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'same-origin',
-      body: JSON.stringify({ password }),
+      body: JSON.stringify({ username, password }),
     });
 
     if (!response.ok) {
@@ -65,7 +69,13 @@ export function AuthProvider({ children }) {
       throw new Error(message);
     }
 
-    setAuthState({ mode: 'builtin', enabled: true, authenticated: true, loading: false });
+    setAuthState({
+      mode: 'builtin',
+      enabled: true,
+      authenticated: true,
+      usernameRequired: false,
+      loading: false,
+    });
   }, []);
 
   const logout = useCallback(async () => {

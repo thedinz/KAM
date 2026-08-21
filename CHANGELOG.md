@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Add username-and-password built-in authentication with username configuration
+  in Settings.
+- Migrate password-only installations by prompting for a username on the first
+  login while retaining compatibility with password-only login API clients.
+
 ## 6.1.0 — 2026-07-29
 
 - Add optional automatic Plex artwork updates after uploads.
