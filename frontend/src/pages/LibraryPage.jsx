@@ -254,13 +254,6 @@ function LibraryPage() {
   const handleNext = useCallback(() => setPage(Math.min(totalPages || 1, page + 1)), [setPage, page, totalPages]);
   const handleLast = useCallback(() => setPage(totalPages || 1), [setPage, totalPages]);
 
-  const handleViewNotReady = useCallback(() => {
-    if (!library) return;
-    const lib = library.trim();
-    if (!lib) return;
-    navigate(`/libraries/${encodeURIComponent(lib)}/not-ready`);
-  }, [library, navigate]);
-
   const [importState, setImportState] = useState({
     active: false,
     percent: 0,
@@ -610,11 +603,6 @@ function LibraryPage() {
     return `${count.toLocaleString()} item${count === 1 ? '' : 's'}`;
   }, [totalCount]);
 
-  const readyCount = useMemo(
-    () => Math.max(0, (Number(totalCount) || 0) - (Number(notReadyCount) || 0)),
-    [notReadyCount, totalCount]
-  );
-
   const normalizedLibrary = (library || '').trim();
   const importTooltip = !normalizedLibrary
     ? 'Choose a library first.'
@@ -626,7 +614,6 @@ function LibraryPage() {
         ? 'Choose collection posters/backgrounds to import from Plex into Kometa asset folders.'
         : 'Choose which posters/backgrounds and TV season artwork to import from Plex into Kometa asset folders.';
 
-  const notReadyButtonDisabled = !library || notReadyCountLoading || (Number(notReadyCount) || 0) <= 0;
   const scanDisabled = !library || loading;
   const scanTitle = library
     ? 'Scan the mapped asset folders and Plex library to find missing matches.'
@@ -652,12 +639,6 @@ function LibraryPage() {
             onScanMapping={handleScanMapping}
             scanDisabled={scanDisabled}
             scanTitle={scanTitle}
-            countLabel={countLabel}
-            readyCount={readyCount}
-            onViewNotReady={handleViewNotReady}
-            notReadyCount={notReadyCount}
-            notReadyLoading={notReadyCountLoading}
-            notReadyDisabled={notReadyButtonDisabled}
           >
             <ImportStatusPanel
               active={importState.active}

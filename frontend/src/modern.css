@@ -312,30 +312,9 @@ button:focus-visible,
 .toolbar-primary-action { border-color: var(--accent); background: var(--accent); color: #03121a; box-shadow: 0 9px 24px rgba(32, 184, 243, 0.18); }
 .toolbar-primary-action:enabled:hover { border-color: var(--accent-strong); background: var(--accent-strong); transform: translateY(-1px); }
 .toolbar-secondary-action { background: transparent; color: var(--fg); }
-.toolbar-status-group { gap: 9px; }
 .library-select { flex-basis: 170px; min-width: 145px; background-color: var(--surface-1); }
 .library-sort-select { flex-basis: 150px; min-width: 135px; background-color: var(--surface-1); }
-
-.count-label,
-.not-ready-button {
-  min-height: 36px;
-  gap: 8px;
-  padding: 6px 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 650;
-}
-
-.count-label strong { color: var(--fg); font-size: 13px; }
-.count-label.is-active { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-strong); }
-.count-label.is-active strong { color: var(--accent-strong); }
-.count-label-ready strong { color: var(--success); }
-.not-ready-button .badge { min-width: 22px; padding: 1px 5px; background: var(--warning-soft); color: var(--warning); }
-.not-ready-button:enabled:hover,
-.not-ready-button:enabled:focus-visible { border-color: var(--warning); color: var(--warning); }
+.toolbar-sort-row { justify-content: flex-end; }
 
 .library-main { padding: 0 14px 4px; }
 #grid { grid-template-columns: repeat(auto-fill, minmax(172px, 1fr)); gap: 16px; padding: 20px 16px; }
@@ -601,8 +580,8 @@ button:focus-visible,
   .app-navigation { min-width: max-content; flex: 1 0 auto; flex-direction: row; align-items: center; padding: 9px 5px; }
   .app-library-links { display: contents; }
   .app-nav-section-label,
-  .app-nav-attention,
   .app-sidebar-version { display: none; }
+  .app-nav-attention { margin-top: 0; }
   .app-nav-item { min-height: 42px; grid-template-columns: 19px auto; padding: 7px 10px; }
   .app-nav-icon { width: 18px; height: 18px; }
   .app-nav-item.is-active::before { inset: auto 10px -10px; width: auto; height: 2px; border-radius: 2px 2px 0 0; }
@@ -617,7 +596,6 @@ button:focus-visible,
   .toolbar-command-row { flex-direction: column; }
   .toolbar-action-group { justify-content: stretch; }
   .toolbar-action-group button { flex: 1 1 auto; }
-  .toolbar-status-group { width: 100%; overflow-x: auto; flex-wrap: nowrap; }
   .library-sort-select { width: 100%; }
   .detail-main,
   .settings-page,
@@ -629,7 +607,8 @@ button:focus-visible,
 @media (max-width: 520px) {
   .app-sidebar .kam-brand-copy,
   .app-navigation > .app-nav-item:first-child span,
-  .app-library-links .app-nav-item span { display: none; }
+  .app-library-links .app-nav-item span,
+  .app-nav-attention > span:not(.app-nav-badge) { display: none; }
   .app-nav-item,
   .app-library-links .app-nav-item { grid-template-columns: 21px; }
   .workspace-routes header { top: 63px; }
