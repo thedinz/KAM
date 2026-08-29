@@ -5,9 +5,6 @@ import LibraryToolbar from '../LibraryToolbar.jsx';
 
 function renderToolbar(overrides = {}) {
   const props = {
-    libraries: ['Movies', 'TV Shows'],
-    selectedLibrary: 'Movies',
-    onLibraryChange: vi.fn(),
     searchValue: '',
     onSearchChange: vi.fn(),
     sortValue: 'title',
@@ -30,6 +27,12 @@ function renderToolbar(overrides = {}) {
 }
 
 describe('LibraryToolbar', () => {
+  it('does not duplicate library navigation from the sidebar', () => {
+    renderToolbar();
+
+    expect(screen.queryByLabelText('Plex library')).not.toBeInTheDocument();
+  });
+
   it('notifies when the sort mode changes', () => {
     const props = renderToolbar();
 

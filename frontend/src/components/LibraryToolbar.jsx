@@ -1,7 +1,4 @@
 function LibraryToolbar({
-  libraries,
-  selectedLibrary,
-  onLibraryChange,
   searchValue,
   onSearchChange,
   sortValue = 'title',
@@ -79,27 +76,6 @@ function LibraryToolbar({
 
       <div className="toolbar-command-row">
         <div className="toolbar-status-group">
-          <label className="sr-only" htmlFor="librarySelect">
-            Plex library
-          </label>
-          <select
-            id="librarySelect"
-            className="library-select"
-            value={selectedLibrary || ''}
-            onChange={(event) => onLibraryChange(event.target.value)}
-          >
-            {libraries.length === 0 && (
-              <option value="" disabled>
-                Loading…
-              </option>
-            )}
-            {libraries.map((lib) => (
-              <option key={lib} value={lib}>
-                {lib}
-              </option>
-            ))}
-          </select>
-
           <span className="count-label is-active" id="count">
             All <strong>{countLabel.replace(/\s+items?$/, '')}</strong>
           </span>

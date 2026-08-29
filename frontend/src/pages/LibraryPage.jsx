@@ -166,7 +166,6 @@ function LibraryPage() {
   const lastUrlLibraryRef = useRef('');
   const pendingUrlLibraryRef = useRef('');
   const {
-    libraries,
     library,
     setLibrary,
     page,
@@ -636,9 +635,6 @@ function LibraryPage() {
         </div>
         <div className="library-header-controls">
           <LibraryToolbar
-            libraries={libraries}
-            selectedLibrary={library || ''}
-            onLibraryChange={setLibrary}
             searchValue={searchInput}
             onSearchChange={handleSearchChange}
             sortValue={sortMode}
