@@ -75,6 +75,7 @@ function App() {
                     <Route path="/" element={<Navigate to="/libraries" replace />} />
                     <Route path="/libraries" element={<LibraryPage />} />
                     <Route path="/libraries/:library" element={<LibraryPage />} />
+                    <Route path="/libraries/:library/collections" element={<LibraryPage collectionsOnly />} />
                     <Route path="/libraries/:library/import-errors" element={<ImportErrorsPage />} />
                     <Route path="/libraries/:library/not-ready" element={<NotReadyPage />} />
                     <Route path="/libraries/:library/mapping" element={<MappingScanPage />} />

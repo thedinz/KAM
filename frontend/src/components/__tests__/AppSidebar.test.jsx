@@ -15,7 +15,12 @@ vi.mock('../../hooks/LibraryItemsProvider.jsx', () => ({
 vi.mock('../../theme/ThemeProvider.jsx', () => ({
   useTheme: () => ({
     libraries: [
-      { name: 'Kids Movies', type: 'movie', assetPath: '/assets/Kids Movies' },
+      {
+        name: 'Kids Movies',
+        type: 'movie',
+        assetPath: '/assets/Kids Movies',
+        collectionsPath: '/assets/Collections',
+      },
       { name: 'Kids TV', type: 'show', assetPath: '' },
     ],
   }),
@@ -44,5 +49,20 @@ describe('AppSidebar', () => {
 
     expect(screen.getByRole('link', { name: 'Kids Movies' })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Kids TV' })).not.toBeInTheDocument();
+  });
+
+  it('removes the generic library link and nests collections under mapped libraries', () => {
+    render(
+      <MemoryRouter initialEntries={['/libraries/Kids%20Movies']}>
+        <AppSidebar />
+      </MemoryRouter>
+    );
+
+    expect(screen.queryByRole('link', { name: 'Library' })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Kids Movies Collections' })).toHaveAttribute(
+      'href',
+      '/libraries/Kids%20Movies/collections'
+    );
+    expect(screen.queryByRole('link', { name: 'Kids TV Collections' })).not.toBeInTheDocument();
   });
 });
