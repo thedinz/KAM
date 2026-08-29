@@ -256,6 +256,7 @@ export function ThemeProvider({ children }) {
   const [exclusionsLoading, setExclusionsLoading] = useState(false);
   const [exclusionsError, setExclusionsError] = useState(null);
   const isMountedRef = useRef(true);
+  const loadedLibrariesCredentialsKeyRef = useRef('');
   const canFetch = !authLoading && (!authEnabled || authenticated);
 
   const getExclusionKey = useCallback((libraryName, ratingKeyValue) => {
@@ -567,7 +568,14 @@ export function ThemeProvider({ children }) {
           setSettings(next);
         }
         const nextHasCredentials = Boolean(next.plexUrl && next.plexToken);
-        await refreshLibraries({ force: nextHasCredentials }).catch(() => {});
+        if (nextHasCredentials) {
+          loadedLibrariesCredentialsKeyRef.current = `${next.plexUrl}::${next.plexToken}`;
+          await refreshLibraries({ force: true }).catch(() => {});
+        } else if (isMountedRef.current) {
+          loadedLibrariesCredentialsKeyRef.current = '';
+          setLibraries([]);
+          setLibrariesError(null);
+        }
         return next;
       } catch (err) {
         const message = err?.message || 'Failed to save settings';
@@ -588,6 +596,26 @@ export function ThemeProvider({ children }) {
     if (!canFetch) return;
     refreshSettings().catch(() => {});
   }, [canFetch, refreshSettings]);
+
+  useEffect(() => {
+    if (!canFetch) {
+      loadedLibrariesCredentialsKeyRef.current = '';
+      return;
+    }
+    const credentialsKey =
+      savedSettings.plexUrl && savedSettings.plexToken
+        ? `${savedSettings.plexUrl}::${savedSettings.plexToken}`
+        : '';
+    if (!credentialsKey) {
+      loadedLibrariesCredentialsKeyRef.current = '';
+      setLibraries([]);
+      setLibrariesError(null);
+      return;
+    }
+    if (loadedLibrariesCredentialsKeyRef.current === credentialsKey) return;
+    loadedLibrariesCredentialsKeyRef.current = credentialsKey;
+    refreshLibraries({ force: true }).catch(() => {});
+  }, [canFetch, savedSettings.plexUrl, savedSettings.plexToken, refreshLibraries]);
 
   useEffect(() => {
     if (!canFetch) return;
