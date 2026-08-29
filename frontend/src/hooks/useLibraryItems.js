@@ -41,7 +41,7 @@ async function fetchJson(url, options) {
   return data;
 }
 
-export function useLibraryItems({ initialLibrary, enabled = true } = {}) {
+export function useLibraryItems({ initialLibrary, enabled = true, collectionsOnly = false } = {}) {
   const { enabled: authEnabled, authenticated, loading: authLoading } = useAuth();
   const {
     savedLibraryMappings = [],
@@ -133,9 +133,11 @@ export function useLibraryItems({ initialLibrary, enabled = true } = {}) {
       const sort = overrideSortMode ?? sortMode;
       const notReady = overrideNotReadyOnly ?? notReadyOnly;
       const normalized = lib.trim().toLowerCase();
-      const base = normalized === 'collections' ? '/collections' : '/api/items';
+      const base = collectionsOnly || normalized === 'collections' ? '/collections' : '/api/items';
       const params = new URLSearchParams();
-      if (base !== '/collections') {
+      if (base === '/collections' && !isCollectionsLibrary(lib)) {
+        params.set('library', lib);
+      } else if (base !== '/collections') {
         params.set('library', lib);
       }
       params.set('page', String(desiredPage));
@@ -187,7 +189,7 @@ export function useLibraryItems({ initialLibrary, enabled = true } = {}) {
         }
       }
     },
-    [canFetch, library, page, query, sortMode, notReadyOnly]
+    [canFetch, collectionsOnly, library, page, query, sortMode, notReadyOnly]
   );
 
   useEffect(() => {
@@ -285,9 +287,11 @@ export function useLibraryItems({ initialLibrary, enabled = true } = {}) {
         return notReadyCount;
       }
       const normalized = lib.trim().toLowerCase();
-      const base = normalized === 'collections' ? '/collections' : '/api/items';
+      const base = collectionsOnly || normalized === 'collections' ? '/collections' : '/api/items';
       const params = new URLSearchParams();
-      if (base !== '/collections') {
+      if (base === '/collections' && !isCollectionsLibrary(lib)) {
+        params.set('library', lib);
+      } else if (base !== '/collections') {
         params.set('library', lib);
       }
       params.set('page', '1');
@@ -316,16 +320,19 @@ export function useLibraryItems({ initialLibrary, enabled = true } = {}) {
         setNotReadyCountLoading(false);
       }
     },
-    [canFetch, library, notReadyCount]
+    [canFetch, collectionsOnly, library, notReadyCount]
   );
 
   const fetchAllForLibrary = useCallback(
     async (lib, searchTerm, options = {}) => {
       if (!lib) return { items: [], totalPages: 0, totalCount: 0 };
       const normalized = lib.trim().toLowerCase();
-      const base = normalized === 'collections' ? '/collections' : '/api/items';
+      const useCollections = options?.collectionsOnly ?? collectionsOnly;
+      const base = useCollections || normalized === 'collections' ? '/collections' : '/api/items';
       const params = new URLSearchParams();
-      if (base !== '/collections') {
+      if (base === '/collections' && !isCollectionsLibrary(lib)) {
+        params.set('library', lib);
+      } else if (base !== '/collections') {
         params.set('library', lib);
       }
       params.set('page_size', String(PAGE_SIZE));
@@ -373,7 +380,7 @@ export function useLibraryItems({ initialLibrary, enabled = true } = {}) {
         notReadyCount: notReadyCountResp,
       };
     },
-    [sortMode]
+    [collectionsOnly, sortMode]
   );
 
   const updateItem = useCallback((ratingKey, updates) => {

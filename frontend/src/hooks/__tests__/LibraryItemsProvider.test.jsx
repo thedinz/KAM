@@ -138,4 +138,41 @@ describe('LibraryItemsProvider', () => {
     expect(urls.some((url) => url.startsWith('/api/items?library=Movies'))).toBe(true);
     expect(urls.some((url) => url.startsWith('/api/items?library=Kids+Movies'))).toBe(false);
   });
+
+  it('loads collections scoped to the parent library on nested collection routes', async () => {
+    global.fetch = vi.fn((url) => {
+      const text = String(url);
+      if (text === '/api/libraries') {
+        return Promise.resolve(jsonResponse(['Movies', 'TV Shows']));
+      }
+      if (text.startsWith('/collections?')) {
+        return Promise.resolve(
+          jsonResponse({
+            page: 1,
+            total_pages: 1,
+            total_count: 1,
+            not_ready_count: 0,
+            items: [{ ratingKey: 10, title: 'A Collection', type: 'collection' }],
+          })
+        );
+      }
+      throw new Error(`Unexpected fetch: ${text}`);
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/libraries/Movies/collections']}>
+        <LibraryItemsProvider>
+          <Probe />
+        </LibraryItemsProvider>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('library')).toHaveTextContent('Movies');
+    });
+
+    const urls = global.fetch.mock.calls.map(([url]) => String(url));
+    expect(urls.some((url) => url.startsWith('/collections?library=Movies'))).toBe(true);
+    expect(urls.some((url) => url.startsWith('/api/items?'))).toBe(false);
+  });
 });

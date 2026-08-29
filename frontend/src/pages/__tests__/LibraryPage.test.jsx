@@ -162,4 +162,22 @@ describe('LibraryPage', () => {
     expect(screen.getByLabelText('Series background')).toBeChecked();
     expect(screen.getByLabelText('Season backgrounds')).toBeChecked();
   });
+
+  it('labels a nested collections view for its parent library', () => {
+    mockLibraryContext({ library: 'Movies', totalCount: 2, notReadyCount: 0 });
+
+    render(
+      <MemoryRouter initialEntries={['/libraries/Movies/collections']}>
+        <Routes>
+          <Route
+            path="/libraries/:library/collections"
+            element={<LibraryPage collectionsOnly />}
+          />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(screen.getByRole('heading', { name: 'Movies Collections' })).toBeInTheDocument();
+    expect(screen.getByText('Collections', { selector: '.page-eyebrow' })).toBeInTheDocument();
+  });
 });

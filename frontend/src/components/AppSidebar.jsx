@@ -62,6 +62,13 @@ function libraryIcon(library) {
   return 'library';
 }
 
+function hasCollectionsMapping(library) {
+  if (String(library?.collectionsPath || '').trim()) return true;
+  if (Array.isArray(library?.collectionAssetPaths) && library.collectionAssetPaths.length) return true;
+  return Array.isArray(library?.collectionOverrides)
+    && library.collectionOverrides.some((entry) => String(entry?.collectionsPath || '').trim());
+}
+
 function AppSidebar() {
   const location = useLocation();
   const { libraries = [] } = useTheme();
@@ -82,15 +89,6 @@ function AppSidebar() {
       </NavLink>
 
       <nav className="app-navigation" aria-label="Primary navigation">
-        <NavLink
-          className={({ isActive }) => `app-nav-item${isActive && location.pathname === '/libraries' && !normalizedSelected ? ' is-active' : ''}`}
-          to="/libraries"
-          end
-        >
-          <NavigationIcon name="library" />
-          <span>Library</span>
-        </NavLink>
-
         {mappedLibraries.length ? (
           <>
             <div className="app-nav-section-label">Libraries</div>
@@ -99,12 +97,29 @@ function AppSidebar() {
                 const name = String(entry?.name || '').trim();
                 if (!name) return null;
                 const href = `/libraries/${encodeURIComponent(name)}`;
-                const active = normalizedSelected === name.toLowerCase() && location.pathname !== '/settings';
+                const collectionsHref = `${href}/collections`;
+                const collectionsActive = location.pathname === collectionsHref
+                  || location.pathname.startsWith(`${collectionsHref}/`);
+                const active = normalizedSelected === name.toLowerCase()
+                  && location.pathname !== '/settings'
+                  && !collectionsActive;
                 return (
-                  <NavLink key={name} className={`app-nav-item${active ? ' is-active' : ''}`} to={href}>
-                    <NavigationIcon name={libraryIcon(entry)} />
-                    <span title={name}>{name}</span>
-                  </NavLink>
+                  <div className="app-library-group" key={name}>
+                    <NavLink className={`app-nav-item${active ? ' is-active' : ''}`} to={href}>
+                      <NavigationIcon name={libraryIcon(entry)} />
+                      <span title={name}>{name}</span>
+                    </NavLink>
+                    {hasCollectionsMapping(entry) ? (
+                      <NavLink
+                        className={`app-nav-item app-nav-subitem${collectionsActive ? ' is-active' : ''}`}
+                        to={collectionsHref}
+                        aria-label={`${name} Collections`}
+                      >
+                        <NavigationIcon name="collection" />
+                        <span>Collections</span>
+                      </NavLink>
+                    ) : null}
+                  </div>
                 );
               })}
             </div>

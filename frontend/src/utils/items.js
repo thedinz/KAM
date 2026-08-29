@@ -11,9 +11,13 @@ export function buildDetailPath(item, libraryName) {
   if (ratingKey == null) return null;
   const encodedLib = encodeURIComponent(lib);
   const encodedKey = encodeURIComponent(ratingKey);
-  if (lib.toLowerCase() === 'collections') {
+  const isCollection = lib.toLowerCase() === 'collections'
+    || String(item?.type || '').toLowerCase() === 'collection';
+  if (isCollection) {
     const sourceLibrary = item?.library ? String(item.library).trim() : '';
-    const sourceParam = sourceLibrary ? `?source=${encodeURIComponent(sourceLibrary)}` : '';
+    const sourceParam = sourceLibrary && sourceLibrary.toLowerCase() !== lib.toLowerCase()
+      ? `?source=${encodeURIComponent(sourceLibrary)}`
+      : '';
     return `/libraries/${encodedLib}/collections/${encodedKey}${sourceParam}`;
   }
   if (isShowItem(item, libraryName)) {

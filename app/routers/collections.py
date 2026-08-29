@@ -347,12 +347,14 @@ def collection_alias(
 
 @router.get("/collections", summary="Collections")
 def collections(
+    library: Optional[str] = Query(None),
     query: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(60, ge=1, le=200),
     not_ready_only: bool = Query(False, alias="not_ready_only"),
 ):
     plex = get_plex()
+    selected_library = library.strip() if isinstance(library, str) and library.strip() else None
     cfg = plex_settings.get_plex_config()
     plex_url = cfg.url
     plex_token = cfg.token
@@ -362,6 +364,8 @@ def collections(
     for sec in plex.library.sections():
         try:
             name = str(getattr(sec, "title", "") or "")
+            if selected_library and name.casefold() != selected_library.casefold():
+                continue
             for coll in sec.collections():
                 rk = getattr(coll, "ratingKey", None)
                 title = (getattr(coll, "title", None) or "").strip()
@@ -413,6 +417,7 @@ def collections(
                 item = {
                     "ratingKey": rk,
                     "library": library_name,
+                    "type": "collection",
                     "title": title,
                     "year": None,
                     "folderName": folder_used or (sanitize_name(title) if title else ""),
@@ -467,7 +472,7 @@ def collections(
     end = start + page_size
 
     return {
-        "library": "Collections",
+        "library": selected_library or "Collections",
         "page": page,
         "page_size": page_size,
         "total_count": total,
