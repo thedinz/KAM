@@ -63,6 +63,9 @@ describe('AppSidebar', () => {
       'href',
       '/libraries/Kids%20Movies/collections'
     );
+    expect(
+      screen.getByRole('link', { name: 'Kids Movies Collections' }).querySelector('.app-nav-branch')
+    ).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Kids TV Collections' })).not.toBeInTheDocument();
   });
 });
