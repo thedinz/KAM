@@ -155,19 +155,21 @@ body {
 
 .app-nav-subitem {
   min-height: 38px;
-  margin-left: 24px;
-  grid-template-columns: 19px minmax(0, 1fr);
+  margin-left: 0;
+  grid-template-columns: 17px minmax(0, 1fr);
+  gap: 8px;
+  padding-left: 51px;
   padding-block: 7px;
   font-size: 12px;
 }
 
 .app-nav-branch {
   position: absolute;
-  top: -28px;
-  left: -2px;
-  width: 18px;
+  top: -25px;
+  left: 22px;
+  width: 20px;
   height: 50px;
-  color: color-mix(in oklab, var(--muted) 62%, transparent);
+  color: color-mix(in oklab, var(--muted) 58%, transparent);
   pointer-events: none;
 }
 
@@ -177,6 +179,9 @@ body {
   height: 100%;
   overflow: visible;
 }
+
+.app-nav-branch-line { stroke-width: 1.35; }
+.app-nav-branch-arrow { stroke-width: 1.75; }
 
 .app-nav-subitem .app-nav-icon {
   width: 17px;
