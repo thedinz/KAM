@@ -66,6 +66,7 @@ function AppSidebar() {
   const location = useLocation();
   const { libraries = [] } = useTheme();
   const { library: selectedLibrary, notReadyCount, totalCount } = useLibraryItemsContext();
+  const mappedLibraries = libraries.filter((entry) => String(entry?.assetPath || '').trim());
   const normalizedSelected = String(selectedLibrary || '').trim().toLowerCase();
   const attentionCount = Number(notReadyCount) || 0;
   const libraryTotal = Number(totalCount) || 0;
@@ -90,21 +91,25 @@ function AppSidebar() {
           <span>Library</span>
         </NavLink>
 
-        <div className="app-nav-section-label">Libraries</div>
-        <div className="app-library-links">
-          {libraries.map((entry) => {
-            const name = String(entry?.name || '').trim();
-            if (!name) return null;
-            const href = `/libraries/${encodeURIComponent(name)}`;
-            const active = normalizedSelected === name.toLowerCase() && location.pathname !== '/settings';
-            return (
-              <NavLink key={name} className={`app-nav-item${active ? ' is-active' : ''}`} to={href}>
-                <NavigationIcon name={libraryIcon(entry)} />
-                <span title={name}>{name}</span>
-              </NavLink>
-            );
-          })}
-        </div>
+        {mappedLibraries.length ? (
+          <>
+            <div className="app-nav-section-label">Libraries</div>
+            <div className="app-library-links">
+              {mappedLibraries.map((entry) => {
+                const name = String(entry?.name || '').trim();
+                if (!name) return null;
+                const href = `/libraries/${encodeURIComponent(name)}`;
+                const active = normalizedSelected === name.toLowerCase() && location.pathname !== '/settings';
+                return (
+                  <NavLink key={name} className={`app-nav-item${active ? ' is-active' : ''}`} to={href}>
+                    <NavigationIcon name={libraryIcon(entry)} />
+                    <span title={name}>{name}</span>
+                  </NavLink>
+                );
+              })}
+            </div>
+          </>
+        ) : null}
 
         {selectedLibrary ? (
           <NavLink
