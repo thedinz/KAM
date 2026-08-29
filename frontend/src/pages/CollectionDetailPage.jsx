@@ -344,9 +344,14 @@ function CollectionDetailPage() {
         <Link className="btn" to={backLink}>
           ← Back
         </Link>
-        <h1>{headerTitle}</h1>
-        {headerYear ? <span className="detail-year">({headerYear})</span> : null}
-        {displaySource ? <span className="detail-source">• {displaySource}</span> : null}
+        <div className="detail-heading">
+          <span className="page-eyebrow">Collection artwork</span>
+          <div className="detail-heading-title">
+            <h1>{headerTitle}</h1>
+            {headerYear ? <span className="detail-year">{headerYear}</span> : null}
+            {displaySource ? <span className="detail-source">• {displaySource}</span> : null}
+          </div>
+        </div>
         <span className="detail-header-gap" aria-hidden="true" />
         <button
           type="button"

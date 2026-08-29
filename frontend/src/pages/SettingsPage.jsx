@@ -910,7 +910,12 @@ function SettingsPage() {
         <Link className="btn" to="/libraries">
           ← Back
         </Link>
-        <h1>Settings</h1>
+        <div className="detail-heading">
+          <span className="page-eyebrow">Configuration</span>
+          <div className="detail-heading-title">
+            <h1>Settings</h1>
+          </div>
+        </div>
       </header>
       <main className="settings-page">
         <div className="settings-actions settings-global-actions settings-global-actions-top">

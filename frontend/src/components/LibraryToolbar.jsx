@@ -13,6 +13,7 @@ function LibraryToolbar({
   scanDisabled,
   scanTitle,
   countLabel,
+  readyCount = 0,
   notReadyControl,
   onViewNotReady = null,
   notReadyCount = 0,
@@ -34,6 +35,50 @@ function LibraryToolbar({
     <div className="page-header-tools" id="toolbar">
       <div className="toolbar-main-row">
         <div className="toolbar-view-group">
+          <label className="sr-only" htmlFor="librarySearch">
+            Search library
+          </label>
+          <div className="library-search-wrap">
+            <span className="library-search-icon" aria-hidden="true">⌕</span>
+            <input
+              id="librarySearch"
+              className="library-search"
+              type="search"
+              placeholder="Search your library"
+              value={searchValue}
+              onChange={(event) => onSearchChange(event.target.value)}
+            />
+          </div>
+        </div>
+        <div className="toolbar-action-group">
+          {onScanMapping ? (
+            <button
+              type="button"
+              className="toolbar-secondary-action"
+              onClick={onScanMapping}
+              disabled={scanDisabled}
+              title={scanTitle}
+            >
+              <span aria-hidden="true">⌗</span>
+              Scan Mapping
+            </button>
+          ) : null}
+
+          <button
+            type="button"
+            className="toolbar-primary-action"
+            onClick={onImportAll}
+            disabled={importDisabled}
+            title={importTitle}
+          >
+            <span aria-hidden="true">↥</span>
+            Import Assets
+          </button>
+        </div>
+      </div>
+
+      <div className="toolbar-command-row">
+        <div className="toolbar-status-group">
           <label className="sr-only" htmlFor="librarySelect">
             Plex library
           </label>
@@ -55,54 +100,24 @@ function LibraryToolbar({
             ))}
           </select>
 
-          <label className="sr-only" htmlFor="librarySearch">
-            Search library
-          </label>
-          <input
-            id="librarySearch"
-            className="library-search"
-            type="search"
-            placeholder="Search…"
-            value={searchValue}
-            onChange={(event) => onSearchChange(event.target.value)}
-          />
+          <span className="count-label is-active" id="count">
+            All <strong>{countLabel.replace(/\s+items?$/, '')}</strong>
+          </span>
 
-          {showSortControl ? (
-            <>
-              <label className="sr-only" htmlFor="librarySort">
-                Sort library
-              </label>
-              <select
-                id="librarySort"
-                className="library-sort-select"
-                value={sortValue}
-                onChange={(event) => onSortChange(event.target.value)}
-                title="Sort library items"
-                aria-label="Sort library items"
-              >
-                <option value="title">A-Z</option>
-                <option value="newest">Newest</option>
-              </select>
-            </>
-          ) : null}
-        </div>
-      </div>
-
-      <div className="toolbar-command-row">
-        <div className="toolbar-status-group">
-          <span className="count-label" id="count">
-            {countLabel}
+          <span className="count-label count-label-ready">
+            Ready <strong>{Number(readyCount).toLocaleString()}</strong>
           </span>
 
           {showNotReadyButton ? (
             <button
               type="button"
               className="not-ready-button"
+              aria-label={`Not Ready: ${notReadyLoading ? 'checking' : notReadyDisplay.toLocaleString()} items`}
               onClick={onViewNotReady}
               disabled={disableNotReady}
               title={notReadyTitle}
             >
-              Not Ready
+              Needs Attention
               <span
                 className="badge"
                 aria-label={
@@ -119,29 +134,24 @@ function LibraryToolbar({
           {notReadyControl}
         </div>
 
-        <div className="toolbar-action-group">
-          <button
-            type="button"
-            className="toolbar-primary-action"
-            onClick={onImportAll}
-            disabled={importDisabled}
-            title={importTitle}
-          >
-            Import Assets
-          </button>
-
-          {onScanMapping ? (
-            <button
-              type="button"
-              className="toolbar-secondary-action"
-              onClick={onScanMapping}
-              disabled={scanDisabled}
-              title={scanTitle}
+        {showSortControl ? (
+          <>
+            <label className="sr-only" htmlFor="librarySort">
+              Sort library
+            </label>
+            <select
+              id="librarySort"
+              className="library-sort-select"
+              value={sortValue}
+              onChange={(event) => onSortChange(event.target.value)}
+              title="Sort library items"
+              aria-label="Sort library items"
             >
-              Scan Mapping
-            </button>
-          ) : null}
-        </div>
+              <option value="title">Title A–Z</option>
+              <option value="newest">Recently Added</option>
+            </select>
+          </>
+        ) : null}
       </div>
 
       {children ? (
