@@ -1,17 +1,16 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <defs>
-    <linearGradient id="bg" x1="12" y1="8" x2="54" y2="58" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#5ea1ff"/>
-      <stop offset="0.5" stop-color="#15151c"/>
-      <stop offset="1" stop-color="#0b0b0f"/>
-    </linearGradient>
-    <linearGradient id="frame" x1="18" y1="16" x2="46" y2="48" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#7ed6a6"/>
-      <stop offset="1" stop-color="#5ea1ff"/>
-    </linearGradient>
-  </defs>
-  <rect width="64" height="64" rx="10" fill="url(#bg)"/>
-  <rect x="9" y="9" width="46" height="46" rx="7" fill="none" stroke="#ffffff" stroke-opacity="0.24" stroke-width="2"/>
-  <rect x="16" y="14" width="39" height="36" rx="6" fill="#7ed6a6" fill-opacity="0.08" stroke="url(#frame)" stroke-width="2"/>
-  <path d="M22 47V17h7v12l12-12h9L36 31l15 16h-9L29 34v13h-7z" fill="#f4f7fb"/>
+  <title>KAM</title>
+  <g
+    fill="none"
+    stroke="#20b8f3"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  >
+    <path d="M38 7 13 32l25 25" stroke-width="5"/>
+    <path d="M46 14 28 32l18 18" stroke-width="4" opacity=".72"/>
+  </g>
+  <path
+    d="M23 16h7v12l11-12h9L36 31l15 17h-9L30 35v13h-7z"
+    fill="#56d8ff"
+  />
 </svg>
