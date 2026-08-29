@@ -1,6 +1,6 @@
 export function buildLibraryBackLink(library) {
   const name = String(library || '').trim();
-  return name ? `/libraries?lib=${encodeURIComponent(name)}` : '/libraries';
+  return name ? `/libraries/${encodeURIComponent(name)}` : '/libraries';
 }
 
 export function currentPathWithSearch(location) {

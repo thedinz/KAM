@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import LibraryPage from '../LibraryPage.jsx';
 import { useLibraryItemsContext } from '../../hooks/LibraryItemsProvider.jsx';
 
@@ -34,6 +34,11 @@ function mockLibraryContext(overrides = {}) {
   };
   useLibraryItemsContext.mockReturnValue(context);
   return context;
+}
+
+function LocationProbe() {
+  const location = useLocation();
+  return <span data-testid="location">{`${location.pathname}${location.search}`}</span>;
 }
 
 describe('LibraryPage', () => {
@@ -75,6 +80,50 @@ describe('LibraryPage', () => {
     await waitFor(() => {
       expect(context.setLibrary).toHaveBeenCalledWith('TV Shows');
     });
+  });
+
+  it('uses the route library instead of a stale legacy query parameter', async () => {
+    const context = mockLibraryContext({
+      libraries: ['Kids Movies', 'Movies'],
+      library: 'Kids Movies',
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/libraries/Movies?lib=Kids+Movies']}>
+        <Routes>
+          <Route path="/libraries/:library" element={<LibraryPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(context.setLibrary).toHaveBeenCalledWith('Movies');
+    });
+  });
+
+  it('removes the legacy query parameter from canonical library routes', async () => {
+    mockLibraryContext({ library: 'Movies' });
+
+    render(
+      <MemoryRouter initialEntries={['/libraries/Movies?lib=Kids+Movies']}>
+        <Routes>
+          <Route
+            path="/libraries/:library"
+            element={
+              <>
+                <LibraryPage />
+                <LocationProbe />
+              </>
+            }
+          />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('location')).toHaveTextContent('/libraries/Movies');
+    });
+    expect(screen.getByTestId('location')).not.toHaveTextContent('?lib=');
   });
 
   it('opens poster/background choices for movie libraries', () => {
