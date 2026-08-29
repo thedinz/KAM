@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import FolderFinderModal from '../components/FolderFinderModal.jsx';
 import ImportStatusPanel from '../components/ImportStatusPanel.jsx';
 import ItemGrid from '../components/ItemGrid.jsx';
@@ -161,8 +161,11 @@ function ImportOptionsDialog({ isOpen, library, options, disabled, onChange, onC
 
 function LibraryPage() {
   const navigate = useNavigate();
+  const { library: routeLibraryParam = '' } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
-  const urlLibrary = searchParams.get('lib') || '';
+  const routeLibrary = String(routeLibraryParam || '').trim();
+  const queryLibrary = searchParams.get('lib') || '';
+  const urlLibrary = routeLibrary || queryLibrary;
   const lastUrlLibraryRef = useRef('');
   const pendingUrlLibraryRef = useRef('');
   const {
@@ -222,11 +225,15 @@ function LibraryPage() {
       pendingUrlLibraryRef.current = '';
     }
     const nextSearchParams = new URLSearchParams(searchParams);
-    nextSearchParams.set('lib', library);
+    if (routeLibrary) {
+      nextSearchParams.delete('lib');
+    } else {
+      nextSearchParams.set('lib', library);
+    }
     if (nextSearchParams.toString() !== searchParams.toString()) {
       setSearchParams(nextSearchParams, { replace: true });
     }
-  }, [library, searchParams, setSearchParams]);
+  }, [library, routeLibrary, searchParams, setSearchParams]);
 
   useEffect(() => () => clearTimeout(searchTimerRef.current), []);
 

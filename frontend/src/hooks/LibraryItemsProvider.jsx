@@ -11,10 +11,21 @@ function shouldLoadLibraryGrid(pathname) {
   return segments.length === 2 && segments[0] === 'libraries';
 }
 
+function libraryFromPathname(pathname) {
+  const path = String(pathname || '').replace(/\/+$/, '') || '/';
+  const segments = path.split('/').filter(Boolean);
+  if (segments.length !== 2 || segments[0] !== 'libraries') return undefined;
+  try {
+    return decodeURIComponent(segments[1]);
+  } catch {
+    return segments[1];
+  }
+}
+
 export function LibraryItemsProvider({ children }) {
   const location = useLocation();
   const searchParams = new URLSearchParams(location.search);
-  const initialLibrary = searchParams.get('lib') || undefined;
+  const initialLibrary = libraryFromPathname(location.pathname) || searchParams.get('lib') || undefined;
   const value = useLibraryItems({
     initialLibrary,
     enabled: shouldLoadLibraryGrid(location.pathname),
