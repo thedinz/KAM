@@ -15,8 +15,8 @@ vi.mock('../../hooks/LibraryItemsProvider.jsx', () => ({
 vi.mock('../../theme/ThemeProvider.jsx', () => ({
   useTheme: () => ({
     libraries: [
-      { name: 'Kids Movies', type: 'movie' },
-      { name: 'Kids TV', type: 'show' },
+      { name: 'Kids Movies', type: 'movie', assetPath: '/assets/Kids Movies' },
+      { name: 'Kids TV', type: 'show', assetPath: '' },
     ],
   }),
 }));
@@ -33,5 +33,16 @@ describe('AppSidebar', () => {
     expect(attentionLink).toHaveAttribute('href', '/libraries/Kids%20Movies/not-ready');
     expect(attentionLink).toHaveTextContent('Needs Attention');
     expect(attentionLink).toHaveTextContent('4 / 28');
+  });
+
+  it('only lists mapped libraries', () => {
+    render(
+      <MemoryRouter initialEntries={['/libraries/Kids%20Movies']}>
+        <AppSidebar />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByRole('link', { name: 'Kids Movies' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Kids TV' })).not.toBeInTheDocument();
   });
 });
