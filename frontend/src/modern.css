@@ -418,9 +418,34 @@ button:focus-visible,
 [data-theme='light'] .asset-flag.missing { background: var(--warning-soft); color: var(--warning); }
 .detail-section-title { margin-top: 34px; font-size: 22px; letter-spacing: -0.03em; }
 .season-panel { overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-sm); }
-.season-panel.is-expanded { border-color: color-mix(in oklab, var(--accent) 45%, var(--border)); }
+.season-panel.is-expanded {
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
 .season-summary-card { border: 0; border-radius: 0; background: var(--surface-2); }
-.season-detail-panel { border-top-color: var(--border); background: color-mix(in oklab, var(--surface-1) 90%, var(--bg)); }
+.season-panel.is-expanded .season-summary-card {
+  align-self: start;
+  overflow: hidden;
+  border: 1px solid color-mix(in oklab, var(--accent) 45%, var(--border));
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+.season-detail-panel {
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: color-mix(in oklab, var(--surface-1) 90%, var(--bg));
+  box-shadow: var(--shadow-sm);
+}
+.season-title-card-group { gap: 16px; }
+
+@media (max-width: 760px) {
+  .season-panel.is-expanded { gap: 12px; }
+  .season-detail-panel { padding: 14px; }
+}
 
 /* Settings */
 .settings-page { gap: 22px; }
