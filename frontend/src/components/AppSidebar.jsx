@@ -115,6 +115,12 @@ function AppSidebar() {
                         to={collectionsHref}
                         aria-label={`${name} Collections`}
                       >
+                        <span className="app-nav-branch" aria-hidden="true">
+                          <svg viewBox="0 0 18 50" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M2 1v36c0 5.5 4.5 10 10 10h4" />
+                            <path d="m13 44 3 3-3 3" />
+                          </svg>
+                        </span>
                         <NavigationIcon name="collection" />
                         <span>Collections</span>
                       </NavLink>
