@@ -153,7 +153,7 @@ body {
   gap: 2px;
 }
 
-.app-nav-subitem {
+.app-nav-item.app-nav-subitem {
   min-height: 38px;
   margin-left: 0;
   grid-template-columns: 17px minmax(0, 1fr);
@@ -165,10 +165,10 @@ body {
 
 .app-nav-branch {
   position: absolute;
-  top: -25px;
+  top: -16px;
   left: 22px;
-  width: 20px;
-  height: 50px;
+  width: 22px;
+  height: 38px;
   color: color-mix(in oklab, var(--muted) 58%, transparent);
   pointer-events: none;
 }
@@ -649,7 +649,13 @@ button:focus-visible,
   .app-navigation { min-width: max-content; flex: 1 0 auto; flex-direction: row; align-items: center; padding: 9px 5px; }
   .app-library-links { display: contents; }
   .app-library-group { display: contents; }
-  .app-nav-subitem { margin-left: 0; }
+  .app-nav-item.app-nav-subitem {
+    min-height: 42px;
+    margin-left: 0;
+    grid-template-columns: 19px auto;
+    gap: 12px;
+    padding: 7px 10px;
+  }
   .app-nav-branch { display: none; }
   .app-nav-section-label,
   .app-sidebar-version { display: none; }
@@ -682,6 +688,7 @@ button:focus-visible,
   .app-nav-attention > span:not(.app-nav-badge) { display: none; }
   .app-nav-item,
   .app-library-links .app-nav-item { grid-template-columns: 21px; }
+  .app-nav-item.app-nav-subitem { grid-template-columns: 21px; }
   .workspace-routes header { top: 63px; }
   .workspace-routes header h1 { font-size: 22px; }
   .library-header { gap: 18px; }
