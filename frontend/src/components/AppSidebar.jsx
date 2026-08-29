@@ -116,9 +116,9 @@ function AppSidebar() {
                         aria-label={`${name} Collections`}
                       >
                         <span className="app-nav-branch" aria-hidden="true">
-                          <svg viewBox="0 0 22 38" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round">
-                            <path className="app-nav-branch-line" d="M1 0v25a10 10 0 0 0 10 10h10" />
-                            <path className="app-nav-branch-arrow" d="m18 32 3 3-3 3" />
+                          <svg viewBox="0 0 15 38" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round">
+                            <path className="app-nav-branch-line" d="M2 0v27a8 8 0 0 0 8 8h2" />
+                            <path className="app-nav-branch-arrow" d="m9 32 3 3-3 3" />
                           </svg>
                         </span>
                         <NavigationIcon name="collection" />
