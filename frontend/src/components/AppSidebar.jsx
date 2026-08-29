@@ -65,9 +65,11 @@ function libraryIcon(library) {
 function AppSidebar() {
   const location = useLocation();
   const { libraries = [] } = useTheme();
-  const { library: selectedLibrary, notReadyCount } = useLibraryItemsContext();
+  const { library: selectedLibrary, notReadyCount, totalCount } = useLibraryItemsContext();
   const normalizedSelected = String(selectedLibrary || '').trim().toLowerCase();
   const attentionCount = Number(notReadyCount) || 0;
+  const libraryTotal = Number(totalCount) || 0;
+  const attentionRatio = `${attentionCount.toLocaleString()} / ${libraryTotal.toLocaleString()}`;
   const attentionHref = selectedLibrary
     ? `/libraries/${encodeURIComponent(selectedLibrary)}/not-ready`
     : '/libraries';
@@ -108,10 +110,11 @@ function AppSidebar() {
           <NavLink
             className={({ isActive }) => `app-nav-item app-nav-attention${isActive ? ' is-active' : ''}`}
             to={attentionHref}
+            aria-label={`Needs Attention ${attentionRatio}`}
           >
             <NavigationIcon name="attention" />
             <span>Needs Attention</span>
-            {attentionCount > 0 ? <span className="app-nav-badge">{attentionCount.toLocaleString()}</span> : null}
+            <span className="app-nav-badge">{attentionRatio}</span>
           </NavLink>
         ) : (
           <span className="app-nav-item app-nav-attention is-disabled" aria-disabled="true">

@@ -18,7 +18,6 @@ function renderToolbar(overrides = {}) {
     onPrev: vi.fn(),
     onNext: vi.fn(),
     onLast: vi.fn(),
-    countLabel: '120 items',
     ...overrides,
   };
 
@@ -49,14 +48,10 @@ describe('LibraryToolbar', () => {
     expect(screen.getByLabelText('Sort library items')).toHaveValue('title');
   });
 
-  it('shows when the not-ready count is still loading', () => {
-    renderToolbar({
-      onViewNotReady: vi.fn(),
-      notReadyLoading: true,
-      notReadyCount: 0,
-    });
+  it('keeps readiness status out of the grid toolbar', () => {
+    renderToolbar();
 
-    expect(screen.getByRole('button', { name: /Not Ready/i })).toBeDisabled();
-    expect(screen.getByLabelText('Checking not-ready items')).toHaveTextContent('...');
+    expect(screen.queryByText('Ready')).not.toBeInTheDocument();
+    expect(screen.queryByText('Needs Attention')).not.toBeInTheDocument();
   });
 });
