@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import BrandLockup from '../components/BrandLockup.jsx';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import FolderFinderModal from '../components/FolderFinderModal.jsx';
 import ImportStatusPanel from '../components/ImportStatusPanel.jsx';
 import ItemGrid from '../components/ItemGrid.jsx';
@@ -605,6 +604,11 @@ function LibraryPage() {
     return `${count.toLocaleString()} item${count === 1 ? '' : 's'}`;
   }, [totalCount]);
 
+  const readyCount = useMemo(
+    () => Math.max(0, (Number(totalCount) || 0) - (Number(notReadyCount) || 0)),
+    [notReadyCount, totalCount]
+  );
+
   const normalizedLibrary = (library || '').trim();
   const importTooltip = !normalizedLibrary
     ? 'Choose a library first.'
@@ -625,9 +629,11 @@ function LibraryPage() {
   return (
     <div>
       <header className="library-header">
-        <h1 className="library-site-title">
-          <BrandLockup />
-        </h1>
+        <div className="page-title-block">
+          <span className="page-eyebrow">Media Library</span>
+          <h1>{library || 'Library'}</h1>
+          <p>{countLabel} <span aria-hidden="true">•</span> Kometa assets</p>
+        </div>
         <div className="library-header-controls">
           <LibraryToolbar
             libraries={libraries}
@@ -644,6 +650,7 @@ function LibraryPage() {
             scanDisabled={scanDisabled}
             scanTitle={scanTitle}
             countLabel={countLabel}
+            readyCount={readyCount}
             onViewNotReady={handleViewNotReady}
             notReadyCount={notReadyCount}
             notReadyLoading={notReadyCountLoading}
@@ -658,12 +665,9 @@ function LibraryPage() {
               onViewErrors={handleViewImportErrors}
             />
           </LibraryToolbar>
-          <Link className="settings-link" to="/settings" aria-label="Open settings">
-            <span aria-hidden="true">⚙</span>
-          </Link>
         </div>
       </header>
-      <main>
+      <main className="library-main">
         <ItemGrid
           items={items}
           library={library}

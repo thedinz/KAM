@@ -72,23 +72,25 @@ function ItemCard({ item, library, onRequestFolder, returnTo }) {
           <span className="title-text" title={title}>
             {title}
           </span>
-          <span
-            className={`ready-badge ${ready ? 'ready' : 'not-ready'}`}
-            title={
-              ready
-                ? 'Asset folder found. Click to change the assigned folder.'
-                : 'Asset folder missing. Click to choose a folder.'
-            }
-            role="button"
-            tabIndex={0}
-            onClick={openFolder}
-            onKeyDown={handleBadgeKey}
-            aria-haspopup="dialog"
-          >
-            {ready ? '✔ Ready' : '✖ Not Ready'}
-          </span>
+          {year ? <span className="year">{String(year)}</span> : null}
         </div>
-        <div className="year">{year ? String(year) : ''}</div>
+        <span
+          className={`ready-badge ${ready ? 'ready' : 'not-ready'}`}
+          title={
+            ready
+              ? 'Asset folder found. Click to change the assigned folder.'
+              : 'Asset folder missing. Click to choose a folder.'
+          }
+          role="button"
+          tabIndex={0}
+          aria-label={ready ? 'Ready' : 'Not Ready: folder needed'}
+          onClick={openFolder}
+          onKeyDown={handleBadgeKey}
+          aria-haspopup="dialog"
+        >
+          <span className="ready-badge-icon" aria-hidden="true">{ready ? '✓' : '!'}</span>
+          {ready ? 'Ready' : 'Folder needed'}
+        </span>
       </div>
     </>
   );

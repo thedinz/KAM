@@ -159,6 +159,7 @@ function NotReadyPage() {
             ← Back
           </button>
           <div>
+            <span className="page-eyebrow">Needs attention</span>
             <h1>Not Ready Items</h1>
             <p>
               {targetLibrary ? `Library: ${targetLibrary}` : 'Select a library to review not-ready items.'}
