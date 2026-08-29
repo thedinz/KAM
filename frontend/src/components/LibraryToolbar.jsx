@@ -17,6 +17,25 @@ function LibraryToolbar({
     <div className="page-header-tools" id="toolbar">
       <div className="toolbar-main-row">
         <div className="toolbar-view-group">
+          {showSortControl ? (
+            <>
+              <label className="sr-only" htmlFor="librarySort">
+                Sort library
+              </label>
+              <select
+                id="librarySort"
+                className="library-sort-select"
+                value={sortValue}
+                onChange={(event) => onSortChange(event.target.value)}
+                title="Sort library items"
+                aria-label="Sort library items"
+              >
+                <option value="title">Title A–Z</option>
+                <option value="newest">Recently Added</option>
+              </select>
+            </>
+          ) : null}
+
           <label className="sr-only" htmlFor="librarySearch">
             Search library
           </label>
@@ -58,25 +77,6 @@ function LibraryToolbar({
           </button>
         </div>
       </div>
-
-      {showSortControl ? (
-        <div className="toolbar-command-row toolbar-sort-row">
-          <label className="sr-only" htmlFor="librarySort">
-            Sort library
-          </label>
-          <select
-            id="librarySort"
-            className="library-sort-select"
-            value={sortValue}
-            onChange={(event) => onSortChange(event.target.value)}
-            title="Sort library items"
-            aria-label="Sort library items"
-          >
-            <option value="title">Title A–Z</option>
-            <option value="newest">Recently Added</option>
-          </select>
-        </div>
-      ) : null}
 
       {children ? (
         <div className="toolbar-feedback">

@@ -259,10 +259,16 @@ body {
 .page-eyebrow { color: var(--accent-strong); font-size: 10px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; }
 
 .library-header {
-  display: grid;
-  grid-template-columns: minmax(190px, 0.23fr) minmax(0, 1fr);
-  align-items: start;
-  gap: 25px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 18px;
+}
+
+.library-header .page-title-block {
+  align-self: center;
+  min-width: 0;
+  text-align: center;
 }
 
 .library-header-controls,
@@ -271,9 +277,9 @@ body {
 .page-header-tools { gap: 14px; }
 .toolbar-main-row,
 .toolbar-command-row { gap: 14px; }
-.toolbar-view-group { flex: 1 1 420px; }
+.toolbar-view-group { flex: 1 1 auto; }
 
-.library-search-wrap { position: relative; width: 100%; }
+.library-search-wrap { position: relative; min-width: 220px; width: 100%; flex: 1 1 420px; }
 .library-search-icon {
   position: absolute;
   top: 50%;
@@ -331,8 +337,7 @@ button:focus-visible,
 .toolbar-primary-action:enabled:hover { border-color: var(--accent-strong); background: var(--accent-strong); transform: translateY(-1px); }
 .toolbar-secondary-action { background: transparent; color: var(--fg); }
 .library-select { flex-basis: 170px; min-width: 145px; background-color: var(--surface-1); }
-.library-sort-select { flex-basis: 150px; min-width: 135px; background-color: var(--surface-1); }
-.toolbar-sort-row { justify-content: flex-end; }
+.library-sort-select { flex: 0 0 150px; min-width: 135px; background-color: var(--surface-1); }
 
 .library-main { padding: 0 14px 4px; }
 #grid { grid-template-columns: repeat(auto-fill, minmax(172px, 1fr)); gap: 16px; padding: 20px 16px; }
@@ -599,7 +604,6 @@ button:focus-visible,
   .workspace-shell { grid-template-columns: 218px minmax(0, 1fr); }
   .app-sidebar-brand { padding-inline: 17px; }
   .app-sidebar .kam-brand-subtitle { display: none; }
-  .library-header { grid-template-columns: 1fr; }
   .toolbar-main-row { align-items: stretch; }
 }
 
@@ -641,7 +645,7 @@ button:focus-visible,
   .toolbar-command-row { flex-direction: column; }
   .toolbar-action-group { justify-content: stretch; }
   .toolbar-action-group button { flex: 1 1 auto; }
-  .library-sort-select { width: 100%; }
+  .library-sort-select { width: 150px; }
   .detail-main,
   .settings-page,
   .mapping-page,
@@ -659,6 +663,9 @@ button:focus-visible,
   .workspace-routes header h1 { font-size: 22px; }
   .library-header { gap: 18px; }
   .toolbar-action-group { flex-direction: column; }
+  .toolbar-view-group { display: flex; flex-direction: column; }
+  .library-search-wrap,
+  .library-sort-select { width: 100%; }
   #grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding: 12px 4px; }
   .meta { padding: 9px; }
   .settings-global-actions-top { top: 133px; }
