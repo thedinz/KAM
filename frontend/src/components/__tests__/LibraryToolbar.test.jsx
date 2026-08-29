@@ -48,6 +48,15 @@ describe('LibraryToolbar', () => {
     expect(screen.getByLabelText('Sort library items')).toHaveValue('title');
   });
 
+  it('keeps sort, search, scan, and import controls in one toolbar row', () => {
+    renderToolbar({ onScanMapping: vi.fn() });
+
+    const toolbarRow = screen.getByLabelText('Sort library items').closest('.toolbar-main-row');
+    expect(toolbarRow).toContainElement(screen.getByRole('searchbox'));
+    expect(toolbarRow).toContainElement(screen.getByRole('button', { name: 'Scan Mapping' }));
+    expect(toolbarRow).toContainElement(screen.getByRole('button', { name: 'Import Assets' }));
+  });
+
   it('keeps readiness status out of the grid toolbar', () => {
     renderToolbar();
 
