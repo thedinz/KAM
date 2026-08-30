@@ -4,6 +4,8 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useLibraryItemsContext } from '../hooks/LibraryItemsProvider.jsx';
 import { responseErrorMessage, safeJson } from '../utils/api.js';
 
+const BATCH_RESOLUTION_KEY = '__all__';
+
 function formatBytes(value) {
   const bytes = Number(value) || 0;
   if (bytes < 1024) return `${bytes} B`;
@@ -36,6 +38,18 @@ function DuplicateFoldersPage() {
   const [resolvingKey, setResolvingKey] = useState('');
   const [error, setError] = useState('');
   const [status, setStatus] = useState('');
+
+  const stagedSelections = useMemo(() => groups
+    .map((group) => ({
+      ratingKey: group.ratingKey,
+      keepFolderName: choices[group.ratingKey],
+    }))
+    .filter((selection) => selection.keepFolderName), [groups, choices]);
+
+  const stagedDeleteCount = useMemo(() => groups.reduce(
+    (total, group) => total + Math.max(0, (group.folders?.length || 0) - 1),
+    0
+  ), [groups]);
 
   useEffect(() => {
     if (targetLibrary && targetLibrary !== library) setLibrary(targetLibrary);
@@ -74,8 +88,12 @@ function DuplicateFoldersPage() {
     const keepFolderName = choices[group.ratingKey];
     if (!keepFolderName || resolvingKey) return;
     const deleteCount = Math.max(0, group.folders.length - 1);
+    const selectedFolder = group.folders.find((folder) => folder.folderName === keepFolderName);
+    const assignmentMessage = selectedFolder && !selectedFolder.isActive
+      ? ` KAM will switch this movie to “${keepFolderName}” before deleting the old folder.`
+      : '';
     const confirmed = window.confirm(
-      `Keep “${keepFolderName}” for ${group.title} and permanently delete the other ${deleteCount} asset ${deleteCount === 1 ? 'folder' : 'folders'} and everything inside? This cannot be undone.`
+      `Keep “${keepFolderName}” for ${group.title} and permanently delete the other ${deleteCount} asset ${deleteCount === 1 ? 'folder' : 'folders'} and everything inside?${assignmentMessage} This cannot be undone.`
     );
     if (!confirmed) return;
 
@@ -98,7 +116,11 @@ function DuplicateFoldersPage() {
       reload();
       const deleted = Array.isArray(data?.deleted) ? data.deleted : [];
       const failures = Array.isArray(data?.errors) ? data.errors : [];
-      setStatus(`Kept ${data?.keptFolderName || keepFolderName} and deleted ${deleted.length} duplicate ${deleted.length === 1 ? 'folder' : 'folders'}.`);
+      const keptFolderName = data?.keptFolderName || keepFolderName;
+      const assignmentMessage = data?.folderAssignmentChanged
+        ? ` KAM now uses ${keptFolderName}.`
+        : '';
+      setStatus(`Kept ${keptFolderName} and deleted ${deleted.length} duplicate ${deleted.length === 1 ? 'folder' : 'folders'}.${assignmentMessage}`);
       if (failures.length) {
         setError(failures.map((entry) => `${entry.folderName}: ${entry.error}`).join(' '));
       }
@@ -109,6 +131,68 @@ function DuplicateFoldersPage() {
       setResolvingKey('');
     }
   }, [choices, resolvingKey, targetLibrary, fetchDuplicates, reload]);
+
+  const resolveAllGroups = useCallback(async () => {
+    if (
+      resolvingKey
+      || !stagedSelections.length
+      || stagedSelections.length !== groups.length
+    ) return;
+
+    const movieCount = stagedSelections.length;
+    const confirmed = window.confirm(
+      `Process all ${movieCount} ${movieCount === 1 ? 'movie' : 'movies'} and permanently delete ${stagedDeleteCount} unselected duplicate ${stagedDeleteCount === 1 ? 'folder' : 'folders'} and everything inside? KAM will switch to any newly selected folder before deleting the old one. This cannot be undone.`
+    );
+    if (!confirmed) return;
+
+    setResolvingKey(BATCH_RESOLUTION_KEY);
+    setError('');
+    setStatus(`Rechecking and processing ${movieCount} ${movieCount === 1 ? 'movie' : 'movies'}…`);
+    try {
+      const response = await fetch('/api/duplicate-folders/resolve-all', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          library: targetLibrary,
+          selections: stagedSelections,
+        }),
+      });
+      const data = await safeJson(response);
+      if (!response.ok) throw new Error(responseErrorMessage(response, data));
+      await fetchDuplicates();
+      reload();
+
+      const processedCount = Number(data?.processedCount) || 0;
+      const deletedCount = Number(data?.deletedCount) || 0;
+      const changedCount = Number(data?.folderAssignmentsChanged) || 0;
+      const resultErrors = (Array.isArray(data?.results) ? data.results : [])
+        .flatMap((result) => (Array.isArray(result?.errors) ? result.errors : [])
+          .map((entry) => `${result.keptFolderName}: ${entry.folderName}: ${entry.error}`));
+      const failures = (Array.isArray(data?.failures) ? data.failures : [])
+        .map((entry) => `${entry.keepFolderName}: ${entry.error}`);
+
+      setStatus(
+        `Processed ${processedCount} ${processedCount === 1 ? 'movie' : 'movies'} and deleted ${deletedCount} duplicate ${deletedCount === 1 ? 'folder' : 'folders'}.`
+        + (changedCount ? ` Switched KAM to ${changedCount} newly selected ${changedCount === 1 ? 'folder' : 'folders'}.` : '')
+      );
+      if (resultErrors.length || failures.length) {
+        setError([...resultErrors, ...failures].join(' '));
+      }
+    } catch (err) {
+      setStatus('');
+      setError(err?.message || 'Failed to process duplicate folders.');
+    } finally {
+      setResolvingKey('');
+    }
+  }, [
+    resolvingKey,
+    stagedSelections,
+    stagedDeleteCount,
+    groups.length,
+    targetLibrary,
+    fetchDuplicates,
+    reload,
+  ]);
 
   const backHref = useMemo(
     () => (targetLibrary ? `/libraries/${encodeURIComponent(targetLibrary)}` : '/libraries'),
@@ -125,7 +209,8 @@ function DuplicateFoldersPage() {
             <h1>Duplicate Folders</h1>
             <p>
               Movies with multiple asset folders that match known title, year, and edition variations.
-              Choose the one folder you want KAM to keep.
+              Choose the folder to keep for each movie, then process them individually or all at once.
+              If you keep a folder KAM is not currently using, KAM switches to it before removing the others.
             </p>
           </div>
         </div>
@@ -139,6 +224,24 @@ function DuplicateFoldersPage() {
 
       <main className="orphaned-assets-page duplicate-folders-page">
         {root ? <p className="orphaned-assets-root" title={root}>Asset root: <code>{root}</code></p> : null}
+        {!loading && groups.length ? (
+          <div className="duplicate-folders-batch-toolbar">
+            <div>
+              <strong>{stagedSelections.length.toLocaleString()} of {groups.length.toLocaleString()} movies ready</strong>
+              <span>Review each retained folder, then apply every staged choice together.</span>
+            </div>
+            <button
+              type="button"
+              className="duplicate-folder-resolve duplicate-folder-resolve-all"
+              onClick={resolveAllGroups}
+              disabled={Boolean(resolvingKey) || stagedSelections.length !== groups.length}
+            >
+              {resolvingKey === BATCH_RESOLUTION_KEY
+                ? 'Processing all…'
+                : `Process all ${groups.length.toLocaleString()} ${groups.length === 1 ? 'movie' : 'movies'}`}
+            </button>
+          </div>
+        ) : null}
         {status ? <div className="success-state orphaned-assets-message" role="status">{status}</div> : null}
         {error ? <div className="error-banner" role="alert">{error}</div> : null}
         {loading ? <div className="loading-state">Matching Plex movies against every asset folder…</div> : null}
@@ -188,6 +291,7 @@ function DuplicateFoldersPage() {
                           <strong title={folder.folderName}>{folder.folderName}</strong>
                           <span>{Number(folder.assetCount || 0).toLocaleString()} files <span aria-hidden="true">•</span> {formatBytes(folder.sizeBytes)}</span>
                           {folder.isActive ? <em>Currently used by KAM</em> : null}
+                          {selected && !folder.isActive ? <em className="will-use">KAM will switch to this folder</em> : null}
                         </span>
                       </label>
                     );

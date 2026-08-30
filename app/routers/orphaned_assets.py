@@ -79,6 +79,50 @@ class ResolveDuplicateFoldersPayload(BaseModel):
         return text
 
 
+class ResolveDuplicateFolderSelection(BaseModel):
+    ratingKey: str
+    keepFolderName: str
+
+    @field_validator("ratingKey", "keepFolderName", mode="before")
+    @classmethod
+    def _required_text(cls, value: Any) -> str:
+        text = str(value or "").strip()
+        if not text:
+            raise ValueError("Value is required")
+        return text
+
+
+class ResolveDuplicateFoldersBatchPayload(BaseModel):
+    library: str
+    selections: List[ResolveDuplicateFolderSelection] = Field(
+        default_factory=list,
+        min_length=1,
+        max_length=10000,
+    )
+
+    @field_validator("library", mode="before")
+    @classmethod
+    def _library_required(cls, value: Any) -> str:
+        text = str(value or "").strip()
+        if not text:
+            raise ValueError("Library is required")
+        return text
+
+    @field_validator("selections")
+    @classmethod
+    def _unique_rating_keys(
+        cls,
+        value: List[ResolveDuplicateFolderSelection],
+    ) -> List[ResolveDuplicateFolderSelection]:
+        seen: set[str] = set()
+        for selection in value:
+            key = selection.ratingKey.casefold()
+            if key in seen:
+                raise ValueError("Each movie can only be selected once")
+            seen.add(key)
+        return value
+
+
 def _library_root(library: str) -> Path:
     mapped = library_mappings_service.get_asset_path(library)
     if not mapped:
@@ -505,18 +549,44 @@ def resolve_duplicate_folders(payload: ResolveDuplicateFoldersPayload) -> Dict[s
             status_code=409,
             detail="This movie no longer has verified duplicate folders.",
         )
+    try:
+        return _resolve_duplicate_group(
+            root=root,
+            library=payload.library,
+            group=group,
+            rating_key=payload.ratingKey,
+            keep_folder_name=payload.keepFolderName,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+def _resolve_duplicate_group(
+    *,
+    root: Path,
+    library: str,
+    group: Dict[str, Any],
+    rating_key: str,
+    keep_folder_name: str,
+) -> Dict[str, Any]:
+    """Switch KAM to the retained folder, then remove its verified alternatives."""
+
     folders_by_name = {
         item["folderName"].casefold(): item["folderName"]
         for item in group["folders"]
     }
-    keep_name = folders_by_name.get(payload.keepFolderName.casefold())
+    keep_name = folders_by_name.get(keep_folder_name.casefold())
     if not keep_name:
-        raise HTTPException(status_code=409, detail="Selected folder is no longer a duplicate.")
+        raise ValueError("Selected folder is no longer a duplicate.")
 
-    folder_overrides.set_canonical_overrides(
-        payload.library,
-        {payload.ratingKey: keep_name},
+    previous_active_name = group.get("activeFolderName")
+    assignment_changed = (
+        not previous_active_name
+        or str(previous_active_name).casefold() != keep_name.casefold()
     )
+
+    # Persist this first so KAM never points at one of the folders being removed.
+    folder_overrides.set_canonical_overrides(library, {rating_key: keep_name})
     deleted: List[str] = []
     errors: List[Dict[str, str]] = []
     for folder_name in folders_by_name.values():
@@ -531,15 +601,71 @@ def resolve_duplicate_folders(payload: ResolveDuplicateFoldersPayload) -> Dict[s
             errors.append({"folderName": folder_name, "error": str(exc) or "Delete failed"})
 
     if deleted:
-        folder_overrides.clear_overrides_for_folders(payload.library, deleted)
+        folder_overrides.clear_overrides_for_folders(library, deleted)
         for folder_name in deleted:
-            orphan_exclusions.remove_exclusion(payload.library, folder_name)
+            orphan_exclusions.remove_exclusion(library, folder_name)
 
     return {
-        "library": payload.library,
-        "ratingKey": payload.ratingKey,
+        "library": library,
+        "ratingKey": rating_key,
         "keptFolderName": keep_name,
+        "previousActiveFolderName": previous_active_name,
+        "folderAssignmentChanged": assignment_changed,
         "deleted": deleted,
         "deletedCount": len(deleted),
         "errors": errors,
+    }
+
+
+@router.post("/api/duplicate-folders/resolve-all")
+def resolve_all_duplicate_folders(
+    payload: ResolveDuplicateFoldersBatchPayload,
+) -> Dict[str, Any]:
+    """Resolve a user-staged set of duplicate groups after one fresh audit."""
+
+    root, groups = _duplicate_groups(payload.library)
+    groups_by_rating = {
+        str(group.get("ratingKey") or ""): group
+        for group in groups
+    }
+    results: List[Dict[str, Any]] = []
+    failures: List[Dict[str, str]] = []
+
+    for selection in payload.selections:
+        group = groups_by_rating.get(selection.ratingKey)
+        if not group:
+            failures.append({
+                "ratingKey": selection.ratingKey,
+                "keepFolderName": selection.keepFolderName,
+                "error": "This movie no longer has verified duplicate folders.",
+            })
+            continue
+        try:
+            result = _resolve_duplicate_group(
+                root=root,
+                library=payload.library,
+                group=group,
+                rating_key=selection.ratingKey,
+                keep_folder_name=selection.keepFolderName,
+            )
+        except (OSError, ValueError) as exc:
+            failures.append({
+                "ratingKey": selection.ratingKey,
+                "keepFolderName": selection.keepFolderName,
+                "error": str(exc) or "Resolution failed.",
+            })
+            continue
+        results.append(result)
+
+    deleted_count = sum(result["deletedCount"] for result in results)
+    changed_count = sum(
+        1 for result in results if result["folderAssignmentChanged"]
+    )
+    return {
+        "library": payload.library,
+        "processedCount": len(results),
+        "deletedCount": deleted_count,
+        "folderAssignmentsChanged": changed_count,
+        "results": results,
+        "failures": failures,
     }
