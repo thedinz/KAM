@@ -78,8 +78,23 @@ function AppSidebar() {
   const attentionCount = Number(notReadyCount) || 0;
   const libraryTotal = Number(totalCount) || 0;
   const attentionRatio = `${attentionCount.toLocaleString()} / ${libraryTotal.toLocaleString()}`;
+  const selectedLibraryHref = selectedLibrary
+    ? `/libraries/${encodeURIComponent(selectedLibrary)}`
+    : '';
+  const selectedCollectionsHref = selectedLibraryHref ? `${selectedLibraryHref}/collections` : '';
+  const attentionUsesCollections = Boolean(
+    selectedCollectionsHref
+    && (
+      location.pathname === selectedCollectionsHref
+      || location.pathname.startsWith(`${selectedCollectionsHref}/`)
+      || (
+        location.pathname === `${selectedLibraryHref}/not-ready`
+        && new URLSearchParams(location.search).get('scope') === 'collections'
+      )
+    )
+  );
   const attentionHref = selectedLibrary
-    ? `/libraries/${encodeURIComponent(selectedLibrary)}/not-ready`
+    ? `${selectedLibraryHref}/not-ready${attentionUsesCollections ? '?scope=collections' : ''}`
     : '/libraries';
 
   return (
@@ -99,7 +114,12 @@ function AppSidebar() {
                 const href = `/libraries/${encodeURIComponent(name)}`;
                 const collectionsHref = `${href}/collections`;
                 const collectionsActive = location.pathname === collectionsHref
-                  || location.pathname.startsWith(`${collectionsHref}/`);
+                  || location.pathname.startsWith(`${collectionsHref}/`)
+                  || (
+                    attentionUsesCollections
+                    && normalizedSelected === name.toLowerCase()
+                    && location.pathname === `${href}/not-ready`
+                  );
                 const active = normalizedSelected === name.toLowerCase()
                   && location.pathname !== '/settings'
                   && !collectionsActive;
