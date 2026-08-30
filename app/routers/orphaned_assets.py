@@ -118,7 +118,7 @@ class ResolveDuplicateFoldersBatchPayload(BaseModel):
         for selection in value:
             key = selection.ratingKey.casefold()
             if key in seen:
-                raise ValueError("Each movie can only be selected once")
+                raise ValueError("Each asset can only be selected once")
             seen.add(key)
         return value
 
@@ -521,7 +521,7 @@ def delete_orphaned_assets(payload: DeleteOrphanedAssetsPayload) -> Dict[str, An
 
 @router.get("/api/duplicate-folders")
 def list_duplicate_folders(library: str = Query(...)) -> Dict[str, Any]:
-    """List Plex movies with more than one plausible asset folder."""
+    """List Plex assets with more than one plausible asset folder."""
 
     normalized_library = str(library or "").strip()
     if not normalized_library:
@@ -547,7 +547,7 @@ def resolve_duplicate_folders(payload: ResolveDuplicateFoldersPayload) -> Dict[s
     if not group:
         raise HTTPException(
             status_code=409,
-            detail="This movie no longer has verified duplicate folders.",
+            detail="This asset no longer has verified duplicate folders.",
         )
     try:
         return _resolve_duplicate_group(
@@ -637,7 +637,7 @@ def resolve_all_duplicate_folders(
             failures.append({
                 "ratingKey": selection.ratingKey,
                 "keepFolderName": selection.keepFolderName,
-                "error": "This movie no longer has verified duplicate folders.",
+                "error": "This asset no longer has verified duplicate folders.",
             })
             continue
         try:
