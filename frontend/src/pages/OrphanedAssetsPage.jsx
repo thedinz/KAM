@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 
 import { useLibraryItemsContext } from '../hooks/LibraryItemsProvider.jsx';
 import { responseErrorMessage, safeJson } from '../utils/api.js';
@@ -18,9 +18,14 @@ function formatBytes(value) {
 }
 
 function OrphanedAssetsPage() {
+  const location = useLocation();
   const navigate = useNavigate();
   const { library: libraryParam } = useParams();
   const targetLibrary = libraryParam ? decodeURIComponent(libraryParam) : '';
+  const cleanupScope = new URLSearchParams(location.search).get('scope') === 'collections'
+    ? 'collections'
+    : 'assets';
+  const collectionScope = cleanupScope === 'collections';
   const { library, setLibrary, reload } = useLibraryItemsContext();
   const [items, setItems] = useState([]);
   const [root, setRoot] = useState('');
@@ -44,7 +49,7 @@ function OrphanedAssetsPage() {
     setError('');
     setStatus('');
     try {
-      const params = new URLSearchParams({ library: targetLibrary });
+      const params = new URLSearchParams({ library: targetLibrary, scope: cleanupScope });
       if (showExcluded) params.set('includeExcluded', 'true');
       const response = await fetch(`/api/orphaned-assets?${params.toString()}`);
       const data = await safeJson(response);
@@ -62,7 +67,7 @@ function OrphanedAssetsPage() {
     } finally {
       setLoading(false);
     }
-  }, [targetLibrary, showExcluded]);
+  }, [targetLibrary, cleanupScope, showExcluded]);
 
   useEffect(() => {
     fetchOrphanedAssets();
@@ -98,7 +103,7 @@ function OrphanedAssetsPage() {
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ library: targetLibrary, folderName }),
+          body: JSON.stringify({ library: targetLibrary, scope: cleanupScope, folderName }),
         }
       );
       const data = await safeJson(response);
@@ -112,14 +117,14 @@ function OrphanedAssetsPage() {
       setStatus(
         excluded
           ? `${folderName} restored to the orphan audit.`
-          : `${folderName} excluded because its movie exists.`
+          : `${folderName} excluded because its Plex asset exists.`
       );
     } catch (err) {
       setError(err?.message || 'Failed to update the orphan exclusion.');
     } finally {
       setActionFolder('');
     }
-  }, [actionFolder, targetLibrary, fetchOrphanedAssets]);
+  }, [actionFolder, targetLibrary, cleanupScope, fetchOrphanedAssets]);
 
   const deleteFolders = useCallback(async (folderNames) => {
     const names = [...new Set(folderNames)].filter(Boolean);
@@ -137,7 +142,7 @@ function OrphanedAssetsPage() {
       const response = await fetch('/api/orphaned-assets/delete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ library: targetLibrary, folderNames: names }),
+        body: JSON.stringify({ library: targetLibrary, scope: cleanupScope, folderNames: names }),
       });
       const data = await safeJson(response);
       if (!response.ok) throw new Error(responseErrorMessage(response, data));
@@ -160,11 +165,13 @@ function OrphanedAssetsPage() {
     } finally {
       setDeleting(false);
     }
-  }, [deleting, targetLibrary, fetchOrphanedAssets, reload]);
+  }, [deleting, targetLibrary, cleanupScope, fetchOrphanedAssets, reload]);
 
   const backHref = useMemo(
-    () => (targetLibrary ? `/libraries/${encodeURIComponent(targetLibrary)}` : '/libraries'),
-    [targetLibrary]
+    () => (targetLibrary
+      ? `/libraries/${encodeURIComponent(targetLibrary)}${collectionScope ? '/collections' : ''}`
+      : '/libraries'),
+    [targetLibrary, collectionScope]
   );
 
   return (
@@ -175,10 +182,10 @@ function OrphanedAssetsPage() {
             ← Back
           </button>
           <div>
-            <span className="page-eyebrow">Library cleanup</span>
+            <span className="page-eyebrow">{collectionScope ? 'Collections cleanup' : 'Library cleanup'}</span>
             <h1>Orphaned Assets</h1>
             <p>
-              Asset folders with no matching item in {targetLibrary || 'Plex'}. Keep them for future reuse,
+              {collectionScope ? 'Collection asset' : 'Asset'} folders with no matching item in {targetLibrary || 'Plex'}. Keep them for future reuse,
               or delete the ones you no longer want.
             </p>
           </div>
@@ -200,7 +207,7 @@ function OrphanedAssetsPage() {
             checked={showExcluded}
             onChange={(event) => setShowExcluded(event.target.checked)}
           />
-          <span>Show folders excluded because their movie exists</span>
+          <span>Show folders excluded because their Plex asset exists</span>
         </label>
 
         {!loading && !error && items.length ? (
@@ -275,7 +282,7 @@ function OrphanedAssetsPage() {
                         ? 'Saving…'
                         : item.excluded
                           ? 'Restore'
-                          : 'Exclude — movie exists'}
+                          : 'Exclude — asset exists'}
                     </button>
                     {!item.excluded ? (
                       <button

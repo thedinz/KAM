@@ -143,6 +143,7 @@ def collections_env(tmp_path, monkeypatch):
         return collections_router.collections(**params)
 
     return SimpleNamespace(
+        route=collections_router,
         call=_call,
         folder_overrides=folder_overrides,
         override_folder=override_folder,
@@ -325,6 +326,21 @@ def test_collections_route_marks_asset_readiness(collections_env):
     assert yearless["folderName"] == "Franchise Collection"
     assert sanitized["folderName"] == "Mission Impossible Collection"
     assert sanitized["library"] == "Movies"
+
+
+def test_collection_audit_rows_are_limited_to_the_selected_source_library(
+    collections_env,
+):
+    rows = collections_env.route._collection_audit_rows("Movies")
+
+    assert {row["title"] for row in rows} == {
+        "My Cool Collection",
+        "Missing Assets",
+        "Mission: Impossible Collection",
+        "Franchise Collection (2024)",
+    }
+    assert all(row["type"] == "collection" for row in rows)
+    assert all(isinstance(row["ratingKey"], str) for row in rows)
 
 
 def test_collections_route_filters_by_source_library(collections_env, monkeypatch):

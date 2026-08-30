@@ -141,6 +141,41 @@ def _collections_root_for_library(library: str | None) -> Path | None:
     return None
 
 
+def _collection_audit_rows(library: str) -> List[Dict[str, Any]]:
+    """Return current Plex collections in one source library for asset audits."""
+
+    selected_library = str(library or "").strip()
+    if not selected_library:
+        return []
+
+    rows: List[Dict[str, Any]] = []
+    plex = get_plex()
+    for section in plex.library.sections():
+        section_name = str(getattr(section, "title", "") or "").strip()
+        if section_name.casefold() != selected_library.casefold():
+            continue
+        try:
+            section_collections = section.collections()
+        except Exception:
+            continue
+        for collection_item in section_collections:
+            rating_key = str(
+                getattr(collection_item, "ratingKey", None) or ""
+            ).strip()
+            title = str(getattr(collection_item, "title", None) or "").strip()
+            if not rating_key or not title:
+                continue
+            rows.append({
+                "title": title,
+                "year": None,
+                "ratingKey": rating_key,
+                "type": "collection",
+                "titleCandidates": [],
+            })
+        break
+    return rows
+
+
 def _strip_year_suffix(name: str) -> str:
     """Return *name* without a trailing ``(YYYY)`` suffix."""
 
