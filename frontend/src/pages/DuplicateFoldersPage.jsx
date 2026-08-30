@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 
 import { useLibraryItemsContext } from '../hooks/LibraryItemsProvider.jsx';
 import { responseErrorMessage, safeJson } from '../utils/api.js';
@@ -27,9 +27,14 @@ function initialChoices(groups) {
 }
 
 function DuplicateFoldersPage() {
+  const location = useLocation();
   const navigate = useNavigate();
   const { library: libraryParam } = useParams();
   const targetLibrary = libraryParam ? decodeURIComponent(libraryParam) : '';
+  const cleanupScope = new URLSearchParams(location.search).get('scope') === 'collections'
+    ? 'collections'
+    : 'assets';
+  const collectionScope = cleanupScope === 'collections';
   const { library, setLibrary, reload } = useLibraryItemsContext();
   const [groups, setGroups] = useState([]);
   const [root, setRoot] = useState('');
@@ -60,7 +65,7 @@ function DuplicateFoldersPage() {
     setLoading(true);
     setError('');
     try {
-      const params = new URLSearchParams({ library: targetLibrary });
+      const params = new URLSearchParams({ library: targetLibrary, scope: cleanupScope });
       const response = await fetch(`/api/duplicate-folders?${params.toString()}`);
       const data = await safeJson(response);
       if (!response.ok) throw new Error(responseErrorMessage(response, data));
@@ -78,7 +83,7 @@ function DuplicateFoldersPage() {
     } finally {
       setLoading(false);
     }
-  }, [targetLibrary]);
+  }, [targetLibrary, cleanupScope]);
 
   useEffect(() => {
     fetchDuplicates();
@@ -106,6 +111,7 @@ function DuplicateFoldersPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           library: targetLibrary,
+          scope: cleanupScope,
           ratingKey: group.ratingKey,
           keepFolderName,
         }),
@@ -130,7 +136,7 @@ function DuplicateFoldersPage() {
     } finally {
       setResolvingKey('');
     }
-  }, [choices, resolvingKey, targetLibrary, fetchDuplicates, reload]);
+  }, [choices, resolvingKey, targetLibrary, cleanupScope, fetchDuplicates, reload]);
 
   const resolveAllGroups = useCallback(async () => {
     if (
@@ -154,6 +160,7 @@ function DuplicateFoldersPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           library: targetLibrary,
+          scope: cleanupScope,
           selections: stagedSelections,
         }),
       });
@@ -190,13 +197,16 @@ function DuplicateFoldersPage() {
     stagedDeleteCount,
     groups.length,
     targetLibrary,
+    cleanupScope,
     fetchDuplicates,
     reload,
   ]);
 
   const backHref = useMemo(
-    () => (targetLibrary ? `/libraries/${encodeURIComponent(targetLibrary)}` : '/libraries'),
-    [targetLibrary]
+    () => (targetLibrary
+      ? `/libraries/${encodeURIComponent(targetLibrary)}${collectionScope ? '/collections' : ''}`
+      : '/libraries'),
+    [targetLibrary, collectionScope]
   );
 
   return (
@@ -205,7 +215,7 @@ function DuplicateFoldersPage() {
         <div className="not-ready-heading">
           <button type="button" className="back-button" onClick={() => navigate(backHref)}>← Back</button>
           <div>
-            <span className="page-eyebrow">Library cleanup</span>
+            <span className="page-eyebrow">{collectionScope ? 'Collections cleanup' : 'Library cleanup'}</span>
             <h1>Duplicate Folders</h1>
             <p>
               Library assets with multiple folders that match known title, year, and edition variations.
