@@ -223,13 +223,15 @@ The main files are:
 * `settings.json` — theme, Plex URL/token, auth mode/username/password, and library mappings.
 * `folder_overrides.json` — per-item folder assignments made by the folder finder.
 * `exclusions.json` — movies, shows, and collections hidden from KAM until re-included.
+* `orphan_exclusions.json` — asset folders hidden from orphan audits until restored.
 
 You can split state into another mounted directory by setting `KAM_STATE_ROOT`, or use
 the explicit file overrides `KAM_SETTINGS_PATH`, `KAM_FOLDER_OVERRIDES_PATH`, and
-`KAM_EXCLUSIONS_PATH`. If an older install kept per-item folder assignments in a
-separate location, set `KAM_LEGACY_STATE_ROOT` to that directory so KAM can still
-read the old `folder_overrides.json` while it writes new state to the current
-config location.
+`KAM_EXCLUSIONS_PATH`. Orphan-audit exclusions can be stored separately with
+`KAM_ORPHAN_EXCLUSIONS_PATH`. If an older install kept per-item folder assignments
+in a separate location, set `KAM_LEGACY_STATE_ROOT` to that directory so KAM can
+still read the old `folder_overrides.json` while it writes new state to the
+current config location.
 
 > Upgrades from previous versions automatically reuse an existing
 > `/data/*.json` file if it is present and no newer `/config` file exists, so saved
