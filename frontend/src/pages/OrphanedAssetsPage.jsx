@@ -27,6 +27,8 @@ function OrphanedAssetsPage() {
   const [selected, setSelected] = useState(() => new Set());
   const [loading, setLoading] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [actionFolder, setActionFolder] = useState('');
+  const [showExcluded, setShowExcluded] = useState(false);
   const [error, setError] = useState('');
   const [status, setStatus] = useState('');
 
@@ -43,6 +45,7 @@ function OrphanedAssetsPage() {
     setStatus('');
     try {
       const params = new URLSearchParams({ library: targetLibrary });
+      if (showExcluded) params.set('includeExcluded', 'true');
       const response = await fetch(`/api/orphaned-assets?${params.toString()}`);
       const data = await safeJson(response);
       if (!response.ok) throw new Error(responseErrorMessage(response, data));
@@ -59,13 +62,14 @@ function OrphanedAssetsPage() {
     } finally {
       setLoading(false);
     }
-  }, [targetLibrary]);
+  }, [targetLibrary, showExcluded]);
 
   useEffect(() => {
     fetchOrphanedAssets();
   }, [fetchOrphanedAssets]);
 
-  const allSelected = items.length > 0 && selected.size === items.length;
+  const selectableItems = useMemo(() => items.filter((item) => !item.excluded), [items]);
+  const allSelected = selectableItems.length > 0 && selected.size === selectableItems.length;
   const selectionLabel = `${selected.size.toLocaleString()} selected`;
 
   const toggleOne = useCallback((folderName) => {
@@ -79,10 +83,43 @@ function OrphanedAssetsPage() {
 
   const toggleAll = useCallback(() => {
     setSelected((previous) => {
-      if (items.length && previous.size === items.length) return new Set();
-      return new Set(items.map((item) => item.folderName));
+      if (selectableItems.length && previous.size === selectableItems.length) return new Set();
+      return new Set(selectableItems.map((item) => item.folderName));
     });
-  }, [items]);
+  }, [selectableItems]);
+
+  const setFolderExcluded = useCallback(async (folderName, excluded) => {
+    if (!folderName || actionFolder) return;
+    setActionFolder(folderName);
+    setError('');
+    try {
+      const response = await fetch(
+        excluded ? '/api/orphaned-assets/include' : '/api/orphaned-assets/exclude',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ library: targetLibrary, folderName }),
+        }
+      );
+      const data = await safeJson(response);
+      if (!response.ok) throw new Error(responseErrorMessage(response, data));
+      setSelected((previous) => {
+        const next = new Set(previous);
+        next.delete(folderName);
+        return next;
+      });
+      await fetchOrphanedAssets();
+      setStatus(
+        excluded
+          ? `${folderName} restored to the orphan audit.`
+          : `${folderName} excluded because its movie exists.`
+      );
+    } catch (err) {
+      setError(err?.message || 'Failed to update the orphan exclusion.');
+    } finally {
+      setActionFolder('');
+    }
+  }, [actionFolder, targetLibrary, fetchOrphanedAssets]);
 
   const deleteFolders = useCallback(async (folderNames) => {
     const names = [...new Set(folderNames)].filter(Boolean);
@@ -157,6 +194,15 @@ function OrphanedAssetsPage() {
       <main className="orphaned-assets-page">
         {root ? <p className="orphaned-assets-root" title={root}>Asset root: <code>{root}</code></p> : null}
 
+        <label className="orphaned-assets-show-excluded">
+          <input
+            type="checkbox"
+            checked={showExcluded}
+            onChange={(event) => setShowExcluded(event.target.checked)}
+          />
+          <span>Show folders excluded because their movie exists</span>
+        </label>
+
         {!loading && !error && items.length ? (
           <div className="orphaned-assets-toolbar">
             <label className="orphaned-assets-select-all">
@@ -200,6 +246,7 @@ function OrphanedAssetsPage() {
                       checked={checked}
                       onChange={() => toggleOne(item.folderName)}
                       aria-label={`Select ${item.folderName}`}
+                      disabled={item.excluded}
                     />
                   </label>
                   <div className="orphaned-asset-preview">
@@ -217,15 +264,31 @@ function OrphanedAssetsPage() {
                     <code title={item.folderName}>{item.folderName}</code>
                     <p>{Number(item.assetCount || 0).toLocaleString()} files <span aria-hidden="true">•</span> {formatBytes(item.sizeBytes)}</p>
                   </div>
-                  <button
-                    type="button"
-                    className="orphaned-asset-delete"
-                    onClick={() => deleteFolders([item.folderName])}
-                    disabled={deleting}
-                    aria-label={`Delete ${item.folderName}`}
-                  >
-                    Delete
-                  </button>
+                  <div className="orphaned-asset-actions">
+                    <button
+                      type="button"
+                      className="orphaned-asset-exclude"
+                      onClick={() => setFolderExcluded(item.folderName, Boolean(item.excluded))}
+                      disabled={deleting || Boolean(actionFolder)}
+                    >
+                      {actionFolder === item.folderName
+                        ? 'Saving…'
+                        : item.excluded
+                          ? 'Restore'
+                          : 'Exclude — movie exists'}
+                    </button>
+                    {!item.excluded ? (
+                      <button
+                        type="button"
+                        className="orphaned-asset-delete"
+                        onClick={() => deleteFolders([item.folderName])}
+                        disabled={deleting || Boolean(actionFolder)}
+                        aria-label={`Delete ${item.folderName}`}
+                      >
+                        Delete
+                      </button>
+                    ) : null}
+                  </div>
                 </article>
               );
             })}

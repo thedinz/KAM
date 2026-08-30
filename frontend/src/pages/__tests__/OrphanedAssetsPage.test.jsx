@@ -50,8 +50,18 @@ describe('OrphanedAssetsPage', () => {
     setLibrary.mockReset();
     reload.mockReset();
     vi.spyOn(window, 'confirm').mockReturnValue(true);
-    global.fetch = vi.fn(async (_url, options = {}) => {
+    global.fetch = vi.fn(async (url, options = {}) => {
       if (options.method === 'POST') {
+        if (url === '/api/orphaned-assets/exclude') {
+          return {
+            ok: true,
+            json: async () => ({
+              library: 'Movies',
+              folderName: 'Step Brothers (2008)',
+              excluded: true,
+            }),
+          };
+        }
         return {
           ok: true,
           json: async () => ({
@@ -95,5 +105,25 @@ describe('OrphanedAssetsPage', () => {
     expect(await screen.findByText('No orphaned asset folders')).toBeInTheDocument();
     expect(screen.getByRole('status')).toHaveTextContent('Deleted 2 asset folders.');
     expect(reload).toHaveBeenCalled();
+  });
+
+  it('lets a user exclude a false positive because its movie exists', async () => {
+    renderPage();
+
+    await screen.findByRole('heading', { name: /Step Brothers/ });
+    fireEvent.click(screen.getAllByRole('button', { name: 'Exclude — movie exists' })[0]);
+
+    await waitFor(() => {
+      const excludeCall = global.fetch.mock.calls.find(([url]) => url === '/api/orphaned-assets/exclude');
+      expect(JSON.parse(excludeCall[1].body)).toEqual({
+        library: 'Movies',
+        folderName: 'Step Brothers (2008)',
+      });
+    });
+    expect(await screen.findByText('No orphaned asset folders')).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Step Brothers (2008) excluded because its movie exists.'
+    );
+    expect(reload).not.toHaveBeenCalled();
   });
 });
