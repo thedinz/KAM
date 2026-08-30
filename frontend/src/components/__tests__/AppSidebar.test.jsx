@@ -53,6 +53,14 @@ describe('AppSidebar', () => {
       '/libraries/Kids%20Movies/not-ready?scope=collections'
     );
     expect(screen.getByRole('link', { name: 'Kids Movies Collections' })).toHaveClass('is-active');
+    expect(screen.getByRole('link', { name: 'Orphaned Assets' })).toHaveAttribute(
+      'href',
+      '/libraries/Kids%20Movies/orphaned-assets?scope=collections'
+    );
+    expect(screen.getByRole('link', { name: 'Duplicate Folders' })).toHaveAttribute(
+      'href',
+      '/libraries/Kids%20Movies/duplicate-folders?scope=collections'
+    );
   });
 
   it('keeps Collections selected on the scoped needs-attention page', () => {
@@ -67,6 +75,27 @@ describe('AppSidebar', () => {
     expect(screen.getByRole('link', { name: 'Needs Attention 4 / 28' })).toHaveAttribute(
       'href',
       '/libraries/Kids%20Movies/not-ready?scope=collections'
+    );
+  });
+
+  it('keeps collection cleanup scoped while moving between audit pages', () => {
+    render(
+      <MemoryRouter initialEntries={[
+        '/libraries/Kids%20Movies/orphaned-assets?scope=collections',
+      ]}>
+        <AppSidebar />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByRole('link', { name: 'Kids Movies Collections' })).toHaveClass('is-active');
+    expect(screen.getByRole('link', { name: 'Kids Movies' })).not.toHaveClass('is-active');
+    expect(screen.getByRole('link', { name: 'Orphaned Assets' })).toHaveAttribute(
+      'href',
+      '/libraries/Kids%20Movies/orphaned-assets?scope=collections'
+    );
+    expect(screen.getByRole('link', { name: 'Duplicate Folders' })).toHaveAttribute(
+      'href',
+      '/libraries/Kids%20Movies/duplicate-folders?scope=collections'
     );
   });
 

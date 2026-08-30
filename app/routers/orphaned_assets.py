@@ -13,6 +13,7 @@ from urllib.parse import quote
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator
 
+from . import collections as collections_router
 from . import items as items_router
 from ..services import folder_overrides, orphan_exclusions
 from ..services import library_mappings as library_mappings_service
@@ -24,8 +25,26 @@ _IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
 _YEAR_PATTERN = re.compile(r"^(?P<title>.+?)\s*\((?P<year>\d{4})\)(?:\s|$)")
 
 
+def _normalize_scope(value: Any) -> str:
+    raw = getattr(value, "default", value)
+    text = str(raw or "assets").strip().casefold()
+    if text in {"asset", "assets", "library"}:
+        return "assets"
+    if text in {"collection", "collections"}:
+        return "collections"
+    raise ValueError("scope must be assets or collections")
+
+
+def _query_scope(value: Any) -> str:
+    try:
+        return _normalize_scope(value)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
 class DeleteOrphanedAssetsPayload(BaseModel):
     library: str
+    scope: str = "assets"
     folderNames: List[str] = Field(default_factory=list, min_length=1, max_length=10000)
 
     @field_validator("library", mode="before")
@@ -35,6 +54,11 @@ class DeleteOrphanedAssetsPayload(BaseModel):
         if not text:
             raise ValueError("Library is required")
         return text
+
+    @field_validator("scope", mode="before")
+    @classmethod
+    def _valid_scope(cls, value: Any) -> str:
+        return _normalize_scope(value)
 
     @field_validator("folderNames", mode="before")
     @classmethod
@@ -54,6 +78,7 @@ class DeleteOrphanedAssetsPayload(BaseModel):
 
 class OrphanExclusionPayload(BaseModel):
     library: str
+    scope: str = "assets"
     folderName: str
 
     @field_validator("library", "folderName", mode="before")
@@ -64,9 +89,15 @@ class OrphanExclusionPayload(BaseModel):
             raise ValueError("Value is required")
         return text
 
+    @field_validator("scope", mode="before")
+    @classmethod
+    def _valid_scope(cls, value: Any) -> str:
+        return _normalize_scope(value)
+
 
 class ResolveDuplicateFoldersPayload(BaseModel):
     library: str
+    scope: str = "assets"
     ratingKey: str
     keepFolderName: str
 
@@ -77,6 +108,11 @@ class ResolveDuplicateFoldersPayload(BaseModel):
         if not text:
             raise ValueError("Value is required")
         return text
+
+    @field_validator("scope", mode="before")
+    @classmethod
+    def _valid_scope(cls, value: Any) -> str:
+        return _normalize_scope(value)
 
 
 class ResolveDuplicateFolderSelection(BaseModel):
@@ -94,6 +130,7 @@ class ResolveDuplicateFolderSelection(BaseModel):
 
 class ResolveDuplicateFoldersBatchPayload(BaseModel):
     library: str
+    scope: str = "assets"
     selections: List[ResolveDuplicateFolderSelection] = Field(
         default_factory=list,
         min_length=1,
@@ -107,6 +144,11 @@ class ResolveDuplicateFoldersBatchPayload(BaseModel):
         if not text:
             raise ValueError("Library is required")
         return text
+
+    @field_validator("scope", mode="before")
+    @classmethod
+    def _valid_scope(cls, value: Any) -> str:
+        return _normalize_scope(value)
 
     @field_validator("selections")
     @classmethod
@@ -123,10 +165,39 @@ class ResolveDuplicateFoldersBatchPayload(BaseModel):
         return value
 
 
-def _library_root(library: str) -> Path:
-    mapped = library_mappings_service.get_asset_path(library)
+def _library_root(library: str, scope: str = "assets") -> Path:
+    scope_name = _normalize_scope(scope)
+    if scope_name == "collections":
+        collection_mapping = library_mappings_service.get_collections_path(library)
+        selected = collections_router._collections_root_for_library(library)
+        mapped = collection_mapping
+        if selected:
+            selected_path = os.path.normcase(os.path.realpath(str(selected)))
+            asset_mapping = library_mappings_service.get_asset_path(library)
+            asset_path = (
+                os.path.normcase(os.path.realpath(asset_mapping))
+                if asset_mapping
+                else ""
+            )
+            collection_path = (
+                os.path.normcase(os.path.realpath(collection_mapping))
+                if collection_mapping
+                else ""
+            )
+            # The collections router has a compatibility fallback to the main
+            # asset root. Audits must never use that fallback because deletion
+            # is in scope here. Only accept it when the user explicitly mapped
+            # collections to that same directory.
+            if not asset_path or selected_path != asset_path or collection_path == asset_path:
+                mapped = str(selected)
+    else:
+        mapped = library_mappings_service.get_asset_path(library)
     if not mapped:
-        raise HTTPException(status_code=404, detail=f"No assets mapping for library '{library}'")
+        target = "collections" if scope_name == "collections" else "assets"
+        raise HTTPException(
+            status_code=404,
+            detail=f"No {target} mapping for library '{library}'",
+        )
     try:
         root = Path(mapped).resolve(strict=True)
     except FileNotFoundError:
@@ -154,8 +225,37 @@ def _direct_asset_folders(root: Path) -> List[Path]:
         raise HTTPException(status_code=403, detail="Permission denied")
 
 
-def _active_folder_paths(library: str, rows: List[Dict[str, Any]]) -> Dict[str, str]:
-    resolver = items_router._RequestDirectoryResolver(library)
+class _RootDirectoryResolver:
+    """Resolve folder names inside only the root selected for this audit scope."""
+
+    def __init__(self, root: Path):
+        self.root = root
+        self._names: Optional[List[str]] = None
+
+    def _entries(self) -> List[str]:
+        if self._names is None:
+            self._names = [folder.name for folder in _direct_asset_folders(self.root)]
+        return self._names
+
+    def resolve(self, folder_name: str) -> str:
+        raw = str(folder_name or "").strip()
+        if not raw:
+            raise FileNotFoundError("Empty folderName")
+        exact = self.root / raw
+        if exact.is_dir() and not exact.is_symlink():
+            return str(exact)
+        match = resolve_service._best_match(self._entries(), raw)
+        if match:
+            return str(self.root / match)
+        raise FileNotFoundError(f"No asset folder matches '{raw}'")
+
+
+def _active_folder_paths(
+    library: str,
+    rows: List[Dict[str, Any]],
+    root: Path,
+) -> Dict[str, str]:
+    resolver = _RootDirectoryResolver(root)
     overrides = folder_overrides.get_library_overrides(library)
     active: Dict[str, str] = {}
 
@@ -166,14 +266,12 @@ def _active_folder_paths(library: str, rows: List[Dict[str, Any]]) -> Dict[str, 
         override = overrides.get(rating_key)
         _name, folder_path = items_router._resolve_override_folder(library, override, resolver)
         if not folder_path:
-            _name, folder_path = items_router._try_existing_asset_folder(
-                library,
-                row.get("title"),
-                row.get("year"),
-                row.get("type"),
-                resolver,
-                row.get("titleCandidates"),
-            )
+            for candidate in _row_match_targets(row):
+                try:
+                    folder_path = resolver.resolve(candidate)
+                    break
+                except FileNotFoundError:
+                    continue
         if folder_path:
             active[rating_key] = _path_key(folder_path)
     return active
@@ -189,12 +287,23 @@ def _row_match_targets(row: Dict[str, Any]) -> List[str]:
         title = str(raw_title or "").strip()
         if not title:
             continue
-        has_year = resolve_service._has_release_year(title)
         candidates: List[str] = []
-        if year and not has_year:
-            candidates.append(f"{title} ({year})")
-        if not (year and item_type == "movie" and not has_year):
-            candidates.append(title)
+        if item_type == "collection":
+            collection_titles = [
+                title,
+                collections_router._strip_year_suffix(title),
+            ]
+            for collection_title in list(collection_titles):
+                collection_titles.append(
+                    collections_router._strip_collection_suffix(collection_title)
+                )
+            candidates.extend(candidate for candidate in collection_titles if candidate)
+        else:
+            has_year = resolve_service._has_release_year(title)
+            if year and not has_year:
+                candidates.append(f"{title} ({year})")
+            if not (year and item_type == "movie" and not has_year):
+                candidates.append(title)
         for candidate in candidates:
             key = candidate.casefold()
             if key in seen:
@@ -311,11 +420,16 @@ def _folder_payload(folder: Path) -> Dict[str, Any]:
     }
 
 
-def _asset_audit(library: str) -> Dict[str, Any]:
-    root = _library_root(library)
-    rows = items_router._library_rows(library)
+def _asset_audit(library: str, scope: str = "assets") -> Dict[str, Any]:
+    scope_name = _normalize_scope(scope)
+    root = _library_root(library, scope_name)
+    rows = (
+        collections_router._collection_audit_rows(library)
+        if scope_name == "collections"
+        else items_router._library_rows(library)
+    )
     folders = _direct_asset_folders(root)
-    active_by_rating = _active_folder_paths(library, rows)
+    active_by_rating = _active_folder_paths(library, rows, root)
     records, normalized_index, token_index, prefix_index = _build_match_index(rows)
     matches_by_path: Dict[str, set[str]] = {}
 
@@ -341,19 +455,22 @@ def _asset_audit(library: str) -> Dict[str, Any]:
         "folders": folders,
         "activeByRating": active_by_rating,
         "matchesByPath": matches_by_path,
+        "scope": scope_name,
     }
 
 
 def _orphaned_assets(
     library: str,
     *,
+    scope: str = "assets",
     include_excluded: bool = False,
 ) -> tuple[Path, List[Dict[str, Any]]]:
-    audit = _asset_audit(library)
+    scope_name = _normalize_scope(scope)
+    audit = _asset_audit(library, scope_name)
     orphaned: List[Dict[str, Any]] = []
     excluded_names = {
         entry["folderName"].casefold()
-        for entry in orphan_exclusions.list_exclusions(library)
+        for entry in orphan_exclusions.list_exclusions(library, scope_name)
     }
 
     for folder in audit["folders"]:
@@ -368,8 +485,11 @@ def _orphaned_assets(
     return audit["root"], orphaned
 
 
-def _duplicate_groups(library: str) -> tuple[Path, List[Dict[str, Any]]]:
-    audit = _asset_audit(library)
+def _duplicate_groups(
+    library: str,
+    scope: str = "assets",
+) -> tuple[Path, List[Dict[str, Any]]]:
+    audit = _asset_audit(library, scope)
     rows_by_key = {
         str(row.get("ratingKey") or "").strip(): row
         for row in audit["rows"]
@@ -429,6 +549,7 @@ def _delete_direct_folder(root: Path, folder_name: str) -> None:
 @router.get("/api/orphaned-assets")
 def list_orphaned_assets(
     library: str = Query(...),
+    scope: str = Query("assets"),
     include_excluded: bool = Query(False, alias="includeExcluded"),
 ) -> Dict[str, Any]:
     """List orphaned asset folders not currently claimed by an item in Plex."""
@@ -436,6 +557,7 @@ def list_orphaned_assets(
     normalized_library = str(library or "").strip()
     if not normalized_library:
         raise HTTPException(status_code=422, detail="Missing library")
+    scope_name = _query_scope(scope)
     include_flag = (
         include_excluded
         if isinstance(include_excluded, bool)
@@ -443,10 +565,12 @@ def list_orphaned_assets(
     )
     root, items = _orphaned_assets(
         normalized_library,
+        scope=scope_name,
         include_excluded=include_flag,
     )
     return {
         "library": normalized_library,
+        "scope": scope_name,
         "root": str(root),
         "totalCount": len(items),
         "items": items,
@@ -457,7 +581,11 @@ def list_orphaned_assets(
 def exclude_orphaned_asset(payload: OrphanExclusionPayload) -> Dict[str, Any]:
     """Hide a known false positive while keeping the folder and its assets."""
 
-    _root, items = _orphaned_assets(payload.library, include_excluded=True)
+    _root, items = _orphaned_assets(
+        payload.library,
+        scope=payload.scope,
+        include_excluded=True,
+    )
     by_name = {item["folderName"].casefold(): item["folderName"] for item in items}
     canonical_name = by_name.get(payload.folderName.casefold())
     if not canonical_name:
@@ -465,7 +593,11 @@ def exclude_orphaned_asset(payload: OrphanExclusionPayload) -> Dict[str, Any]:
             status_code=409,
             detail="Folder is missing or now matches an item in Plex.",
         )
-    stored = orphan_exclusions.add_exclusion(payload.library, canonical_name)
+    stored = orphan_exclusions.add_exclusion(
+        payload.library,
+        canonical_name,
+        payload.scope,
+    )
     return stored
 
 
@@ -473,17 +605,26 @@ def exclude_orphaned_asset(payload: OrphanExclusionPayload) -> Dict[str, Any]:
 def include_orphaned_asset(payload: OrphanExclusionPayload) -> Dict[str, Any]:
     """Restore a previously excluded folder to the orphan audit."""
 
-    removed = orphan_exclusions.remove_exclusion(payload.library, payload.folderName)
+    removed = orphan_exclusions.remove_exclusion(
+        payload.library,
+        payload.folderName,
+        payload.scope,
+    )
     if not removed:
         raise HTTPException(status_code=404, detail="Orphan exclusion not found")
-    return {"library": payload.library, "folderName": payload.folderName, "excluded": False}
+    return {
+        "library": payload.library,
+        "scope": payload.scope,
+        "folderName": payload.folderName,
+        "excluded": False,
+    }
 
 
 @router.post("/api/orphaned-assets/delete")
 def delete_orphaned_assets(payload: DeleteOrphanedAssetsPayload) -> Dict[str, Any]:
     """Delete selected folders only if they are still orphaned after a fresh Plex scan."""
 
-    root, orphaned = _orphaned_assets(payload.library)
+    root, orphaned = _orphaned_assets(payload.library, scope=payload.scope)
     orphaned_by_name = {item["folderName"].casefold(): item["folderName"] for item in orphaned}
     deleted: List[str] = []
     skipped: List[Dict[str, str]] = []
@@ -506,12 +647,18 @@ def delete_orphaned_assets(payload: DeleteOrphanedAssetsPayload) -> Dict[str, An
             errors.append({"folderName": canonical_name, "error": str(exc) or "Delete failed"})
 
     if deleted:
-        folder_overrides.clear_overrides_for_folders(payload.library, deleted)
+        if payload.scope == "assets":
+            folder_overrides.clear_overrides_for_folders(payload.library, deleted)
         for folder_name in deleted:
-            orphan_exclusions.remove_exclusion(payload.library, folder_name)
+            orphan_exclusions.remove_exclusion(
+                payload.library,
+                folder_name,
+                payload.scope,
+            )
 
     return {
         "library": payload.library,
+        "scope": payload.scope,
         "deletedCount": len(deleted),
         "deleted": deleted,
         "skipped": skipped,
@@ -520,15 +667,20 @@ def delete_orphaned_assets(payload: DeleteOrphanedAssetsPayload) -> Dict[str, An
 
 
 @router.get("/api/duplicate-folders")
-def list_duplicate_folders(library: str = Query(...)) -> Dict[str, Any]:
+def list_duplicate_folders(
+    library: str = Query(...),
+    scope: str = Query("assets"),
+) -> Dict[str, Any]:
     """List Plex assets with more than one plausible asset folder."""
 
     normalized_library = str(library or "").strip()
     if not normalized_library:
         raise HTTPException(status_code=422, detail="Missing library")
-    root, groups = _duplicate_groups(normalized_library)
+    scope_name = _query_scope(scope)
+    root, groups = _duplicate_groups(normalized_library, scope_name)
     return {
         "library": normalized_library,
+        "scope": scope_name,
         "root": str(root),
         "totalCount": len(groups),
         "groups": groups,
@@ -539,7 +691,7 @@ def list_duplicate_folders(library: str = Query(...)) -> Dict[str, Any]:
 def resolve_duplicate_folders(payload: ResolveDuplicateFoldersPayload) -> Dict[str, Any]:
     """Keep one selected folder and delete the other freshly verified duplicates."""
 
-    root, groups = _duplicate_groups(payload.library)
+    root, groups = _duplicate_groups(payload.library, payload.scope)
     group = next(
         (item for item in groups if str(item.get("ratingKey")) == payload.ratingKey),
         None,
@@ -553,6 +705,7 @@ def resolve_duplicate_folders(payload: ResolveDuplicateFoldersPayload) -> Dict[s
         return _resolve_duplicate_group(
             root=root,
             library=payload.library,
+            scope=payload.scope,
             group=group,
             rating_key=payload.ratingKey,
             keep_folder_name=payload.keepFolderName,
@@ -565,6 +718,7 @@ def _resolve_duplicate_group(
     *,
     root: Path,
     library: str,
+    scope: str,
     group: Dict[str, Any],
     rating_key: str,
     keep_folder_name: str,
@@ -601,12 +755,14 @@ def _resolve_duplicate_group(
             errors.append({"folderName": folder_name, "error": str(exc) or "Delete failed"})
 
     if deleted:
-        folder_overrides.clear_overrides_for_folders(library, deleted)
+        if scope == "assets":
+            folder_overrides.clear_overrides_for_folders(library, deleted)
         for folder_name in deleted:
-            orphan_exclusions.remove_exclusion(library, folder_name)
+            orphan_exclusions.remove_exclusion(library, folder_name, scope)
 
     return {
         "library": library,
+        "scope": scope,
         "ratingKey": rating_key,
         "keptFolderName": keep_name,
         "previousActiveFolderName": previous_active_name,
@@ -623,7 +779,7 @@ def resolve_all_duplicate_folders(
 ) -> Dict[str, Any]:
     """Resolve a user-staged set of duplicate groups after one fresh audit."""
 
-    root, groups = _duplicate_groups(payload.library)
+    root, groups = _duplicate_groups(payload.library, payload.scope)
     groups_by_rating = {
         str(group.get("ratingKey") or ""): group
         for group in groups
@@ -644,6 +800,7 @@ def resolve_all_duplicate_folders(
             result = _resolve_duplicate_group(
                 root=root,
                 library=payload.library,
+                scope=payload.scope,
                 group=group,
                 rating_key=selection.ratingKey,
                 keep_folder_name=selection.keepFolderName,
@@ -663,6 +820,7 @@ def resolve_all_duplicate_folders(
     )
     return {
         "library": payload.library,
+        "scope": payload.scope,
         "processedCount": len(results),
         "deletedCount": deleted_count,
         "folderAssignmentsChanged": changed_count,

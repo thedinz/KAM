@@ -95,25 +95,32 @@ function AppSidebar() {
     ? `/libraries/${encodeURIComponent(selectedLibrary)}`
     : '';
   const selectedCollectionsHref = selectedLibraryHref ? `${selectedLibraryHref}/collections` : '';
+  const collectionScopeRequested = new URLSearchParams(location.search).get('scope') === 'collections';
+  const scopedCleanupPath = Boolean(
+    selectedLibraryHref
+    && collectionScopeRequested
+    && [
+      `${selectedLibraryHref}/not-ready`,
+      `${selectedLibraryHref}/orphaned-assets`,
+      `${selectedLibraryHref}/duplicate-folders`,
+    ].includes(location.pathname)
+  );
   const attentionUsesCollections = Boolean(
     selectedCollectionsHref
     && (
       location.pathname === selectedCollectionsHref
       || location.pathname.startsWith(`${selectedCollectionsHref}/`)
-      || (
-        location.pathname === `${selectedLibraryHref}/not-ready`
-        && new URLSearchParams(location.search).get('scope') === 'collections'
-      )
+      || scopedCleanupPath
     )
   );
   const attentionHref = selectedLibrary
     ? `${selectedLibraryHref}/not-ready${attentionUsesCollections ? '?scope=collections' : ''}`
     : '/libraries';
   const orphanedAssetsHref = selectedLibrary
-    ? `${selectedLibraryHref}/orphaned-assets`
+    ? `${selectedLibraryHref}/orphaned-assets${attentionUsesCollections ? '?scope=collections' : ''}`
     : '/libraries';
   const duplicateFoldersHref = selectedLibrary
-    ? `${selectedLibraryHref}/duplicate-folders`
+    ? `${selectedLibraryHref}/duplicate-folders${attentionUsesCollections ? '?scope=collections' : ''}`
     : '/libraries';
   const supportsOrphanedAssets = Boolean(
     selectedLibrary && selectedLibrary.trim().toLowerCase() !== 'collections'
@@ -140,7 +147,11 @@ function AppSidebar() {
                   || (
                     attentionUsesCollections
                     && normalizedSelected === name.toLowerCase()
-                    && location.pathname === `${href}/not-ready`
+                    && [
+                      `${href}/not-ready`,
+                      `${href}/orphaned-assets`,
+                      `${href}/duplicate-folders`,
+                    ].includes(location.pathname)
                   );
                 const active = normalizedSelected === name.toLowerCase()
                   && location.pathname !== '/settings'
