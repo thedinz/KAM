@@ -45,6 +45,12 @@ function NavigationIcon({ name }) {
         <path d="m6 7 1 14h10l1-14M10 11v6m4-6v6" />
       </>
     ),
+    duplicate: (
+      <>
+        <path d="M8 7h11a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2Z" />
+        <path d="M6 17H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11a2 2 0 0 1 2 2v2" />
+      </>
+    ),
     settings: (
       <>
         <circle cx="12" cy="12" r="3" />
@@ -105,6 +111,9 @@ function AppSidebar() {
     : '/libraries';
   const orphanedAssetsHref = selectedLibrary
     ? `${selectedLibraryHref}/orphaned-assets`
+    : '/libraries';
+  const duplicateFoldersHref = selectedLibrary
+    ? `${selectedLibraryHref}/duplicate-folders`
     : '/libraries';
   const supportsOrphanedAssets = Boolean(
     selectedLibrary && selectedLibrary.trim().toLowerCase() !== 'collections'
@@ -182,13 +191,22 @@ function AppSidebar() {
           </span>
         )}
         {supportsOrphanedAssets ? (
-          <NavLink
-            className={({ isActive }) => `app-nav-item app-nav-orphaned${isActive ? ' is-active' : ''}`}
-            to={orphanedAssetsHref}
-          >
-            <NavigationIcon name="orphaned" />
-            <span>Orphaned Assets</span>
-          </NavLink>
+          <>
+            <NavLink
+              className={({ isActive }) => `app-nav-item app-nav-orphaned${isActive ? ' is-active' : ''}`}
+              to={orphanedAssetsHref}
+            >
+              <NavigationIcon name="orphaned" />
+              <span>Orphaned Assets</span>
+            </NavLink>
+            <NavLink
+              className={({ isActive }) => `app-nav-item app-nav-duplicates${isActive ? ' is-active' : ''}`}
+              to={duplicateFoldersHref}
+            >
+              <NavigationIcon name="duplicate" />
+              <span>Duplicate Folders</span>
+            </NavLink>
+          </>
         ) : null}
       </nav>
 

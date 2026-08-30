@@ -92,6 +92,10 @@ describe('AppSidebar', () => {
       'href',
       '/libraries/Kids%20Movies/orphaned-assets'
     );
+    expect(screen.getByRole('link', { name: 'Duplicate Folders' })).toHaveAttribute(
+      'href',
+      '/libraries/Kids%20Movies/duplicate-folders'
+    );
   });
 
   it('removes the generic library link and nests collections under mapped libraries', () => {

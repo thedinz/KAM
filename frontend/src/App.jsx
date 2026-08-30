@@ -3,6 +3,7 @@ import AppSidebar from './components/AppSidebar.jsx';
 import BrandLockup from './components/BrandLockup.jsx';
 import LoginPage from './pages/LoginPage.jsx';
 import CollectionDetailPage from './pages/CollectionDetailPage.jsx';
+import DuplicateFoldersPage from './pages/DuplicateFoldersPage.jsx';
 import ImportErrorsPage from './pages/ImportErrorsPage.jsx';
 import LibraryPage from './pages/LibraryPage.jsx';
 import MovieDetailPage from './pages/MovieDetailPage.jsx';
@@ -80,6 +81,7 @@ function App() {
                     <Route path="/libraries/:library/import-errors" element={<ImportErrorsPage />} />
                     <Route path="/libraries/:library/not-ready" element={<NotReadyPage />} />
                     <Route path="/libraries/:library/orphaned-assets" element={<OrphanedAssetsPage />} />
+                    <Route path="/libraries/:library/duplicate-folders" element={<DuplicateFoldersPage />} />
                     <Route path="/libraries/:library/mapping" element={<MappingScanPage />} />
                     <Route path="/libraries/:library/movies/:ratingKey" element={<MovieDetailPage />} />
                     <Route path="/libraries/:library/shows/:ratingKey" element={<ShowDetailPage />} />
