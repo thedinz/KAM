@@ -1,5 +1,18 @@
 # Changelog
 
+## 7.2.0 — 2026-08-30
+
+- Extend **Orphaned Assets** and **Duplicate Folders** cleanup to mapped collection
+  roots while keeping collection and normal-library audits safely separated.
+- Preserve collection context throughout cleanup navigation and use library-neutral
+  asset labels and counts on movie, TV, and collection pages.
+- Switch KAM to a newly retained collection folder before deleting its verified
+  alternatives, including staged **Process all** resolutions.
+- Scope persistent orphan exclusions to either normal assets or collections so the
+  same folder name can be reviewed independently in both roots.
+- Fix duplicate resolution for distinct filesystem folders whose exact names compare
+  equal case-insensitively or contain otherwise invisible differences.
+
 ## 7.1.0 — 2026-08-30
 
 - Add a per-library **Orphaned Assets** audit that compares asset folders with

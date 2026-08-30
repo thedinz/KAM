@@ -1,5 +1,5 @@
 // Keep this aligned with the KAM release tag before publishing a release.
-export const KAM_VERSION_NUMBER = '7.1.0';
+export const KAM_VERSION_NUMBER = '7.2.0';
 
 function normalizeBranchName(value) {
   const text = String(value || '').trim();
