@@ -196,8 +196,8 @@ def set_canonical_overrides(library: str, assignments: Mapping[str, str]) -> Dic
     cleaned: Dict[str, str] = {}
     for rating_key, folder_name in assignments.items():
         key = str(rating_key or "").strip()
-        name = str(folder_name or "").strip()
-        if key and name:
+        name = str(folder_name or "")
+        if key and name.strip():
             cleaned[key] = name
 
     if not cleaned:
@@ -245,7 +245,9 @@ def clear_overrides_for_folders(library: str, folder_names: Collection[str]) -> 
 
     if not library or not folder_names:
         return 0
-    targets = {str(name).strip().casefold() for name in folder_names if str(name).strip()}
+    # These are canonical filesystem names, so compare them exactly. Linux can
+    # contain two distinct directories whose names differ only by case.
+    targets = {str(name) for name in folder_names if str(name).strip()}
     if not targets:
         return 0
 
@@ -256,7 +258,7 @@ def clear_overrides_for_folders(library: str, folder_names: Collection[str]) -> 
         if not lib_entries:
             return 0
         for rating_key, folder_name in list(lib_entries.items()):
-            if str(folder_name).strip().casefold() not in targets:
+            if str(folder_name) not in targets:
                 continue
             lib_entries.pop(rating_key, None)
             removed += 1

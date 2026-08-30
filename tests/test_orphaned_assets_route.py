@@ -89,6 +89,88 @@ def orphaned_assets_env(tmp_path, monkeypatch):
     )
 
 
+@pytest.fixture
+def collection_cleanup_env(tmp_path, monkeypatch):
+    assets_root = tmp_path / "assets"
+    library_root = assets_root / "Movies"
+    collections_root = assets_root / "Collections" / "Movies"
+    regular_same_name = library_root / "Retired Collection"
+    active = collections_root / "Hero Collection"
+    alternate = collections_root / "Hero"
+    orphaned = collections_root / "Retired Collection"
+    yearless = collections_root / "Franchise Collection"
+    for folder in (regular_same_name, active, alternate, orphaned, yearless):
+        folder.mkdir(parents=True)
+    (alternate / "poster.jpg").write_bytes(b"poster")
+
+    monkeypatch.setenv("KAM_ASSETS_ROOT", str(assets_root))
+    monkeypatch.setenv("KAM_FOLDER_OVERRIDES_PATH", str(tmp_path / "overrides.json"))
+    monkeypatch.setenv(
+        "KAM_ORPHAN_EXCLUSIONS_PATH",
+        str(tmp_path / "orphan_exclusions.json"),
+    )
+
+    settings = importlib.reload(importlib.import_module("app.services.settings"))
+    settings.set_settings_path(str(tmp_path / "settings.json"))
+    settings.save_settings({
+        "plexUrl": "http://plex.test",
+        "plexToken": "token",
+        "libraryMappings": [{
+            "library": "Movies",
+            "assetPath": str(library_root),
+            "collectionsPath": str(collections_root),
+        }],
+    })
+
+    mappings = importlib.reload(importlib.import_module("app.services.library_mappings"))
+    mappings.clear_cache()
+    resolve = importlib.reload(importlib.import_module("app.services.resolve"))
+    resolve.ASSETS_ROOT = str(assets_root)
+    overrides = importlib.reload(importlib.import_module("app.services.folder_overrides"))
+    overrides.set_storage_path(str(tmp_path / "overrides.json"))
+    orphan_exclusions = importlib.reload(
+        importlib.import_module("app.services.orphan_exclusions")
+    )
+    orphan_exclusions.set_storage_path(str(tmp_path / "orphan_exclusions.json"))
+    route = importlib.reload(importlib.import_module("app.routers.orphaned_assets"))
+
+    collection_rows = [
+        {
+            "title": "Hero Collection",
+            "year": None,
+            "ratingKey": "collection-1",
+            "type": "collection",
+            "titleCandidates": [],
+        },
+        {
+            "title": "Franchise Collection (2024)",
+            "year": None,
+            "ratingKey": "collection-2",
+            "type": "collection",
+            "titleCandidates": [],
+        },
+    ]
+    monkeypatch.setattr(
+        route.collections_router,
+        "_collection_audit_rows",
+        lambda _library: list(collection_rows),
+    )
+    monkeypatch.setattr(route.items_router, "_library_rows", lambda _library: [])
+
+    return SimpleNamespace(
+        route=route,
+        root=collections_root,
+        library_root=library_root,
+        regular_same_name=regular_same_name,
+        active=active,
+        alternate=alternate,
+        orphaned=orphaned,
+        yearless=yearless,
+        overrides=overrides,
+        orphan_exclusions=orphan_exclusions,
+    )
+
+
 def test_lists_only_folders_without_a_current_plex_match(orphaned_assets_env):
     data = orphaned_assets_env.route.list_orphaned_assets(library="Movies")
 
@@ -285,3 +367,207 @@ def test_duplicate_batch_resolution_switches_kam_before_deleting_other_folders(
     assert orphaned_assets_env.present_directors_cut.is_dir()
     assert not orphaned_assets_env.present.is_dir()
     assert not orphaned_assets_env.present_yearless.is_dir()
+
+
+def test_collection_scope_finds_orphans_and_duplicate_collection_folders(
+    collection_cleanup_env,
+):
+    orphaned = collection_cleanup_env.route.list_orphaned_assets(
+        library="Movies",
+        scope="collections",
+    )
+    duplicates = collection_cleanup_env.route.list_duplicate_folders(
+        library="Movies",
+        scope="collections",
+    )
+
+    assert orphaned["scope"] == "collections"
+    assert orphaned["root"] == str(collection_cleanup_env.root.resolve())
+    assert {item["folderName"] for item in orphaned["items"]} == {
+        "Retired Collection"
+    }
+    group = duplicates["groups"][0]
+    assert group["title"] == "Hero Collection"
+    assert group["activeFolderName"] == "Hero Collection"
+    assert {item["folderName"] for item in group["folders"]} == {
+        "Hero",
+        "Hero Collection",
+    }
+
+
+def test_collection_orphan_exclusions_do_not_hide_same_named_library_folder(
+    collection_cleanup_env,
+):
+    payload = collection_cleanup_env.route.OrphanExclusionPayload(
+        library="Movies",
+        scope="collections",
+        folderName="Retired Collection",
+    )
+
+    stored = collection_cleanup_env.route.exclude_orphaned_asset(payload)
+    hidden = collection_cleanup_env.route.list_orphaned_assets(
+        library="Movies",
+        scope="collections",
+    )
+    regular = collection_cleanup_env.route.list_orphaned_assets(
+        library="Movies",
+        scope="assets",
+    )
+
+    assert stored["scope"] == "collections"
+    assert hidden["items"] == []
+    assert {item["folderName"] for item in regular["items"]} == {
+        "Retired Collection"
+    }
+    collection_cleanup_env.route.include_orphaned_asset(payload)
+    restored = collection_cleanup_env.route.list_orphaned_assets(
+        library="Movies",
+        scope="collections",
+    )
+    assert {item["folderName"] for item in restored["items"]} == {
+        "Retired Collection"
+    }
+
+
+def test_collection_duplicate_resolution_switches_only_the_collection_folder(
+    collection_cleanup_env,
+):
+    payload = collection_cleanup_env.route.ResolveDuplicateFoldersPayload(
+        library="Movies",
+        scope="collections",
+        ratingKey="collection-1",
+        keepFolderName="Hero",
+    )
+
+    data = collection_cleanup_env.route.resolve_duplicate_folders(payload)
+
+    assert data["scope"] == "collections"
+    assert data["folderAssignmentChanged"] is True
+    assert data["deleted"] == ["Hero Collection"]
+    assert collection_cleanup_env.alternate.is_dir()
+    assert not collection_cleanup_env.active.exists()
+    assert collection_cleanup_env.regular_same_name.is_dir()
+    assert collection_cleanup_env.overrides.get_override(
+        "Movies", "collection-1"
+    ) == "Hero"
+
+
+def test_duplicate_resolution_keeps_exact_name_when_folders_differ_only_by_case(
+    collection_cleanup_env,
+    monkeypatch,
+):
+    group = {
+        "ratingKey": "collection-case",
+        "title": "Men In Black",
+        "year": None,
+        "type": "collection",
+        "activeFolderName": "men in black",
+        "folders": [
+            {"folderName": "Men In Black", "isActive": False},
+            {"folderName": "men in black", "isActive": True},
+        ],
+    }
+    deleted = []
+    monkeypatch.setattr(
+        collection_cleanup_env.route,
+        "_duplicate_groups",
+        lambda _library, _scope: (collection_cleanup_env.root, [group]),
+    )
+    monkeypatch.setattr(
+        collection_cleanup_env.route,
+        "_delete_direct_folder",
+        lambda _root, folder_name: deleted.append(folder_name),
+    )
+
+    payload = collection_cleanup_env.route.ResolveDuplicateFoldersPayload(
+        library="Movies",
+        scope="assets",
+        ratingKey="collection-case",
+        keepFolderName="Men In Black",
+    )
+    data = collection_cleanup_env.route.resolve_duplicate_folders(payload)
+
+    assert data["keptFolderName"] == "Men In Black"
+    assert data["folderAssignmentChanged"] is True
+    assert data["deleted"] == ["men in black"]
+    assert deleted == ["men in black"]
+    assert collection_cleanup_env.overrides.get_override(
+        "Movies", "collection-case"
+    ) == "Men In Black"
+
+
+def test_duplicate_selection_preserves_significant_folder_whitespace(
+    collection_cleanup_env,
+):
+    exact_name = "Men In Black\N{NO-BREAK SPACE}"
+
+    single = collection_cleanup_env.route.ResolveDuplicateFoldersPayload(
+        library="Movies",
+        scope="collections",
+        ratingKey="collection-space",
+        keepFolderName=exact_name,
+    )
+    selection = collection_cleanup_env.route.ResolveDuplicateFolderSelection(
+        ratingKey="collection-space",
+        keepFolderName=exact_name,
+    )
+    collection_cleanup_env.overrides.set_canonical_overrides(
+        "Movies", {"collection-space": exact_name}
+    )
+
+    assert single.keepFolderName == exact_name
+    assert selection.keepFolderName == exact_name
+    assert collection_cleanup_env.overrides.get_override(
+        "Movies", "collection-space"
+    ) == exact_name
+
+
+def test_collection_orphan_delete_preserves_same_named_library_folder_and_override(
+    collection_cleanup_env,
+):
+    collection_cleanup_env.overrides.set_canonical_overrides(
+        "Movies",
+        {"regular-item": "Retired Collection"},
+    )
+    payload = collection_cleanup_env.route.DeleteOrphanedAssetsPayload(
+        library="Movies",
+        scope="collections",
+        folderNames=["Retired Collection"],
+    )
+
+    data = collection_cleanup_env.route.delete_orphaned_assets(payload)
+
+    assert data["scope"] == "collections"
+    assert data["deleted"] == ["Retired Collection"]
+    assert not collection_cleanup_env.orphaned.exists()
+    assert collection_cleanup_env.regular_same_name.is_dir()
+    assert collection_cleanup_env.overrides.get_override(
+        "Movies", "regular-item"
+    ) == "Retired Collection"
+
+
+def test_collection_audit_never_falls_back_to_the_regular_asset_root(
+    collection_cleanup_env,
+    tmp_path,
+    monkeypatch,
+):
+    missing_collections = tmp_path / "missing-collections"
+    monkeypatch.setattr(
+        collection_cleanup_env.route.library_mappings_service,
+        "get_collections_path",
+        lambda _library: str(missing_collections),
+    )
+    monkeypatch.setattr(
+        collection_cleanup_env.route.collections_router,
+        "_collections_root_for_library",
+        lambda _library: collection_cleanup_env.library_root,
+    )
+
+    with pytest.raises(collection_cleanup_env.route.HTTPException) as exc_info:
+        collection_cleanup_env.route.list_orphaned_assets(
+            library="Movies",
+            scope="collections",
+        )
+
+    assert exc_info.value.status_code == 404
+    assert collection_cleanup_env.regular_same_name.is_dir()

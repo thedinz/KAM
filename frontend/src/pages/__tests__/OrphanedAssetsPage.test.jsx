@@ -35,9 +35,9 @@ const scanPayload = {
   ],
 };
 
-function renderPage() {
+function renderPage(initialEntry = '/libraries/Movies/orphaned-assets') {
   return render(
-    <MemoryRouter initialEntries={['/libraries/Movies/orphaned-assets']}>
+    <MemoryRouter initialEntries={[initialEntry]}>
       <Routes>
         <Route path="/libraries/:library/orphaned-assets" element={<OrphanedAssetsPage />} />
       </Routes>
@@ -99,6 +99,7 @@ describe('OrphanedAssetsPage', () => {
       const deleteCall = global.fetch.mock.calls.find(([, options = {}]) => options.method === 'POST');
       expect(JSON.parse(deleteCall[1].body)).toEqual({
         library: 'Movies',
+        scope: 'assets',
         folderNames: ['Step Brothers (2008)', 'Old Movie (1999)'],
       });
     });
@@ -107,23 +108,50 @@ describe('OrphanedAssetsPage', () => {
     expect(reload).toHaveBeenCalled();
   });
 
-  it('lets a user exclude a false positive because its movie exists', async () => {
+  it('lets a user exclude a false positive because its Plex asset exists', async () => {
     renderPage();
 
     await screen.findByRole('heading', { name: /Step Brothers/ });
-    fireEvent.click(screen.getAllByRole('button', { name: 'Exclude — movie exists' })[0]);
+    fireEvent.click(screen.getAllByRole('button', { name: 'Exclude — asset exists' })[0]);
 
     await waitFor(() => {
       const excludeCall = global.fetch.mock.calls.find(([url]) => url === '/api/orphaned-assets/exclude');
       expect(JSON.parse(excludeCall[1].body)).toEqual({
         library: 'Movies',
+        scope: 'assets',
         folderName: 'Step Brothers (2008)',
       });
     });
     expect(await screen.findByText('No orphaned asset folders')).toBeInTheDocument();
     expect(screen.getByRole('status')).toHaveTextContent(
-      'Step Brothers (2008) excluded because its movie exists.'
+      'Step Brothers (2008) excluded because its Plex asset exists.'
     );
     expect(reload).not.toHaveBeenCalled();
+  });
+
+  it('carries collection scope through scans and actions', async () => {
+    renderPage('/libraries/Movies/orphaned-assets?scope=collections');
+
+    await screen.findByRole('heading', { name: /Step Brothers/ });
+    expect(screen.getByText('Collections cleanup')).toBeInTheDocument();
+    const scanCall = global.fetch.mock.calls.find(
+      ([url, options = {}]) => options.method !== 'POST'
+        && String(url).startsWith('/api/orphaned-assets?')
+    );
+    const scanUrl = new URL(scanCall[0], 'http://kam.test');
+    expect(scanUrl.searchParams.get('library')).toBe('Movies');
+    expect(scanUrl.searchParams.get('scope')).toBe('collections');
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Exclude — asset exists' })[0]);
+    await waitFor(() => {
+      const excludeCall = global.fetch.mock.calls.find(
+        ([url]) => url === '/api/orphaned-assets/exclude'
+      );
+      expect(JSON.parse(excludeCall[1].body)).toEqual({
+        library: 'Movies',
+        scope: 'collections',
+        folderName: 'Step Brothers (2008)',
+      });
+    });
   });
 });

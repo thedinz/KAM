@@ -48,9 +48,9 @@ const duplicatePayload = {
   ],
 };
 
-function renderPage() {
+function renderPage(initialEntry = '/libraries/Movies/duplicate-folders') {
   return render(
-    <MemoryRouter initialEntries={['/libraries/Movies/duplicate-folders']}>
+    <MemoryRouter initialEntries={[initialEntry]}>
       <Routes>
         <Route path="/libraries/:library/duplicate-folders" element={<DuplicateFoldersPage />} />
       </Routes>
@@ -125,6 +125,7 @@ describe('DuplicateFoldersPage', () => {
       const resolveCall = global.fetch.mock.calls.find(([url]) => url === '/api/duplicate-folders/resolve');
       expect(JSON.parse(resolveCall[1].body)).toEqual({
         library: 'Movies',
+        scope: 'assets',
         ratingKey: '123',
         keepFolderName: 'Step Brothers Directors Cut (2008)',
       });
@@ -140,9 +141,10 @@ describe('DuplicateFoldersPage', () => {
   });
 
   it('stages choices and processes the full list in one action', async () => {
-    renderPage();
+    renderPage('/libraries/Movies/duplicate-folders?scope=collections');
 
     expect(await screen.findByText('1 of 1 assets ready')).toBeInTheDocument();
+    expect(screen.getByText('Collections cleanup')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('radio', { name: /Step Brothers Directors Cut.*3 files/i }));
 
     expect(screen.getByText('KAM will switch to this folder')).toBeInTheDocument();
@@ -157,6 +159,7 @@ describe('DuplicateFoldersPage', () => {
       );
       expect(JSON.parse(resolveCall[1].body)).toEqual({
         library: 'Movies',
+        scope: 'collections',
         selections: [{
           ratingKey: '123',
           keepFolderName: 'Step Brothers Directors Cut (2008)',
