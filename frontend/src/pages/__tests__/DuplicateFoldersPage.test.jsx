@@ -142,11 +142,11 @@ describe('DuplicateFoldersPage', () => {
   it('stages choices and processes the full list in one action', async () => {
     renderPage();
 
-    expect(await screen.findByText('1 of 1 movies ready')).toBeInTheDocument();
+    expect(await screen.findByText('1 of 1 assets ready')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('radio', { name: /Step Brothers Directors Cut.*3 files/i }));
 
     expect(screen.getByText('KAM will switch to this folder')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Process all 1 movie' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Process all 1 asset' }));
 
     expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining(
       'KAM will switch to any newly selected folder before deleting the old one.'
@@ -165,7 +165,7 @@ describe('DuplicateFoldersPage', () => {
     });
     expect(await screen.findByText('No duplicate asset folders')).toBeInTheDocument();
     expect(screen.getByRole('status')).toHaveTextContent(
-      'Processed 1 movie and deleted 2 duplicate folders.'
+      'Processed 1 asset and deleted 2 duplicate folders.'
     );
     expect(screen.getByRole('status')).toHaveTextContent(
       'Switched KAM to 1 newly selected folder.'

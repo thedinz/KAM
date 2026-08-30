@@ -90,7 +90,7 @@ function DuplicateFoldersPage() {
     const deleteCount = Math.max(0, group.folders.length - 1);
     const selectedFolder = group.folders.find((folder) => folder.folderName === keepFolderName);
     const assignmentMessage = selectedFolder && !selectedFolder.isActive
-      ? ` KAM will switch this movie to “${keepFolderName}” before deleting the old folder.`
+      ? ` KAM will switch this asset to “${keepFolderName}” before deleting the old folder.`
       : '';
     const confirmed = window.confirm(
       `Keep “${keepFolderName}” for ${group.title} and permanently delete the other ${deleteCount} asset ${deleteCount === 1 ? 'folder' : 'folders'} and everything inside?${assignmentMessage} This cannot be undone.`
@@ -139,15 +139,15 @@ function DuplicateFoldersPage() {
       || stagedSelections.length !== groups.length
     ) return;
 
-    const movieCount = stagedSelections.length;
+    const assetCount = stagedSelections.length;
     const confirmed = window.confirm(
-      `Process all ${movieCount} ${movieCount === 1 ? 'movie' : 'movies'} and permanently delete ${stagedDeleteCount} unselected duplicate ${stagedDeleteCount === 1 ? 'folder' : 'folders'} and everything inside? KAM will switch to any newly selected folder before deleting the old one. This cannot be undone.`
+      `Process all ${assetCount} ${assetCount === 1 ? 'asset' : 'assets'} and permanently delete ${stagedDeleteCount} unselected duplicate ${stagedDeleteCount === 1 ? 'folder' : 'folders'} and everything inside? KAM will switch to any newly selected folder before deleting the old one. This cannot be undone.`
     );
     if (!confirmed) return;
 
     setResolvingKey(BATCH_RESOLUTION_KEY);
     setError('');
-    setStatus(`Rechecking and processing ${movieCount} ${movieCount === 1 ? 'movie' : 'movies'}…`);
+    setStatus(`Rechecking and processing ${assetCount} ${assetCount === 1 ? 'asset' : 'assets'}…`);
     try {
       const response = await fetch('/api/duplicate-folders/resolve-all', {
         method: 'POST',
@@ -172,7 +172,7 @@ function DuplicateFoldersPage() {
         .map((entry) => `${entry.keepFolderName}: ${entry.error}`);
 
       setStatus(
-        `Processed ${processedCount} ${processedCount === 1 ? 'movie' : 'movies'} and deleted ${deletedCount} duplicate ${deletedCount === 1 ? 'folder' : 'folders'}.`
+        `Processed ${processedCount} ${processedCount === 1 ? 'asset' : 'assets'} and deleted ${deletedCount} duplicate ${deletedCount === 1 ? 'folder' : 'folders'}.`
         + (changedCount ? ` Switched KAM to ${changedCount} newly selected ${changedCount === 1 ? 'folder' : 'folders'}.` : '')
       );
       if (resultErrors.length || failures.length) {
@@ -208,14 +208,14 @@ function DuplicateFoldersPage() {
             <span className="page-eyebrow">Library cleanup</span>
             <h1>Duplicate Folders</h1>
             <p>
-              Movies with multiple asset folders that match known title, year, and edition variations.
-              Choose the folder to keep for each movie, then process them individually or all at once.
+              Library assets with multiple folders that match known title, year, and edition variations.
+              Choose the folder to keep for each asset, then process them individually or all at once.
               If you keep a folder KAM is not currently using, KAM switches to it before removing the others.
             </p>
           </div>
         </div>
         <div className="not-ready-meta">
-          <span className="badge-label">{groups.length.toLocaleString()} movies</span>
+          <span className="badge-label">{groups.length.toLocaleString()} assets</span>
           <button type="button" onClick={fetchDuplicates} disabled={loading || Boolean(resolvingKey)}>
             {loading ? 'Scanning…' : 'Scan again'}
           </button>
@@ -227,7 +227,7 @@ function DuplicateFoldersPage() {
         {!loading && groups.length ? (
           <div className="duplicate-folders-batch-toolbar">
             <div>
-              <strong>{stagedSelections.length.toLocaleString()} of {groups.length.toLocaleString()} movies ready</strong>
+              <strong>{stagedSelections.length.toLocaleString()} of {groups.length.toLocaleString()} assets ready</strong>
               <span>Review each retained folder, then apply every staged choice together.</span>
             </div>
             <button
@@ -238,18 +238,18 @@ function DuplicateFoldersPage() {
             >
               {resolvingKey === BATCH_RESOLUTION_KEY
                 ? 'Processing all…'
-                : `Process all ${groups.length.toLocaleString()} ${groups.length === 1 ? 'movie' : 'movies'}`}
+                : `Process all ${groups.length.toLocaleString()} ${groups.length === 1 ? 'asset' : 'assets'}`}
             </button>
           </div>
         ) : null}
         {status ? <div className="success-state orphaned-assets-message" role="status">{status}</div> : null}
         {error ? <div className="error-banner" role="alert">{error}</div> : null}
-        {loading ? <div className="loading-state">Matching Plex movies against every asset folder…</div> : null}
+        {loading ? <div className="loading-state">Matching Plex assets against every asset folder…</div> : null}
         {!loading && !error && !groups.length ? (
           <div className="empty-state">
             <div className="orphaned-assets-empty-copy">
               <strong>No duplicate asset folders</strong>
-              <span>Each matched movie currently has one asset folder.</span>
+              <span>Each matched asset currently has one asset folder.</span>
             </div>
           </div>
         ) : null}
