@@ -6,6 +6,30 @@ import { useTheme } from '../theme/ThemeProvider.jsx';
 import { responseErrorMessage, safeJson } from '../utils/api.js';
 
 const PAGE_SIZE = 60;
+const COLLECTIONS_LIBRARY = 'Collections';
+
+function isCollectionsLibrary(value) {
+  return String(value || '').trim().toLowerCase() === COLLECTIONS_LIBRARY.toLowerCase();
+}
+
+function prioritizeLibraries(values) {
+  const seen = new Set();
+  const libraries = [];
+  (Array.isArray(values) ? values : []).forEach((value) => {
+    const name = String(value || '').trim();
+    if (!name || seen.has(name)) return;
+    seen.add(name);
+    libraries.push(name);
+  });
+  return libraries.sort((a, b) => {
+    const aCollections = isCollectionsLibrary(a);
+    const bCollections = isCollectionsLibrary(b);
+    if (aCollections !== bCollections) {
+      return aCollections ? 1 : -1;
+    }
+    return a.localeCompare(b, undefined, { sensitivity: 'base' });
+  });
+}
 
 async function fetchJson(url, options) {
   const response = await fetch(url, options);
@@ -17,18 +41,14 @@ async function fetchJson(url, options) {
   return data;
 }
 
-export function useLibraryItems({ initialLibrary } = {}) {
+export function useLibraryItems({ initialLibrary, enabled = true, collectionsOnly = false } = {}) {
   const { enabled: authEnabled, authenticated, loading: authLoading } = useAuth();
   const {
-    savedPlexUrl = '',
-    savedPlexToken = '',
     savedLibraryMappings = [],
     exclusions = [],
     isItemExcluded,
   } = useTheme();
-  const canFetch = !authLoading && (!authEnabled || authenticated);
-  const hasSavedPlexCredentials = Boolean(savedPlexUrl && savedPlexToken);
-  const savedCredentialsKey = `${savedPlexUrl}::${savedPlexToken}`;
+  const canFetch = enabled && !authLoading && (!authEnabled || authenticated);
   const savedLibraryMappingsKey = useMemo(() => {
     if (!Array.isArray(savedLibraryMappings)) return '';
     return savedLibraryMappings
@@ -54,27 +74,25 @@ export function useLibraryItems({ initialLibrary } = {}) {
   const [sortMode, setSortModeState] = useState('title');
   const [notReadyOnly, setNotReadyOnlyState] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [notReadyCountLoading, setNotReadyCountLoading] = useState(false);
   const [error, setError] = useState(null);
 
   const fetchAbort = useRef(null);
   const initialLibraryRef = useRef(initialLibrary);
+  const libraryRef = useRef(library);
+
+  useEffect(() => {
+    libraryRef.current = library;
+  }, [library]);
 
   const fetchLibraries = useCallback(async () => {
     if (!canFetch) return;
     try {
       setError(null);
       const data = await fetchJson('/api/libraries');
-      let libs = Array.isArray(data?.libraries) ? data.libraries : Array.isArray(data) ? data : [];
-      libs = libs.map((name) => String(name));
-
-      try {
-        const probe = await fetch('/collections?page=1&page_size=1');
-        if (probe.ok && !libs.includes('Collections')) {
-          libs = libs.concat('Collections');
-        }
-      } catch (err) {
-        console.warn('Collections probe failed', err);
-      }
+      const libs = prioritizeLibraries(
+        Array.isArray(data?.libraries) ? data.libraries : Array.isArray(data) ? data : []
+      );
 
       setLibraries(libs);
       setError(null);
@@ -86,30 +104,19 @@ export function useLibraryItems({ initialLibrary } = {}) {
         setLibrary(desired);
         return;
       }
-      if (!library || !libs.includes(library)) {
-        setLibrary(libs[0]);
+      const currentLibrary = libraryRef.current;
+      if (!currentLibrary || !libs.includes(currentLibrary)) {
+        setLibrary(libs.find((name) => !isCollectionsLibrary(name)) || libs[0]);
       }
     } catch (err) {
       setError(err.message || 'Failed to fetch libraries');
     }
-  }, [canFetch, library]);
+  }, [canFetch]);
 
   useEffect(() => {
     if (!canFetch) return;
     fetchLibraries();
-  }, [canFetch, fetchLibraries]);
-
-  useEffect(() => {
-    if (!canFetch) return;
-    if (!hasSavedPlexCredentials) {
-      return;
-    }
-    fetchLibraries();
-  }, [canFetch, fetchLibraries, hasSavedPlexCredentials, savedLibraryMappingsKey]);
-
-  const previousCredentialsKeyRef = useRef(savedCredentialsKey);
-  const previousHasCredentialsRef = useRef(hasSavedPlexCredentials);
-  const previousLibraryMappingsKeyRef = useRef(savedLibraryMappingsKey);
+  }, [canFetch, fetchLibraries, savedLibraryMappingsKey]);
 
   const loadItems = useCallback(
     async ({
@@ -126,9 +133,11 @@ export function useLibraryItems({ initialLibrary } = {}) {
       const sort = overrideSortMode ?? sortMode;
       const notReady = overrideNotReadyOnly ?? notReadyOnly;
       const normalized = lib.trim().toLowerCase();
-      const base = normalized === 'collections' ? '/collections' : '/api/items';
+      const base = collectionsOnly || normalized === 'collections' ? '/collections' : '/api/items';
       const params = new URLSearchParams();
-      if (base !== '/collections') {
+      if (base === '/collections' && !isCollectionsLibrary(lib)) {
+        params.set('library', lib);
+      } else if (base !== '/collections') {
         params.set('library', lib);
       }
       params.set('page', String(desiredPage));
@@ -139,6 +148,9 @@ export function useLibraryItems({ initialLibrary } = {}) {
       }
       if (notReady) {
         params.set('not_ready_only', 'true');
+      }
+      if (!notReady) {
+        params.set('include_counts', 'false');
       }
 
       if (fetchAbort.current) {
@@ -159,7 +171,10 @@ export function useLibraryItems({ initialLibrary } = {}) {
         setRawItems(Array.isArray(data?.items) ? data.items : []);
         setTotalPages(data?.total_pages || 1);
         setTotalCount(data?.total_count || (Array.isArray(data?.items) ? data.items.length : 0));
-        setNotReadyCount(data?.not_ready_count || 0);
+        if (typeof data?.not_ready_count === 'number') {
+          setNotReadyCount(data.not_ready_count);
+          setNotReadyCountLoading(false);
+        }
       } catch (err) {
         if (err.name === 'AbortError') return;
         setRawItems([]);
@@ -168,10 +183,13 @@ export function useLibraryItems({ initialLibrary } = {}) {
         setNotReadyCount(0);
         setError(err.message || 'Failed to load items');
       } finally {
-        setLoading(false);
+        if (fetchAbort.current === controller) {
+          fetchAbort.current = null;
+          setLoading(false);
+        }
       }
     },
-    [canFetch, library, page, query, sortMode, notReadyOnly]
+    [canFetch, collectionsOnly, library, page, query, sortMode, notReadyOnly]
   );
 
   useEffect(() => {
@@ -181,8 +199,17 @@ export function useLibraryItems({ initialLibrary } = {}) {
 
   useEffect(() => () => fetchAbort.current?.abort(), []);
 
+  useEffect(() => {
+    if (enabled) return;
+    fetchAbort.current?.abort();
+    fetchAbort.current = null;
+    setLoading(false);
+  }, [enabled]);
+
   const changeLibrary = useCallback((next) => {
     setPage(1);
+    setNotReadyCount(0);
+    setNotReadyCountLoading(Boolean(next));
     setLibrary(next);
   }, []);
 
@@ -248,49 +275,29 @@ export function useLibraryItems({ initialLibrary } = {}) {
     reload();
   }, [exclusionsKey, reload, library]);
 
-  useEffect(() => {
-    const previousKey = previousCredentialsKeyRef.current;
-    const previousHasCredentials = previousHasCredentialsRef.current;
-    const previousMappingsKey = previousLibraryMappingsKeyRef.current;
-
-    if (!hasSavedPlexCredentials) {
-      previousCredentialsKeyRef.current = savedCredentialsKey;
-      previousHasCredentialsRef.current = hasSavedPlexCredentials;
-      previousLibraryMappingsKeyRef.current = savedLibraryMappingsKey;
-      return;
-    }
-
-    if (
-      !previousHasCredentials ||
-      previousKey !== savedCredentialsKey ||
-      savedLibraryMappingsKey !== previousMappingsKey
-    ) {
-      fetchLibraries();
-      reload();
-    }
-    previousCredentialsKeyRef.current = savedCredentialsKey;
-    previousHasCredentialsRef.current = hasSavedPlexCredentials;
-    previousLibraryMappingsKeyRef.current = savedLibraryMappingsKey;
-  }, [
-    hasSavedPlexCredentials,
-    savedCredentialsKey,
-    savedLibraryMappingsKey,
-    fetchLibraries,
-    reload,
-  ]);
-
   const refreshNotReadyCount = useCallback(
     async (targetLibrary) => {
       const lib = targetLibrary ?? library;
-      if (!lib) return 0;
+      if (!lib) {
+        setNotReadyCountLoading(false);
+        return 0;
+      }
+      if (!canFetch) {
+        setNotReadyCountLoading(false);
+        return notReadyCount;
+      }
       const normalized = lib.trim().toLowerCase();
-      const base = normalized === 'collections' ? '/collections' : '/api/items';
+      const base = collectionsOnly || normalized === 'collections' ? '/collections' : '/api/items';
       const params = new URLSearchParams();
-      if (base !== '/collections') {
+      if (base === '/collections' && !isCollectionsLibrary(lib)) {
+        params.set('library', lib);
+      } else if (base !== '/collections') {
         params.set('library', lib);
       }
       params.set('page', '1');
       params.set('page_size', '1');
+      params.set('counts_only', 'true');
+      setNotReadyCountLoading(true);
       try {
         const response = await fetch(`${base}?${params.toString()}`);
         const data = await safeJson(response);
@@ -309,18 +316,23 @@ export function useLibraryItems({ initialLibrary } = {}) {
       } catch (err) {
         console.warn('Failed to refresh not-ready count', err);
         return notReadyCount;
+      } finally {
+        setNotReadyCountLoading(false);
       }
     },
-    [library, notReadyCount]
+    [canFetch, collectionsOnly, library, notReadyCount]
   );
 
   const fetchAllForLibrary = useCallback(
     async (lib, searchTerm, options = {}) => {
       if (!lib) return { items: [], totalPages: 0, totalCount: 0 };
       const normalized = lib.trim().toLowerCase();
-      const base = normalized === 'collections' ? '/collections' : '/api/items';
+      const useCollections = options?.collectionsOnly ?? collectionsOnly;
+      const base = useCollections || normalized === 'collections' ? '/collections' : '/api/items';
       const params = new URLSearchParams();
-      if (base !== '/collections') {
+      if (base === '/collections' && !isCollectionsLibrary(lib)) {
+        params.set('library', lib);
+      } else if (base !== '/collections') {
         params.set('library', lib);
       }
       params.set('page_size', String(PAGE_SIZE));
@@ -368,7 +380,7 @@ export function useLibraryItems({ initialLibrary } = {}) {
         notReadyCount: notReadyCountResp,
       };
     },
-    [sortMode]
+    [collectionsOnly, sortMode]
   );
 
   const updateItem = useCallback((ratingKey, updates) => {
@@ -438,6 +450,7 @@ export function useLibraryItems({ initialLibrary } = {}) {
       totalPages,
       totalCount,
       notReadyCount,
+      notReadyCountLoading,
       items: filteredItems,
       query,
       setQuery: changeQuery,
@@ -463,6 +476,7 @@ export function useLibraryItems({ initialLibrary } = {}) {
       totalPages,
       totalCount,
       notReadyCount,
+      notReadyCountLoading,
       filteredItems,
       query,
       changeQuery,

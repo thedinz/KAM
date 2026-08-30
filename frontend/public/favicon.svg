@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <title>KAM</title>
+  <g
+    fill="none"
+    stroke="#20b8f3"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  >
+    <path d="M38 7 13 32l25 25" stroke-width="5"/>
+    <path d="M46 14 28 32l18 18" stroke-width="4" opacity=".72"/>
+  </g>
+  <path
+    d="M23 16h7v12l11-12h9L36 31l15 17h-9L30 35v13h-7z"
+    fill="#56d8ff"
+  />
+</svg>

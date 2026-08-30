@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import LibraryPage from '../LibraryPage.jsx';
 import { useLibraryItemsContext } from '../../hooks/LibraryItemsProvider.jsx';
 
@@ -36,6 +36,11 @@ function mockLibraryContext(overrides = {}) {
   return context;
 }
 
+function LocationProbe() {
+  const location = useLocation();
+  return <span data-testid="location">{`${location.pathname}${location.search}`}</span>;
+}
+
 describe('LibraryPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -58,6 +63,67 @@ describe('LibraryPage', () => {
       expect(context.refreshNotReadyCount).toHaveBeenCalledWith('Movies');
     });
     expect(context.refreshNotReadyCount).toHaveBeenCalledTimes(1);
+  });
+
+  it('honors the URL library when cached state still has another library selected', async () => {
+    const context = mockLibraryContext({
+      libraries: ['Kids Movies', 'TV Shows'],
+      library: 'Kids Movies',
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/libraries?lib=TV%20Shows']}>
+        <LibraryPage />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(context.setLibrary).toHaveBeenCalledWith('TV Shows');
+    });
+  });
+
+  it('uses the route library instead of a stale legacy query parameter', async () => {
+    const context = mockLibraryContext({
+      libraries: ['Kids Movies', 'Movies'],
+      library: 'Kids Movies',
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/libraries/Movies?lib=Kids+Movies']}>
+        <Routes>
+          <Route path="/libraries/:library" element={<LibraryPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(context.setLibrary).toHaveBeenCalledWith('Movies');
+    });
+  });
+
+  it('removes the legacy query parameter from canonical library routes', async () => {
+    mockLibraryContext({ library: 'Movies' });
+
+    render(
+      <MemoryRouter initialEntries={['/libraries/Movies?lib=Kids+Movies']}>
+        <Routes>
+          <Route
+            path="/libraries/:library"
+            element={
+              <>
+                <LibraryPage />
+                <LocationProbe />
+              </>
+            }
+          />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('location')).toHaveTextContent('/libraries/Movies');
+    });
+    expect(screen.getByTestId('location')).not.toHaveTextContent('?lib=');
   });
 
   it('opens poster/background choices for movie libraries', () => {
@@ -95,5 +161,23 @@ describe('LibraryPage', () => {
     expect(screen.getByLabelText('Season posters')).toBeChecked();
     expect(screen.getByLabelText('Series background')).toBeChecked();
     expect(screen.getByLabelText('Season backgrounds')).toBeChecked();
+  });
+
+  it('labels a nested collections view for its parent library', () => {
+    mockLibraryContext({ library: 'Movies', totalCount: 2, notReadyCount: 0 });
+
+    render(
+      <MemoryRouter initialEntries={['/libraries/Movies/collections']}>
+        <Routes>
+          <Route
+            path="/libraries/:library/collections"
+            element={<LibraryPage collectionsOnly />}
+          />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(screen.getByRole('heading', { name: 'Movies Collections' })).toBeInTheDocument();
+    expect(screen.getByText('Collections', { selector: '.page-eyebrow' })).toBeInTheDocument();
   });
 });
