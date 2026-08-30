@@ -452,6 +452,76 @@ def test_collection_duplicate_resolution_switches_only_the_collection_folder(
     ) == "Hero"
 
 
+def test_duplicate_resolution_keeps_exact_name_when_folders_differ_only_by_case(
+    collection_cleanup_env,
+    monkeypatch,
+):
+    group = {
+        "ratingKey": "collection-case",
+        "title": "Men In Black",
+        "year": None,
+        "type": "collection",
+        "activeFolderName": "men in black",
+        "folders": [
+            {"folderName": "Men In Black", "isActive": False},
+            {"folderName": "men in black", "isActive": True},
+        ],
+    }
+    deleted = []
+    monkeypatch.setattr(
+        collection_cleanup_env.route,
+        "_duplicate_groups",
+        lambda _library, _scope: (collection_cleanup_env.root, [group]),
+    )
+    monkeypatch.setattr(
+        collection_cleanup_env.route,
+        "_delete_direct_folder",
+        lambda _root, folder_name: deleted.append(folder_name),
+    )
+
+    payload = collection_cleanup_env.route.ResolveDuplicateFoldersPayload(
+        library="Movies",
+        scope="assets",
+        ratingKey="collection-case",
+        keepFolderName="Men In Black",
+    )
+    data = collection_cleanup_env.route.resolve_duplicate_folders(payload)
+
+    assert data["keptFolderName"] == "Men In Black"
+    assert data["folderAssignmentChanged"] is True
+    assert data["deleted"] == ["men in black"]
+    assert deleted == ["men in black"]
+    assert collection_cleanup_env.overrides.get_override(
+        "Movies", "collection-case"
+    ) == "Men In Black"
+
+
+def test_duplicate_selection_preserves_significant_folder_whitespace(
+    collection_cleanup_env,
+):
+    exact_name = "Men In Black\N{NO-BREAK SPACE}"
+
+    single = collection_cleanup_env.route.ResolveDuplicateFoldersPayload(
+        library="Movies",
+        scope="collections",
+        ratingKey="collection-space",
+        keepFolderName=exact_name,
+    )
+    selection = collection_cleanup_env.route.ResolveDuplicateFolderSelection(
+        ratingKey="collection-space",
+        keepFolderName=exact_name,
+    )
+    collection_cleanup_env.overrides.set_canonical_overrides(
+        "Movies", {"collection-space": exact_name}
+    )
+
+    assert single.keepFolderName == exact_name
+    assert selection.keepFolderName == exact_name
+    assert collection_cleanup_env.overrides.get_override(
+        "Movies", "collection-space"
+    ) == exact_name
+
+
 def test_collection_orphan_delete_preserves_same_named_library_folder_and_override(
     collection_cleanup_env,
 ):

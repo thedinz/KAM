@@ -101,11 +101,21 @@ class ResolveDuplicateFoldersPayload(BaseModel):
     ratingKey: str
     keepFolderName: str
 
-    @field_validator("library", "ratingKey", "keepFolderName", mode="before")
+    @field_validator("library", "ratingKey", mode="before")
     @classmethod
     def _required_text(cls, value: Any) -> str:
         text = str(value or "").strip()
         if not text:
+            raise ValueError("Value is required")
+        return text
+
+    @field_validator("keepFolderName", mode="before")
+    @classmethod
+    def _exact_folder_name(cls, value: Any) -> str:
+        # Folder names are identifiers here. Preserve case and whitespace so
+        # two distinct Linux directories cannot collapse to the same choice.
+        text = str(value or "")
+        if not text.strip():
             raise ValueError("Value is required")
         return text
 
@@ -119,11 +129,19 @@ class ResolveDuplicateFolderSelection(BaseModel):
     ratingKey: str
     keepFolderName: str
 
-    @field_validator("ratingKey", "keepFolderName", mode="before")
+    @field_validator("ratingKey", mode="before")
     @classmethod
     def _required_text(cls, value: Any) -> str:
         text = str(value or "").strip()
         if not text:
+            raise ValueError("Value is required")
+        return text
+
+    @field_validator("keepFolderName", mode="before")
+    @classmethod
+    def _exact_folder_name(cls, value: Any) -> str:
+        text = str(value or "")
+        if not text.strip():
             raise ValueError("Value is required")
         return text
 
@@ -238,8 +256,8 @@ class _RootDirectoryResolver:
         return self._names
 
     def resolve(self, folder_name: str) -> str:
-        raw = str(folder_name or "").strip()
-        if not raw:
+        raw = str(folder_name or "")
+        if not raw.strip():
             raise FileNotFoundError("Empty folderName")
         exact = self.root / raw
         if exact.is_dir() and not exact.is_symlink():
@@ -725,25 +743,31 @@ def _resolve_duplicate_group(
 ) -> Dict[str, Any]:
     """Switch KAM to the retained folder, then remove its verified alternatives."""
 
-    folders_by_name = {
-        item["folderName"].casefold(): item["folderName"]
-        for item in group["folders"]
-    }
-    keep_name = folders_by_name.get(keep_folder_name.casefold())
-    if not keep_name:
+    folder_names = [item["folderName"] for item in group["folders"]]
+    keep_name = next((name for name in folder_names if name == keep_folder_name), None)
+    if keep_name is None:
+        folded_matches = [
+            name for name in folder_names
+            if name.casefold() == keep_folder_name.casefold()
+        ]
+        # Retain compatibility with older callers that did not preserve case,
+        # but never guess when more than one real directory has the same fold.
+        if len(folded_matches) == 1:
+            keep_name = folded_matches[0]
+    if keep_name is None:
         raise ValueError("Selected folder is no longer a duplicate.")
 
     previous_active_name = group.get("activeFolderName")
     assignment_changed = (
         not previous_active_name
-        or str(previous_active_name).casefold() != keep_name.casefold()
+        or str(previous_active_name) != keep_name
     )
 
     # Persist this first so KAM never points at one of the folders being removed.
     folder_overrides.set_canonical_overrides(library, {rating_key: keep_name})
     deleted: List[str] = []
     errors: List[Dict[str, str]] = []
-    for folder_name in folders_by_name.values():
+    for folder_name in folder_names:
         if folder_name == keep_name:
             continue
         try:

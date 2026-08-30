@@ -126,9 +126,13 @@ function DuplicateFoldersPage() {
       const assignmentMessage = data?.folderAssignmentChanged
         ? ` KAM now uses ${keptFolderName}.`
         : '';
-      setStatus(`Kept ${keptFolderName} and deleted ${deleted.length} duplicate ${deleted.length === 1 ? 'folder' : 'folders'}.${assignmentMessage}`);
       if (failures.length) {
+        setStatus(deleted.length
+          ? `Kept ${keptFolderName} and deleted ${deleted.length} duplicate ${deleted.length === 1 ? 'folder' : 'folders'}.${assignmentMessage}`
+          : '');
         setError(failures.map((entry) => `${entry.folderName}: ${entry.error}`).join(' '));
+      } else {
+        setStatus(`Kept ${keptFolderName} and deleted ${deleted.length} duplicate ${deleted.length === 1 ? 'folder' : 'folders'}.${assignmentMessage}`);
       }
     } catch (err) {
       setStatus('');
