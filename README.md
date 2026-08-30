@@ -2,14 +2,34 @@
 
 KAM is a small web app that makes Kometa/Plex artwork management painless. It lets you upload artwork for **movies, TV series, seasons, and collections** and will:
 
-* **Import existing Plex assets** — movie posters/backgrounds, series posters/backgrounds, and **season posters/backgrounds** — into your mapped Kometa assets structure
+> ## KAM 6.2 released with username-and-password login!
+>
+> KAM 6.2 adds configurable usernames to built-in authentication. Existing password-only installations get a safe one-time username setup on their next login without losing access.
+
+* **Import existing Plex assets** — movie posters/backgrounds, series posters/backgrounds, **season posters/backgrounds**, and title cards — into your mapped Kometa assets structure
+* **Import Mediux series zip files** from a show page and map the files into Kometa names automatically
 * Convert uploads to **`.jpg`**
-* **Replace** existing `poster.*`, `background.*`, `SeasonNN.*`, or `SeasonNN_background.*` in the correct asset folder
+* **Replace** existing `poster.*`, `background.*`, `SeasonNN.*`, `SeasonNN_background.*`, or `SNNENN.*` in the correct asset folder
+* **Send saved artwork directly to Plex** on demand, or automatically after uploads when enabled
 * Keep everything in the **same structure Kometa expects**
 * Provide a simple web UI with a **fallback** image to quickly spot missing artwork
 * Let you **exclude** specific movies, shows, or collections from KAM until you re-include them
 * Use either KAM's lightweight built-in login or authentication handled by your reverse proxy
 * Run a **Setup Check** from Settings to confirm saved Plex credentials, writable asset paths, collection folders, and config persistence
+
+---
+
+## Latest release
+
+**Download the latest stable release:** [github.com/thedinz/KAM/releases/latest](https://github.com/thedinz/KAM/releases/latest)
+
+For Docker installs, pull the current stable image:
+
+```bash
+docker pull ghcr.io/thedinz/kam:latest
+```
+
+Older releases remain available for rollbacks and pinned installs, but start with the latest release unless you specifically need an older version.
 
 ---
 
@@ -87,6 +107,8 @@ KAM only cares about the **internal** path (e.g., `/assets`). You choose what ho
       Season02_background.jpg
       Season03.jpg
       Season03_background.jpg
+      S01E01.jpg
+      S01E02.jpg
 
   /Collections
     /Batman Collection
@@ -94,7 +116,7 @@ KAM only cares about the **internal** path (e.g., `/assets`). You choose what ho
       background.jpg
 ```
 
-> ✅ **Season posters and backgrounds** are stored as flat files **in the series folder** (`Season01.jpg`, `Season01_background.jpg`, …).
+> ✅ **Season posters, season backgrounds, and title cards** are stored as flat files **in the series folder** (`Season01.jpg`, `Season01_background.jpg`, `S01E01.jpg`, …).
 > ❌ No `Season 01/` subfolders are used by KAM.
 
 ### Collection directory overrides
@@ -157,6 +179,7 @@ services:
     environment:
       KAM_ASSETS_ROOT: /assets
       COLLECTIONS_ROOT: /assets/Collections
+      PLEX_VERIFY_SSL: "true"
     volumes:
       - /mnt/user/appdata/kam:/config
       - /mnt/user/media/assets:/assets
@@ -169,29 +192,23 @@ Bring it up:
 docker compose up -d
 ```
 
-Optional environment variables:
+Set `PLEX_VERIFY_SSL=false` if your Plex server uses a self-signed certificate and you need KAM to skip TLS verification when contacting Plex.
 
-Sample .env
-```dotenv
-# Example environment file for KAM
-# Copy to .env and edit values before running
+### Migrating older Compose installs
 
-# Main assets root inside the container
-KAM_ASSETS_ROOT=/assets
+Older Compose examples used `env_file: .env`. That still works because Docker passes
+those values into KAM as normal environment variables.
 
-# Shared collection artwork root
-COLLECTIONS_ROOT=/assets/Collections
+To remove the extra file, copy any values you still use from `.env` into the
+`environment:` block shown above, remove the `env_file:` block from your Compose
+file, then run:
 
-# Plex server certificate handling (set to "false" for self-signed HTTPS)
-PLEX_VERIFY_SSL=true
-
-# Optional auth overrides. The Settings UI can manage these instead.
-# KAM_AUTH_MODE=builtin
-# KAM_AUTH_PASSWORD=change-me
-# KAM_AUTH_MODE=reverse_proxy
+```bash
+docker compose up -d
 ```
 
-Set `PLEX_VERIFY_SSL=false` if your Plex server uses a self-signed certificate and you need KAM to skip TLS verification when contacting Plex.
+After the container starts with the inline values, the old `.env` file is no longer
+needed.
 
 ---
 
@@ -203,7 +220,7 @@ across image updates, container recreation, and Unraid upgrades.
 
 The main files are:
 
-* `settings.json` — theme, Plex URL/token, auth mode/password, and library mappings.
+* `settings.json` — theme, Plex URL/token, auth mode/username/password, and library mappings.
 * `folder_overrides.json` — per-item folder assignments made by the folder finder.
 * `exclusions.json` — movies, shows, and collections hidden from KAM until re-included.
 
@@ -236,12 +253,30 @@ from another browser tab.
 
 ---
 
+## Sending artwork to Plex
+
+Every saved poster, background, season image, and episode title card has a
+**Send to Plex** action on its detail page. KAM uploads the existing local asset to the
+matching Plex item while leaving the Kometa asset file unchanged.
+
+To send new uploads to Plex immediately, enable **Send artwork to Plex automatically
+after uploads** in **Settings → Plex**. This setting is off by default so upgrades do not
+unexpectedly change Plex artwork.
+
+If the Plex update fails, the KAM upload still succeeds and the asset remains available
+for a manual retry or a later Kometa run. When Kometa overlays are configured, the
+direct Plex update shows the clean asset first; Kometa can rebuild the overlaid version
+during its next normal run.
+
+---
+
 ## Unraid setup
 
 Kometa Asset Manager can now be found in the Unraid app store. Mount both your Kometa
 asset directory **and** a persistent config directory (e.g., `/mnt/user/appdata/kam ->
 /config`), set `KAM_ASSETS_ROOT` and `COLLECTIONS_ROOT` to match the container paths,
-edit the template variables, and GO!
+set `PLEX_VERIFY_SSL=false` only if your Plex server uses a self-signed HTTPS
+certificate, edit the template variables, and GO!
 
 ---
 
@@ -249,15 +284,17 @@ edit the template variables, and GO!
 
 1. Open the web UI.
 2. Open **Settings → Setup Check** if you want to verify Plex, asset paths, collection folders, and config persistence before importing artwork.
-3. Choose the item (movie, series, collection, or season) you want to update.
+3. Choose the item (movie, series, collection, season, or title card) you want to update.
 4. If the item shows a red “Not Ready” badge, activate it to open the **folder finder** dialog, browse/search your Kometa assets, and assign the correct folder. Once paired the badge flips to ✔ Ready.
 5. Upload artwork. KAM will:
 
    * Convert to `.jpg`
-   * Remove any existing `poster.*`, `background.*`, `SeasonNN.*`, or `SeasonNN_background.*` for that item
+   * Remove any existing `poster.*`, `background.*`, `SeasonNN.*`, `SeasonNN_background.*`, or `SNNENN.*` for that item
    * Save the new file with the correct name
 
 If an item has **no** artwork yet, KAM shows a **fallback** image in the UI so you can spot what’s missing fast.
+
+On a TV series page, **Import Mediux zip** accepts files such as `Show (2024).jpg`, `Show (2024) - Backdrop.jpg`, `Show (2024) - Season 1.jpg`, and `Show (2024) - S1 E1.jpg`, then saves them as `poster.jpg`, `background.jpg`, `Season01.jpg`, and `S01E01.jpg`.
 
 ---
 
@@ -273,7 +310,7 @@ KAM follows Kometa’s layout and **does not** invent proprietary paths.
     background.jpg
   ```
 
-* **TV Series** (series poster/background + seasons)
+* **TV Series** (series poster/background + seasons + title cards)
 
   ```
   TV Shows/<Show Name>/
@@ -285,6 +322,9 @@ KAM follows Kometa’s layout and **does not** invent proprietary paths.
     Season02_background.jpg
     Season03.jpg
     Season03_background.jpg
+    S01E01.jpg
+    S01E02.jpg
+    S02E01.jpg
     ...
     # (Optionally Season00.jpg if you use Specials)
   ```
@@ -314,8 +354,10 @@ Collections can share a single `/assets/Collections` directory, or you can map s
 
 KAM supports two authentication modes:
 
-* **Built-in auth** — set **Settings → Login → Built-in auth** and enter a login password. You can also provide `KAM_AUTH_PASSWORD` as an environment variable.
+* **Built-in auth** — set **Settings → Login → Built-in auth** and enter a username and password. You can also provide `KAM_AUTH_USERNAME` and `KAM_AUTH_PASSWORD` as environment variables.
 * **Reverse proxy auth** — set **Settings → Login → Reverse proxy auth** or `KAM_AUTH_MODE=reverse_proxy`. In this mode KAM skips its own login screen and trusts the upstream proxy.
+
+Existing password-only installations remain compatible. On the first login after upgrading, KAM asks the user to choose a username and verifies the existing password before saving it. Older integrations that post only a password continue to work until a username is configured.
 
 Additional auth environment variables:
 
@@ -373,7 +415,7 @@ docker stop kam && docker rm kam
 
 * Plex may cache images. Try “Refresh Metadata” or give it time.
 * Confirm the file exists and is correctly named in the expected asset folder.
-* For **seasons**, verify the file names are `Season01.jpg`, `Season02.jpg`, `Season01_background.jpg`, etc. (no subfolders).
+* For **seasons/title cards**, verify the file names are `Season01.jpg`, `Season02.jpg`, `Season01_background.jpg`, `S01E01.jpg`, etc. (no subfolders).
 
 **Nothing changes after upload**
 
@@ -388,7 +430,7 @@ docker stop kam && docker rm kam
 
 **Fallback image shows**
 
-* That item has no `poster.jpg` or `background.jpg` (or `SeasonNN.jpg` / `SeasonNN_background.jpg` for seasons).
+* That item has no `poster.jpg` or `background.jpg` (or `SeasonNN.jpg` / `SeasonNN_background.jpg` for seasons, `SNNENN.jpg` for title cards).
 * Upload the file, or confirm the item’s folder/filename matches exactly.
 
 **Collections missing**
@@ -407,10 +449,10 @@ A: Yes. Bind-mount any host folder to the container’s internal assets path (ex
 You could map `/mnt/user/kometa/assets` to `/assets` or map `/mystuff` to `/assets` — KAM doesn’t care.
 
 **Q: What artwork types does KAM handle?**  
-A: `poster.jpg` and `background.jpg` for movies, series, and collections; `SeasonNN.jpg` and `SeasonNN_background.jpg` for seasons (in the series folder).
+A: `poster.jpg` and `background.jpg` for movies, series, and collections; `SeasonNN.jpg` and `SeasonNN_background.jpg` for seasons; `SNNENN.jpg` for episode title cards (in the series folder).
 
 **Q: Does KAM keep the old files?**  
-A: No. It **replaces** any existing `poster.*`, `background.*`, `SeasonNN.*`, or `SeasonNN_background.*` for the selected item.
+A: No. It **replaces** any existing `poster.*`, `background.*`, `SeasonNN.*`, `SeasonNN_background.*`, or `SNNENN.*` for the selected item.
 
 **Q: Which image formats can I upload?**  
 A: Any common format; KAM converts to `.jpg` on save.

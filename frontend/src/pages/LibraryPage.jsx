@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import BrandLockup from '../components/BrandLockup.jsx';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import FolderFinderModal from '../components/FolderFinderModal.jsx';
 import ImportStatusPanel from '../components/ImportStatusPanel.jsx';
 import ItemGrid from '../components/ItemGrid.jsx';
@@ -160,13 +159,16 @@ function ImportOptionsDialog({ isOpen, library, options, disabled, onChange, onC
   );
 }
 
-function LibraryPage() {
+function LibraryPage({ collectionsOnly = false }) {
   const navigate = useNavigate();
+  const { library: routeLibraryParam = '' } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
-  const urlLibrary = searchParams.get('lib') || '';
-  const lastUrlLibraryRef = useRef(urlLibrary);
+  const routeLibrary = String(routeLibraryParam || '').trim();
+  const queryLibrary = searchParams.get('lib') || '';
+  const urlLibrary = routeLibrary || queryLibrary;
+  const lastUrlLibraryRef = useRef('');
+  const pendingUrlLibraryRef = useRef('');
   const {
-    libraries,
     library,
     setLibrary,
     page,
@@ -174,6 +176,7 @@ function LibraryPage() {
     totalPages,
     totalCount,
     notReadyCount,
+    notReadyCountLoading,
     items,
     query,
     setQuery,
@@ -210,14 +213,27 @@ function LibraryPage() {
     lastUrlLibraryRef.current = urlLibrary;
 
     if (urlLibrary !== library) {
+      pendingUrlLibraryRef.current = urlLibrary;
       setLibrary(urlLibrary);
     }
   }, [urlLibrary, library, setLibrary]);
 
   useEffect(() => {
     if (!library) return;
-    setSearchParams({ lib: library });
-  }, [library, setSearchParams]);
+    if (pendingUrlLibraryRef.current) {
+      if (pendingUrlLibraryRef.current !== library) return;
+      pendingUrlLibraryRef.current = '';
+    }
+    const nextSearchParams = new URLSearchParams(searchParams);
+    if (routeLibrary) {
+      nextSearchParams.delete('lib');
+    } else {
+      nextSearchParams.set('lib', library);
+    }
+    if (nextSearchParams.toString() !== searchParams.toString()) {
+      setSearchParams(nextSearchParams, { replace: true });
+    }
+  }, [library, routeLibrary, searchParams, setSearchParams]);
 
   useEffect(() => () => clearTimeout(searchTimerRef.current), []);
 
@@ -238,13 +254,6 @@ function LibraryPage() {
   const handleNext = useCallback(() => setPage(Math.min(totalPages || 1, page + 1)), [setPage, page, totalPages]);
   const handleLast = useCallback(() => setPage(totalPages || 1), [setPage, totalPages]);
 
-  const handleViewNotReady = useCallback(() => {
-    if (!library) return;
-    const lib = library.trim();
-    if (!lib) return;
-    navigate(`/libraries/${encodeURIComponent(lib)}/not-ready`);
-  }, [library, navigate]);
-
   const [importState, setImportState] = useState({
     active: false,
     percent: 0,
@@ -261,9 +270,9 @@ function LibraryPage() {
 
   useEffect(() => {
     if (!importOptionsOpen) {
-      setImportOptions(defaultImportOptionsForLibrary(library));
+      setImportOptions(defaultImportOptionsForLibrary(collectionsOnly ? 'Collections' : library));
     }
-  }, [importOptionsOpen, library]);
+  }, [collectionsOnly, importOptionsOpen, library]);
 
   const showStatus = useCallback(({ percent = 0, label = '', errors = [], receipt = null, active = true }) => {
     clearTimeout(hideTimerRef.current);
@@ -328,7 +337,10 @@ function LibraryPage() {
       });
       return;
     }
-    const selectedOptions = normalizeImportOptionsForLibrary(lib, requestedOptions || {});
+    const selectedOptions = normalizeImportOptionsForLibrary(
+      collectionsOnly ? 'Collections' : lib,
+      requestedOptions || {}
+    );
     if (!hasImportSelection(selectedOptions)) {
       showStatus({ active: true, percent: 0, label: 'No asset types selected.', errors: [] });
       hideStatus(2000);
@@ -336,7 +348,7 @@ function LibraryPage() {
     }
     setIsImporting(true);
     const lower = lib.toLowerCase();
-    const isCollections = lower === 'collections';
+    const isCollections = collectionsOnly || lower === 'collections';
     const isTVLib = isTelevisionLibraryName(lib);
     const failures = [];
     const receipt = createImportReceipt();
@@ -533,7 +545,7 @@ function LibraryPage() {
       stopPreparingStatus();
       setIsImporting(false);
     }
-  }, [library, fetchAllForLibrary, query, notReadyOnly, reload, showStatus, hideStatus, unresolvedCount]);
+  }, [collectionsOnly, library, fetchAllForLibrary, query, notReadyOnly, reload, showStatus, hideStatus, unresolvedCount]);
 
   const handleImportAll = useCallback(() => {
     if (!library) return;
@@ -548,9 +560,9 @@ function LibraryPage() {
       });
       return;
     }
-    setImportOptions(defaultImportOptionsForLibrary(lib));
+    setImportOptions(defaultImportOptionsForLibrary(collectionsOnly ? 'Collections' : lib));
     setImportOptionsOpen(true);
-  }, [library, showStatus, unresolvedCount]);
+  }, [collectionsOnly, library, showStatus, unresolvedCount]);
 
   const handleImportOptionsChange = useCallback((nextOptions) => {
     setImportOptions(nextOptions);
@@ -563,7 +575,10 @@ function LibraryPage() {
   const handleStartSelectedImport = useCallback(
     (selectedOptions) => {
       const lib = (library || '').trim();
-      const normalizedOptions = normalizeImportOptionsForLibrary(lib, selectedOptions);
+      const normalizedOptions = normalizeImportOptionsForLibrary(
+        collectionsOnly ? 'Collections' : lib,
+        selectedOptions
+      );
       if (!hasImportSelection(normalizedOptions)) {
         showStatus({ active: true, percent: 0, label: 'No asset types selected.', errors: [] });
         hideStatus(2000);
@@ -572,7 +587,7 @@ function LibraryPage() {
       setImportOptionsOpen(false);
       void runImportAll(normalizedOptions);
     },
-    [hideStatus, library, runImportAll, showStatus]
+    [collectionsOnly, hideStatus, library, runImportAll, showStatus]
   );
 
   const handleViewImportErrors = useCallback(() => {
@@ -597,13 +612,14 @@ function LibraryPage() {
   const normalizedLibrary = (library || '').trim();
   const importTooltip = !normalizedLibrary
     ? 'Choose a library first.'
+    : notReadyCountLoading
+      ? 'Checking not-ready items before import is available.'
     : unresolvedCount > 0
       ? `Resolve or exclude ${unresolvedCount} not-ready item${unresolvedCount === 1 ? '' : 's'} before importing.`
-      : normalizedLibrary.toLowerCase() === 'collections'
+      : collectionsOnly || normalizedLibrary.toLowerCase() === 'collections'
         ? 'Choose collection posters/backgrounds to import from Plex into Kometa asset folders.'
         : 'Choose which posters/backgrounds and TV season artwork to import from Plex into Kometa asset folders.';
 
-  const notReadyButtonDisabled = !library || (Number(notReadyCount) || 0) <= 0;
   const scanDisabled = !library || loading;
   const scanTitle = library
     ? 'Scan the mapped asset folders and Plex library to find missing matches.'
@@ -612,28 +628,23 @@ function LibraryPage() {
   return (
     <div>
       <header className="library-header">
-        <h1 className="library-site-title">
-          <BrandLockup />
-        </h1>
+        <div className="page-title-block">
+          <span className="page-eyebrow">{collectionsOnly ? 'Collections' : 'Media Library'}</span>
+          <h1>{collectionsOnly && library ? `${library} Collections` : library || 'Library'}</h1>
+          <p>{countLabel} <span aria-hidden="true">•</span> Kometa assets</p>
+        </div>
         <div className="library-header-controls">
           <LibraryToolbar
-            libraries={libraries}
-            selectedLibrary={library || ''}
-            onLibraryChange={setLibrary}
             searchValue={searchInput}
             onSearchChange={handleSearchChange}
             sortValue={sortMode}
             onSortChange={setSortMode}
             onImportAll={handleImportAll}
-            importDisabled={!library || isImporting || loading || unresolvedCount > 0}
+            importDisabled={!library || isImporting || loading || notReadyCountLoading || unresolvedCount > 0}
             importTitle={importTooltip}
             onScanMapping={handleScanMapping}
             scanDisabled={scanDisabled}
             scanTitle={scanTitle}
-            countLabel={countLabel}
-            onViewNotReady={handleViewNotReady}
-            notReadyCount={notReadyCount}
-            notReadyDisabled={notReadyButtonDisabled}
           >
             <ImportStatusPanel
               active={importState.active}
@@ -644,12 +655,9 @@ function LibraryPage() {
               onViewErrors={handleViewImportErrors}
             />
           </LibraryToolbar>
-          <Link className="settings-link" to="/settings" aria-label="Open settings">
-            <span aria-hidden="true">⚙</span>
-          </Link>
         </div>
       </header>
-      <main>
+      <main className="library-main">
         <ItemGrid
           items={items}
           library={library}

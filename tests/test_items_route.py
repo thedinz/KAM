@@ -96,6 +96,8 @@ def items_env(tmp_path, monkeypatch):
             "query": None,
             "sort": "title",
             "not_ready_only": False,
+            "include_counts": True,
+            "counts_only": False,
         }
         params.update(kwargs)
         return items_router.list_items(**params)
@@ -144,6 +146,105 @@ def test_items_route_reports_not_ready_count_and_filters(items_env):
     assert filtered["total_count"] == 1
     assert len(filtered["items"]) == 1
     assert filtered["items"][0]["ratingKey"] == "22"
+
+
+def test_items_route_uses_alternate_title_candidates(items_env, monkeypatch):
+    localized_folder = items_env.folder.parent / "Leon The Professional (1994)"
+    localized_folder.mkdir()
+
+    def fake_plex_list(path, params=None):
+        if params and params.get("type") == 1:
+            return [
+                {
+                    "title": "Léon - Der Profi",
+                    "originalTitle": "Léon The Professional",
+                    "year": 1994,
+                    "ratingKey": "44",
+                    "type": "movie",
+                    "thumb": "/thumb4",
+                    "Media": [
+                        {
+                            "Part": [
+                                {
+                                    "file": (
+                                        "/movies/Léon - The Professional (1994)/"
+                                        "Léon The Professional (1994) {tmdb-101} "
+                                        "{edition-Remastered} [Bluray-1080p].mkv"
+                                    )
+                                }
+                            ]
+                        }
+                    ],
+                }
+            ]
+        return []
+
+    monkeypatch.setattr(items_env.items_router, "_plex_list", fake_plex_list)
+
+    data = items_env.call()
+    item = data["items"][0]
+
+    assert data["not_ready_count"] == 0
+    assert item["assetReady"] is True
+    assert item["folderName"] == "Leon The Professional (1994)"
+
+
+def test_items_route_fast_page_does_not_scan_full_library(items_env, monkeypatch):
+    calls = []
+
+    monkeypatch.setattr(
+        items_env.items_router,
+        "_section_info_by_name",
+        lambda library: ("1", "movie"),
+    )
+
+    def fake_plex_list_page(path, params=None):
+        params = dict(params or {})
+        calls.append((path, params))
+        start = int(params.get("X-Plex-Container-Start") or 0)
+        size = int(params.get("X-Plex-Container-Size") or 0)
+        items = [
+            {
+                "title": f"Movie {idx}",
+                "year": 2020,
+                "ratingKey": str(idx),
+                "type": "movie",
+                "thumb": f"/thumb/{idx}",
+            }
+            for idx in range(start, start + size)
+        ]
+        return items, 1000
+
+    monkeypatch.setattr(items_env.items_router, "_plex_list_page", fake_plex_list_page)
+
+    data = items_env.items_router.list_items(
+        library="Movies",
+        page=2,
+        page_size=2,
+        query=None,
+        sort="title",
+        not_ready_only=False,
+        include_counts=False,
+        counts_only=False,
+    )
+
+    assert len(calls) == 1
+    assert calls[0][0] == "/library/sections/1/all"
+    assert calls[0][1]["type"] == 1
+    assert calls[0][1]["X-Plex-Container-Start"] == 2
+    assert calls[0][1]["X-Plex-Container-Size"] == 2
+    assert data["total_count"] == 1000
+    assert data["total_pages"] == 500
+    assert data["not_ready_count"] is None
+    assert [item["ratingKey"] for item in data["items"]] == ["2", "3"]
+
+
+def test_items_route_counts_only_omits_items(items_env):
+    data = items_env.call(counts_only=True)
+
+    assert data["items"] == []
+    assert data["total_count"] == 3
+    assert data["not_ready_count"] == 1
 
 
 def test_items_route_omits_excluded_items(items_env):

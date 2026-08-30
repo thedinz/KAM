@@ -6,8 +6,10 @@ services:
     restart: unless-stopped
     ports:
       - "7171:8000"
-    env_file:
-      - .env
+    environment:
+      KAM_ASSETS_ROOT: /assets
+      COLLECTIONS_ROOT: /assets/Collections
+      PLEX_VERIFY_SSL: "true"
     volumes:
       - /mnt/user/appdata/kam:/config:rw
       - /mnt/user/media/assets:/assets:rw
