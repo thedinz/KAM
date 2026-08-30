@@ -95,3 +95,24 @@ def test_normalize_path_preserves_expected_root(monkeypatch):
     monkeypatch.delenv("KAM_ASSETS_ROOT", raising=False)
     _reload_library_mappings()
 
+
+def test_default_collections_path_uses_assets_root(monkeypatch):
+    monkeypatch.setenv("KAM_ASSETS_ROOT", "/mnt/assets")
+    monkeypatch.delenv("COLLECTIONS_ROOT", raising=False)
+    library_mappings = _reload_library_mappings()
+    library_mappings.clear_cache()
+
+    assert library_mappings.get_collections_path() == "/mnt/assets/Collections"
+
+    monkeypatch.delenv("KAM_ASSETS_ROOT", raising=False)
+    _reload_library_mappings()
+
+
+def test_default_collections_path_without_env(monkeypatch):
+    monkeypatch.delenv("KAM_ASSETS_ROOT", raising=False)
+    monkeypatch.delenv("ASSETS_ROOT", raising=False)
+    monkeypatch.delenv("COLLECTIONS_ROOT", raising=False)
+    library_mappings = _reload_library_mappings()
+    library_mappings.clear_cache()
+
+    assert library_mappings.get_collections_path() == "/assets/Collections"

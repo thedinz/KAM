@@ -179,7 +179,12 @@ function MappingScanPage() {
   return (
     <div>
       <header>
-        <h1>Mapping Scan</h1>
+        <div className="detail-heading">
+          <span className="page-eyebrow">Library maintenance</span>
+          <div className="detail-heading-title">
+            <h1>Mapping Scan</h1>
+          </div>
+        </div>
         <div className="mapping-header-actions">
           <button type="button" onClick={runScan} disabled={isScanning}>
             {isScanning ? 'Scanning…' : 'Scan Again'}

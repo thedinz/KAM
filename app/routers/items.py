@@ -9,6 +9,7 @@ from urllib.parse import quote
 from ..services import exclusions, folder_overrides
 from ..services import plex_settings
 from ..services.plex_assets import build_plex_asset_url, build_plex_proxy_url
+from ..services import resolve as resolve_service
 from ..services.resolve import resolve_existing_dir_or_422
 
 router = APIRouter()
@@ -34,7 +35,7 @@ def _plex_sections_raw():
     r.raise_for_status()
     return r
 
-def _section_key_by_name(lib_name: str) -> str:
+def _section_info_by_name(lib_name: str) -> Tuple[str, Optional[str]]:
     r = _plex_sections_raw()
     ctype = (r.headers.get("Content-Type") or "").lower()
     if "application/json" in ctype:
@@ -44,15 +45,57 @@ def _section_key_by_name(lib_name: str) -> str:
         for d in dirs:
             if (d.get("title") or "").strip().lower() == (lib_name or "").strip().lower():
                 key = d.get("key")
-                if key: return str(key)
+                if key:
+                    return str(key), (d.get("type") or None)
         raise HTTPException(status_code=404, detail=f"Plex library not found: {lib_name}")
     # XML fallback
     root = ET.fromstring(r.text)
     for node in root.findall(".//Directory"):
         if (node.attrib.get("title") or "").strip().lower() == (lib_name or "").strip().lower():
             key = node.attrib.get("key")
-            if key: return str(key)
+            if key:
+                return str(key), (node.attrib.get("type") or None)
     raise HTTPException(status_code=404, detail=f"Plex library not found: {lib_name}")
+
+
+def _section_key_by_name(lib_name: str) -> str:
+    key, _section_type = _section_info_by_name(lib_name)
+    return key
+
+
+def _xml_video_row(node: ET.Element) -> Dict[str, Any]:
+    media: List[Dict[str, Any]] = []
+    for media_node in node.findall("./Media"):
+        parts = [
+            {"file": part.attrib.get("file")}
+            for part in media_node.findall("./Part")
+            if part.attrib.get("file")
+        ]
+        if parts:
+            media.append({"Part": parts})
+
+    locations = [
+        {"path": location.attrib.get("path")}
+        for location in node.findall("./Location")
+        if location.attrib.get("path")
+    ]
+
+    row: Dict[str, Any] = {
+        "type": node.attrib.get("type"),
+        "title": node.attrib.get("title"),
+        "year": _to_int(node.attrib.get("year")),
+        "ratingKey": node.attrib.get("ratingKey"),
+        "thumb": node.attrib.get("thumb"),
+        "addedAt": _to_int(node.attrib.get("addedAt")),
+        "originalTitle": node.attrib.get("originalTitle"),
+        "titleSort": node.attrib.get("titleSort"),
+    }
+    if media:
+        row["Media"] = media
+    if locations:
+        row["Location"] = locations
+    return row
+
 
 def _plex_list(path: str, params: Optional[dict] = None) -> List[Dict[str, Any]]:
     plex_url, plex_token = _require_plex()
@@ -73,15 +116,40 @@ def _plex_list(path: str, params: Optional[dict] = None) -> List[Dict[str, Any]]
     for node in root.findall(".//Video"):
         typ = node.attrib.get("type")
         if typ not in ("movie", "show"): continue
-        out.append({
-            "type": typ,
-            "title": node.attrib.get("title"),
-            "year": _to_int(node.attrib.get("year")),
-            "ratingKey": node.attrib.get("ratingKey"),
-            "thumb": node.attrib.get("thumb"),
-            "addedAt": _to_int(node.attrib.get("addedAt")),
-        })
+        out.append(_xml_video_row(node))
     return out
+
+
+def _plex_list_page(path: str, params: Optional[dict] = None) -> Tuple[List[Dict[str, Any]], int]:
+    plex_url, plex_token = _require_plex()
+    url = f"{plex_url}{path}"
+    params = dict(params or {})
+    params["X-Plex-Token"] = plex_token
+    headers = {"Accept": "application/json", "X-Plex-Token": plex_token}
+    r = requests.get(url, params=params, headers=headers, timeout=25)
+    r.raise_for_status()
+    if "application/json" in (r.headers.get("Content-Type") or "").lower():
+        data = r.json()
+        container = (data.get("MediaContainer", {}) or {})
+        md = container.get("Metadata") or []
+        if isinstance(md, dict):
+            md = [md]
+        total = _to_int(container.get("totalSize"))
+        if total is None:
+            total = _to_int(container.get("size"))
+        if total is None:
+            total = len(md)
+        return md, total
+
+    out: List[Dict[str, Any]] = []
+    root = ET.fromstring(r.text)
+    total = _to_int(root.attrib.get("totalSize")) or _to_int(root.attrib.get("size"))
+    for node in root.findall(".//Video"):
+        typ = node.attrib.get("type")
+        if typ not in ("movie", "show"):
+            continue
+        out.append(_xml_video_row(node))
+    return out, (total if total is not None else len(out))
 
 def _to_int(x) -> Optional[int]:
     try: return int(str(x))
@@ -102,6 +170,188 @@ def _sort_item_rows(rows: List[Dict[str, Any]], sort_mode: Optional[str] = None)
 
     rows.sort(key=lambda x: (x.get("title") or "").lower())
 
+
+def _media_type_for_section(section_type: Optional[str]) -> Optional[int]:
+    normalized = (section_type or "").strip().lower()
+    if normalized == "movie":
+        return 1
+    if normalized == "show":
+        return 2
+    return None
+
+
+def _plex_sort_param(sort_mode: Optional[str]) -> str:
+    mode = (sort_mode or "title").strip().lower()
+    if mode in {"newest", "newest_added", "added_desc", "added"}:
+        return "addedAt:desc"
+    return "titleSort:asc"
+
+
+def _as_list(value: Any) -> List[Any]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return value
+    return [value]
+
+
+def _clean_title_candidate(value: Any) -> Optional[str]:
+    text = str(value or "").strip()
+    return text or None
+
+
+def _metadata_file_paths(it: Dict[str, Any]) -> List[str]:
+    paths: List[str] = []
+    for media in _as_list(it.get("Media")):
+        if not isinstance(media, dict):
+            continue
+        for part in _as_list(media.get("Part")):
+            if isinstance(part, dict):
+                path = _clean_title_candidate(part.get("file"))
+                if path:
+                    paths.append(path)
+
+    for location in _as_list(it.get("Location")):
+        if isinstance(location, dict):
+            path = _clean_title_candidate(location.get("path"))
+            if path:
+                paths.append(path)
+    return paths
+
+
+def _path_title_candidates(path: str) -> List[str]:
+    normalized = str(path or "").replace("\\", "/").strip()
+    parts = [part.strip() for part in normalized.split("/") if part.strip()]
+    if not parts:
+        return []
+
+    candidates: List[str] = []
+    leaf = parts[-1]
+    stem, ext = os.path.splitext(leaf)
+    if ext:
+        if len(parts) > 1:
+            candidates.append(parts[-2])
+        if stem:
+            candidates.append(stem)
+    else:
+        candidates.append(leaf)
+    return [candidate for candidate in candidates if candidate]
+
+
+def _metadata_title_candidates(it: Dict[str, Any]) -> List[str]:
+    candidates: List[str] = []
+    seen: set[str] = set()
+
+    def add(value: Any) -> None:
+        candidate = _clean_title_candidate(value)
+        if not candidate:
+            return
+        key = candidate.casefold()
+        if key in seen:
+            return
+        seen.add(key)
+        candidates.append(candidate)
+
+    add(it.get("originalTitle"))
+    add(it.get("titleSort"))
+
+    if (it.get("type") or "").casefold() == "movie":
+        for path in _metadata_file_paths(it):
+            for candidate in _path_title_candidates(path):
+                add(candidate)
+
+    return candidates
+
+
+def _rows_from_metadata(md: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    rows: List[Dict[str, Any]] = []
+    for it in md:
+        rows.append({
+            "title": (it.get("title") or "").strip(),
+            "year": _to_int(it.get("year")),
+            "ratingKey": str(it.get("ratingKey") or "").strip(),
+            "type": (it.get("type") or "").strip(),
+            "thumb": it.get("thumb"),
+            "addedAt": _to_int(it.get("addedAt")),
+            "titleCandidates": _metadata_title_candidates(it),
+        })
+    return rows
+
+
+def _excluded_rating_keys(library: str) -> set[str]:
+    keys: set[str] = set()
+    for entry in exclusions.list_exclusions():
+        if entry.get("library") != library:
+            continue
+        key = str(entry.get("ratingKey") or "").strip()
+        if key:
+            keys.add(key)
+    return keys
+
+
+def _library_rows_page(
+    library: str,
+    page: int,
+    page_size: int,
+    query: Optional[str] = None,
+    sort: Optional[str] = None,
+) -> Optional[Tuple[List[Dict[str, Any]], int]]:
+    section_key, section_type = _section_info_by_name(library)
+    media_type = _media_type_for_section(section_type)
+    if media_type is None:
+        return None
+
+    excluded_keys = _excluded_rating_keys(library)
+    desired_end = max(1, page) * page_size
+    desired_start = desired_end - page_size
+    visible_rows: List[Dict[str, Any]] = []
+    total_raw = 0
+    offset = 0
+    chunk_size = page_size if not excluded_keys else max(page_size, 200)
+    path = (
+        f"/library/sections/{section_key}/search"
+        if query
+        else f"/library/sections/{section_key}/all"
+    )
+
+    if not excluded_keys:
+        params: Dict[str, Any] = {
+            "type": media_type,
+            "X-Plex-Container-Start": desired_start,
+            "X-Plex-Container-Size": page_size,
+            "sort": _plex_sort_param(sort),
+        }
+        if query:
+            params["query"] = query
+        md, total_raw = _plex_list_page(path, params)
+        return _rows_from_metadata(md), total_raw
+
+    while len(visible_rows) < desired_end:
+        params: Dict[str, Any] = {
+            "type": media_type,
+            "X-Plex-Container-Start": offset,
+            "X-Plex-Container-Size": chunk_size,
+            "sort": _plex_sort_param(sort),
+        }
+        if query:
+            params["query"] = query
+
+        md, total_raw = _plex_list_page(path, params)
+        if not md:
+            break
+
+        for row in _rows_from_metadata(md):
+            if row["ratingKey"] in excluded_keys:
+                continue
+            visible_rows.append(row)
+
+        offset += len(md)
+        if offset >= total_raw:
+            break
+
+    total_count = max(0, total_raw - len(excluded_keys))
+    return visible_rows[desired_start:desired_end], total_count
+
 def _library_rows(
     library: str,
     query: Optional[str] = None,
@@ -118,53 +368,95 @@ def _library_rows(
         shows  = _plex_list(f"/library/sections/{section_key}/all", {"type": 2})
         md = movies + shows
 
-    rows: List[Dict[str, Any]] = []
-    for it in md:
-        rows.append({
-            "title": (it.get("title") or "").strip(),
-            "year": _to_int(it.get("year")),
-            "ratingKey": str(it.get("ratingKey") or "").strip(),
-            "type": (it.get("type") or "").strip(),
-            "thumb": it.get("thumb"),
-            "addedAt": _to_int(it.get("addedAt")),
-        })
+    rows = _rows_from_metadata(md)
     _sort_item_rows(rows, sort)
     return rows
 
 # ---------- Local folder & poster helpers ----------
+
+
+class _RequestDirectoryResolver:
+    def __init__(self, library: str):
+        self.library = library
+        self.bases = list(dict.fromkeys(resolve_service._candidate_bases(library)))
+        self.entries_by_base: Dict[str, List[str]] = {}
+
+    def _entries(self, base: str) -> List[str]:
+        if base in self.entries_by_base:
+            return self.entries_by_base[base]
+        try:
+            entries = [
+                d
+                for d in os.listdir(base)
+                if os.path.isdir(os.path.join(base, d))
+            ]
+        except Exception:
+            entries = []
+        self.entries_by_base[base] = entries
+        return entries
+
+    def resolve(self, folder_name: str) -> str:
+        raw = (folder_name or "").strip()
+        if not raw:
+            raise FileNotFoundError("Empty folderName")
+
+        for base in self.bases:
+            if not os.path.isdir(base):
+                continue
+            exact = os.path.join(base, raw)
+            if os.path.isdir(exact):
+                return exact
+            match = resolve_service._best_match(self._entries(base), raw)
+            if match:
+                return os.path.join(base, match)
+
+        last_base = self.bases[0] if self.bases else os.path.join(resolve_service.ASSETS_ROOT, self.library)
+        raise FileNotFoundError(f"Assets library not found: {last_base}")
 
 def _try_existing_asset_folder(
     library: str,
     title: Optional[str],
     year: Optional[int],
     item_type: Optional[str] = None,
+    resolver: Optional[_RequestDirectoryResolver] = None,
+    alternate_titles: Optional[List[str]] = None,
 ) -> Tuple[Optional[str], Optional[str]]:
     """
     Use the resolver to find an actual, existing Kometa folder.
     Movies with a Plex year resolve through 'Title (Year)' so the shared
     resolver can enforce safe year-aware matching without a bare-title guess.
     """
-    if not title:
+    title_values = [value for value in [title, *(alternate_titles or [])] if value]
+    if not title_values:
         return None, None
     candidates: List[str] = []
-    if year:
-        candidates.append(f"{title} ({year})")
-    if not (year and (item_type or "").casefold() == "movie"):
-        candidates.append(title)
+    for title_value in title_values:
+        clean_title = str(title_value or "").strip()
+        if not clean_title:
+            continue
+        has_year = resolve_service._has_release_year(clean_title)
+        if year and not has_year:
+            candidates.append(f"{clean_title} ({year})")
+        if not (year and (item_type or "").casefold() == "movie" and not has_year):
+            candidates.append(clean_title)
     candidates = list(dict.fromkeys(candidates))
     for cand in candidates:
         try:
-            full = resolve_existing_dir_or_422(library, cand)
+            full = resolver.resolve(cand) if resolver else resolve_existing_dir_or_422(library, cand)
             return os.path.basename(full.rstrip(os.sep)), full
         except Exception:
             continue
     return None, None
 
-def _resolve_override_folder(library: str, folder: Optional[str]) -> Tuple[Optional[str], Optional[str]]:
+def _resolve_override_folder(
+    library: str,
+    folder: Optional[str],
+    resolver: Optional[_RequestDirectoryResolver] = None,
+) -> Tuple[Optional[str], Optional[str]]:
     if not folder:
         return None, None
     try:
-        full = resolve_existing_dir_or_422(library, folder)
+        full = resolver.resolve(folder) if resolver else resolve_existing_dir_or_422(library, folder)
     except Exception:
         return folder, None
     name = os.path.basename(full.rstrip(os.sep))
@@ -198,6 +490,54 @@ def _plex_poster_url(rating_key: Optional[str], thumb: Optional[str]) -> Optiona
 def _plex_poster_proxy_url(rating_key: Optional[str], thumb: Optional[str]) -> Optional[str]:
     return build_plex_proxy_url(thumb, rating_key, "thumb")
 
+
+def _enrich_item(
+    library: str,
+    it: Dict[str, Any],
+    overrides_for_library: Dict[str, str],
+    resolver: _RequestDirectoryResolver,
+    *,
+    include_posters: bool = True,
+) -> Dict[str, Any]:
+    override = overrides_for_library.get(it["ratingKey"])
+
+    folder_name, folder_path = _resolve_override_folder(library, override, resolver)
+    if not folder_path:
+        auto_name, auto_path = _try_existing_asset_folder(
+            library,
+            it["title"],
+            it["year"],
+            it["type"],
+            resolver,
+            it.get("titleCandidates"),
+        )
+        if auto_name:
+            folder_name = folder_name or auto_name
+        if auto_path:
+            folder_path = folder_path or auto_path
+
+    asset_ready = bool(folder_path)
+    poster_local = None
+    if include_posters:
+        local_poster = _local_poster_path(folder_path)
+        poster_local = _fileproxy_poster_url(local_poster) if local_poster else None
+    poster_plex = _plex_poster_url(it["ratingKey"], it["thumb"]) if include_posters else None
+    poster_proxy = _plex_poster_proxy_url(it["ratingKey"], it["thumb"]) if include_posters else None
+    poster = poster_local or poster_proxy or poster_plex
+    return {
+        "ratingKey": it["ratingKey"],
+        "title": it["title"],
+        "year": it["year"],
+        "type": it["type"],
+        "addedAt": it.get("addedAt"),
+        "folder": folder_name,
+        "folderName": folder_name,
+        "assetReady": asset_ready,
+        "posterUrl": poster,
+        "posterUrlLocal": poster_local,
+        "posterUrlPlex": poster_plex,
+    }
+
 # ---------- API ----------
 
 @router.get("/api/items")
@@ -208,53 +548,97 @@ def list_items(
     query: Optional[str] = Query(None),
     sort: str = Query("title"),
     not_ready_only: bool = Query(False, alias="not_ready_only"),
+    include_counts: bool = Query(True, alias="include_counts"),
+    counts_only: bool = Query(False, alias="counts_only"),
 ):
     """
     Prefer local poster.jpg via fileproxy if it actually exists; otherwise fall back to Plex thumb.
     """
-    rows = _library_rows(library, query, sort)
     overrides_for_library = folder_overrides.get_library_overrides(library)
+    resolver = _RequestDirectoryResolver(library)
+
+    if counts_only:
+        rows = _library_rows(library, query, sort)
+        excluded_keys = _excluded_rating_keys(library)
+        not_ready_count = 0
+        total_count = 0
+        for it in rows:
+            if it["ratingKey"] in excluded_keys:
+                continue
+            total_count += 1
+            enriched = _enrich_item(
+                library,
+                it,
+                overrides_for_library,
+                resolver,
+                include_posters=False,
+            )
+            if not enriched.get("assetReady"):
+                not_ready_count += 1
+        return {
+            "page": 1,
+            "total_pages": 1,
+            "total_count": total_count,
+            "items": [],
+            "not_ready_count": not_ready_count,
+        }
+
+    if not include_counts and not not_ready_only:
+        try:
+            page_result = _library_rows_page(library, page, page_size, query, sort)
+        except HTTPException:
+            raise
+        except Exception:
+            page_result = None
+        if page_result is not None:
+            page_rows_raw, total_count = page_result
+            page_rows = [
+                _enrich_item(library, it, overrides_for_library, resolver)
+                for it in page_rows_raw
+            ]
+            total_pages = max(1, (total_count + page_size - 1) // page_size)
+            page = min(max(1, page), total_pages)
+            return {
+                "page": page,
+                "total_pages": total_pages,
+                "total_count": total_count,
+                "items": page_rows,
+                "not_ready_count": None,
+            }
+
+        rows = _library_rows(library, query, sort)
+        excluded_keys = _excluded_rating_keys(library)
+        visible_rows = [it for it in rows if it["ratingKey"] not in excluded_keys]
+        total_count = len(visible_rows)
+        total_pages = max(1, (total_count + page_size - 1) // page_size)
+        page = min(max(1, page), total_pages)
+        start = (page - 1) * page_size
+        end = min(start + page_size, total_count)
+        page_rows = [
+            _enrich_item(library, it, overrides_for_library, resolver)
+            for it in visible_rows[start:end]
+        ]
+        return {
+            "page": page,
+            "total_pages": total_pages,
+            "total_count": total_count,
+            "items": page_rows,
+            "not_ready_count": None,
+        }
+
+    rows = _library_rows(library, query, sort)
+    excluded_keys = _excluded_rating_keys(library)
 
     enriched: List[Dict[str, Any]] = []
     not_ready_count = 0
     for it in rows:
-        if exclusions.is_excluded(library, it["ratingKey"]):
+        if it["ratingKey"] in excluded_keys:
             continue
 
-        override = overrides_for_library.get(it["ratingKey"])
-
-        folder_name, folder_path = _resolve_override_folder(library, override)
-        if not folder_path:
-            auto_name, auto_path = _try_existing_asset_folder(
-                library, it["title"], it["year"], it["type"]
-            )
-            if auto_name:
-                folder_name = folder_name or auto_name
-            if auto_path:
-                folder_path = folder_path or auto_path
-
-        asset_ready = bool(folder_path)
-        if not asset_ready:
+        item = _enrich_item(library, it, overrides_for_library, resolver)
+        if not item.get("assetReady"):
             not_ready_count += 1
-
-        local_poster = _local_poster_path(folder_path)
-        poster_local = _fileproxy_poster_url(local_poster) if local_poster else None
-        poster_plex = _plex_poster_url(it["ratingKey"], it["thumb"])
-        poster_proxy = _plex_poster_proxy_url(it["ratingKey"], it["thumb"])
-        poster = poster_local or poster_proxy or poster_plex
-        enriched.append({
-            "ratingKey": it["ratingKey"],
-            "title": it["title"],
-            "year": it["year"],
-            "type": it["type"],
-            "addedAt": it.get("addedAt"),
-            "folder": folder_name,
-            "folderName": folder_name,
-            "assetReady": asset_ready,
-            "posterUrl": poster,
-            "posterUrlLocal": poster_local,
-            "posterUrlPlex": poster_plex,
-        })
+        enriched.append(item)
 
     if not_ready_only:
         filtered_rows = [it for it in enriched if not it.get("assetReady")]
@@ -299,6 +683,7 @@ def list_items_for_mapping_scan(
             "title": it["title"],
             "year": it["year"],
             "type": it["type"],
+            "titleCandidates": it.get("titleCandidates") or [],
             "folder": override or "",
             "folderName": override or "",
             "assetReady": bool(override),

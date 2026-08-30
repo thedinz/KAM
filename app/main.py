@@ -35,6 +35,7 @@ from .routers import (
     items,
     libraries,
     movie,
+    plex_artwork,
     plex_proxy,
     settings,
     tv,
@@ -53,6 +54,7 @@ app.include_router(settings.router)
 app.include_router(imports.router)
 app.include_router(fileproxy.router)
 app.include_router(plex_proxy.router)
+app.include_router(plex_artwork.router)
 app.include_router(assets.router)
 app.include_router(auth.router)
 app.include_router(ui.router)
@@ -84,7 +86,7 @@ async def enforce_auth(request: Request, call_next):
 
     path = request.url.path
     exempt_prefixes = ("/spa-assets", "/assets", "/auth/")
-    exempt_exact = {"/login", "/favicon.ico"}
+    exempt_exact = {"/login", "/favicon.ico", "/favicon.svg"}
 
     if path in exempt_exact or path.startswith(exempt_prefixes):
         return await call_next(request)
@@ -98,13 +100,15 @@ async def enforce_auth(request: Request, call_next):
         return RedirectResponse(url="/login")
     return JSONResponse(status_code=401, content={"detail": "Unauthorized"})
 
-# ---- SAFE assets mount (env-driven) ----
-# Prefer explicit envs if you set them; otherwise infer from COLLECTIONS_ROOT.
+# ---- SAFE assets mount ----
+# Prefer explicit envs if you set them; otherwise infer from COLLECTIONS_ROOT
+# or use the standard container mount.
 ASSETS_ROOT = os.getenv("KAM_ASSETS_ROOT") or os.getenv("ASSETS_ROOT")
 if not ASSETS_ROOT:
     cr = os.getenv("COLLECTIONS_ROOT")
     if cr:
         ASSETS_ROOT = os.path.dirname(cr)
+ASSETS_ROOT = ASSETS_ROOT or "/assets"
 
 if ASSETS_ROOT and os.path.isdir(ASSETS_ROOT):
     # Serve files at the URL path /assets (matches your .env paths)

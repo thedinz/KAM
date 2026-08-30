@@ -144,7 +144,10 @@ def _collection_paths(mappings: Iterable[Dict[str, Any]]) -> List[Dict[str, str]
             )
         )
 
-    add_path("Collections root", os.environ.get("COLLECTIONS_ROOT"))
+    add_path(
+        "Collections root",
+        os.environ.get("COLLECTIONS_ROOT") or library_mappings.get_collections_path(),
+    )
     for mapping in mappings:
         library = str(mapping.get("library") or "").strip()
         add_path(f"{library or 'Library'} collections", mapping.get("collectionsPath"), library)

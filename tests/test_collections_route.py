@@ -327,6 +327,21 @@ def test_collections_route_marks_asset_readiness(collections_env):
     assert sanitized["library"] == "Movies"
 
 
+def test_collections_route_filters_by_source_library(collections_env, monkeypatch):
+    collections_router = importlib.import_module("app.routers.collections")
+    sections = [
+        _DummySection("Movies", [_DummyCollection("Movie Collection", 20)]),
+        _DummySection("TV Shows", [_DummyCollection("TV Collection", 21)]),
+    ]
+    monkeypatch.setattr(collections_router, "get_plex", lambda: _DummyPlex(sections))
+
+    data = collections_env.call(library="Movies")
+
+    assert data["library"] == "Movies"
+    assert [item["title"] for item in data["items"]] == ["Movie Collection"]
+    assert data["items"][0]["type"] == "collection"
+
+
 def test_collections_route_omits_excluded_items(collections_env):
     collections_env.exclusions.add_exclusion("Movies", "1", "collection")
 

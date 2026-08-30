@@ -1,6 +1,7 @@
 # app/routers/tv.py
 from fastapi import APIRouter, HTTPException, Query
 from typing import Any, Dict, List, Optional, Tuple
+import logging
 import os
 import requests
 import xml.etree.ElementTree as ET
@@ -13,6 +14,7 @@ from ..services.resolve import resolve_existing_dir_or_422
 from ..services.sanitize import kometa_sanitize_folder
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 ASSETS_ROOT = os.environ.get("KAM_ASSETS_ROOT", "/assets")
 
@@ -90,6 +92,64 @@ def _seasons(rk: str) -> List[Dict[str, Any]]:
                 "art": node.attrib.get("art"),
             })
     return sorted([s for s in out if s["index"] is not None], key=lambda x: x["index"])
+
+def _episodes_for_season(season_rk: Optional[str], season_index: int) -> List[Dict[str, Any]]:
+    if not season_rk:
+        return []
+
+    try:
+        r = _plex_json_or_xml(f"/library/metadata/{season_rk}/children")
+    except Exception as exc:
+        logger.warning(
+            "Failed to fetch episodes for season ratingKey=%s season=%s: %s",
+            season_rk,
+            season_index,
+            exc,
+        )
+        return []
+
+    ctype = (r.headers.get("Content-Type") or "").lower()
+    out: List[Dict[str, Any]] = []
+    if "application/json" in ctype:
+        data = r.json()
+        md = (data.get("MediaContainer", {}) or {}).get("Metadata") or []
+        if isinstance(md, dict): md = [md]
+        for it in md:
+            if it.get("type") == "episode":
+                idx = _to_int(it.get("index"))
+                out.append({
+                    "index": idx,
+                    "seasonIndex": _to_int(it.get("parentIndex")) or season_index,
+                    "title": it.get("title") or (f"Episode {idx}" if idx is not None else "Episode"),
+                    "ratingKey": it.get("ratingKey"),
+                    "thumb": it.get("thumb"),
+                    "art": it.get("art"),
+                })
+        return sorted([e for e in out if e["index"] is not None], key=lambda x: x["index"])
+
+    try:
+        root = ET.fromstring(r.text)
+    except Exception as exc:
+        logger.warning(
+            "Failed to parse episodes for season ratingKey=%s season=%s: %s",
+            season_rk,
+            season_index,
+            exc,
+        )
+        return []
+
+    for node in root.findall(".//Video"):
+        if node.attrib.get("type") == "episode":
+            idx = _to_int(node.attrib.get("index"))
+            out.append({
+                "index": idx,
+                "seasonIndex": _to_int(node.attrib.get("parentIndex")) or season_index,
+                "title": node.attrib.get("title") or (f"Episode {idx}" if idx is not None else "Episode"),
+                "ratingKey": node.attrib.get("ratingKey"),
+                "thumb": node.attrib.get("thumb"),
+                "art": node.attrib.get("art"),
+            })
+    return sorted([e for e in out if e["index"] is not None], key=lambda x: x["index"])
 
 def _to_int(x) -> Optional[int]:
     try: return int(str(x))
@@ -170,14 +230,16 @@ def get_show(library: str = Query(...), ratingKey: str = Query(...)):
 
     # Local-first with cache-busting
     poster_local = os.path.join(series_dir_fs, "poster.jpg")
-    if _local_exists(poster_local):
+    poster_exists = _local_exists(poster_local)
+    if poster_exists:
         poster_url = _fileproxy_abs_path(library, folder, "poster.jpg", _mtime(poster_local))
     else:
         poster_url = _plex_thumb_proxy_url(thumb, ratingKey)
     plex_poster_url = _plex_thumb_url(thumb, ratingKey)
 
     bg_local = os.path.join(series_dir_fs, "background.jpg")
-    if _local_exists(bg_local):
+    background_exists = _local_exists(bg_local)
+    if background_exists:
         background_url = _fileproxy_abs_path(library, folder, "background.jpg", _mtime(bg_local))
     else:
         background_url = _plex_art_proxy_url(art, ratingKey)
@@ -190,6 +252,8 @@ def get_show(library: str = Query(...), ratingKey: str = Query(...)):
         sea_local = os.path.join(series_dir_fs, sea_name)
         sea_bg_name = f"Season{idx:02d}_background.jpg"
         sea_bg_local = os.path.join(series_dir_fs, sea_bg_name)
+        sea_exists = _local_exists(sea_local)
+        sea_bg_exists = _local_exists(sea_bg_local)
         if _local_exists(sea_local):
             sea_url = _fileproxy_abs_path(library, folder, sea_name, _mtime(sea_local))
         else:
@@ -198,15 +262,43 @@ def get_show(library: str = Query(...), ratingKey: str = Query(...)):
             sea_bg_url = _fileproxy_abs_path(library, folder, sea_bg_name, _mtime(sea_bg_local))
         else:
             sea_bg_url = _plex_art_proxy_url(s.get("art"), s.get("ratingKey"))
+
+        episodes_out: List[Dict[str, Any]] = []
+        for episode in _episodes_for_season(s.get("ratingKey"), idx):
+            episode_idx = episode["index"]
+            title_card_name = f"S{idx:02d}E{episode_idx:02d}.jpg"
+            title_card_local = os.path.join(series_dir_fs, title_card_name)
+            title_card_exists = _local_exists(title_card_local)
+            if title_card_exists:
+                title_card_url = _fileproxy_abs_path(
+                    library,
+                    folder,
+                    title_card_name,
+                    _mtime(title_card_local),
+                )
+            else:
+                title_card_url = _plex_thumb_proxy_url(episode.get("thumb"), episode.get("ratingKey"))
+            episodes_out.append({
+                "seasonIndex": idx,
+                "index": episode_idx,
+                "title": episode["title"],
+                "ratingKey": episode.get("ratingKey"),
+                "titleCardUrl": title_card_url,
+                "plexTitleCardUrl": _plex_thumb_url(episode.get("thumb"), episode.get("ratingKey")),
+                "titleCardExists": title_card_exists,
+                "filename": title_card_name,
+            })
+
         seasons_out.append({
             "index": idx,
             "title": s["title"],
             "posterUrl": sea_url,
             "plexPosterUrl": _plex_thumb_url(s.get("thumb"), s.get("ratingKey")),
-            "posterExists": _local_exists(sea_local),
+            "posterExists": sea_exists,
             "backgroundUrl": sea_bg_url,
             "plexBackgroundUrl": _plex_art_url(s.get("art"), s.get("ratingKey")),
-            "backgroundExists": _local_exists(sea_bg_local),
+            "backgroundExists": sea_bg_exists,
+            "episodes": episodes_out,
             "ratingKey": s.get("ratingKey"),  # added for convenience
         })
 
@@ -215,6 +307,8 @@ def get_show(library: str = Query(...), ratingKey: str = Query(...)):
         "year": year,
         "folderName": folder,
         "folderExists": folder_exists,
+        "posterExists": poster_exists,
+        "backgroundExists": background_exists,
         "posterUrl": poster_url,
         "backgroundUrl": background_url,
         "plexPosterUrl": plex_poster_url,

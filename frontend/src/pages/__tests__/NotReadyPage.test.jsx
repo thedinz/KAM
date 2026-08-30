@@ -25,9 +25,9 @@ function jsonResponse(data) {
   };
 }
 
-function renderNotReadyPage() {
+function renderNotReadyPage(initialEntry = '/libraries/Movies/not-ready') {
   return render(
-    <MemoryRouter initialEntries={['/libraries/Movies/not-ready']}>
+    <MemoryRouter initialEntries={[initialEntry]}>
       <Routes>
         <Route path="/libraries/:library/not-ready" element={<NotReadyPage />} />
       </Routes>
@@ -123,5 +123,38 @@ describe('NotReadyPage', () => {
       expect(global.fetch).toHaveBeenCalledTimes(2);
       expect(screen.getByText('No items found.')).toBeInTheDocument();
     });
+  });
+
+  it('loads not-ready collections from the parent library collection scope', async () => {
+    global.fetch = vi.fn((url) => {
+      const parsed = new URL(String(url), 'http://kam.local');
+      expect(parsed.pathname).toBe('/collections');
+      expect(parsed.searchParams.get('library')).toBe('Movies');
+      expect(parsed.searchParams.get('not_ready_only')).toBe('1');
+      return Promise.resolve(
+        jsonResponse({
+          page: 1,
+          total_pages: 1,
+          total_count: 2,
+          not_ready_count: 2,
+          items: [
+            {
+              ratingKey: '44',
+              title: 'Needs Collection Assets',
+              type: 'collection',
+              assetReady: false,
+            },
+          ],
+        })
+      );
+    });
+
+    renderNotReadyPage('/libraries/Movies/not-ready?scope=collections');
+
+    expect(await screen.findByText('Needs Collection Assets')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Not Ready Collections' })).toBeInTheDocument();
+    expect(screen.getByText('Library: Movies • Collections')).toBeInTheDocument();
+    expect(screen.getByText('2 not-ready collections')).toBeInTheDocument();
+    expect(global.fetch).toHaveBeenCalledTimes(1);
   });
 });

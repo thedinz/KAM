@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom';
 import ArtworkCard from '../components/ArtworkCard.jsx';
 import { useLibraryItemsContext } from '../hooks/LibraryItemsProvider.jsx';
 import { responseErrorMessage, safeJson } from '../utils/api.js';
+import { sendSavedArtworkToPlex, uploadStatusMessage } from '../utils/plexArtwork.js';
 import { useTheme } from '../theme/ThemeProvider.jsx';
+import { buildLibraryBackLink, detailBackLink } from '../utils/navigation.js';
 
 const MISSING_FOLDER_MESSAGE = 'Create the Kometa collections folder first.';
 
@@ -20,6 +22,7 @@ function createOperation() {
 function CollectionDetailPage() {
   const params = useParams();
   const [searchParams] = useSearchParams();
+  const location = useLocation();
   const rawLibrary = params.library ?? searchParams.get('library') ?? searchParams.get('lib') ?? '';
   const rawRatingKey = params.ratingKey ?? searchParams.get('ratingKey') ?? searchParams.get('id') ?? '';
   const sourceParam = searchParams.get('source') ?? searchParams.get('sourceLibrary') ?? '';
@@ -189,7 +192,7 @@ function CollectionDetailPage() {
           error: null,
           lastAction: 'upload',
         });
-        setStatusMessage('Upload complete.');
+        setStatusMessage(uploadStatusMessage(data));
         if (kind === 'poster') {
           reloadLibraryItems();
         }
@@ -208,6 +211,27 @@ function CollectionDetailPage() {
       }
     },
     [folderExists, library, effectiveRatingKey, folderName, fetchDetails, reloadLibraryItems, updateOperation]
+  );
+
+  const handleSendToPlex = useCallback(
+    async (kind) => {
+      const label = kind === 'background' ? 'background' : 'poster';
+      setStatusMessage(`Sending ${label} to Plex…`);
+      try {
+        await sendSavedArtworkToPlex({
+          library,
+          folderName,
+          ratingKey: effectiveRatingKey,
+          kind,
+        });
+        setStatusMessage(`${label === 'poster' ? 'Poster' : 'Background'} sent to Plex.`);
+      } catch (err) {
+        const message = err?.message || `Failed to send ${label} to Plex.`;
+        setStatusMessage(message);
+        throw err;
+      }
+    },
+    [library, folderName, effectiveRatingKey]
   );
 
   const handleImport = useCallback(
@@ -310,7 +334,7 @@ function CollectionDetailPage() {
     }
   }, [exclusionLibrary, effectiveRatingKey, includeItem]);
 
-  const backLink = library ? `/libraries?lib=${encodeURIComponent(library)}` : '/libraries';
+  const backLink = detailBackLink(location, buildLibraryBackLink(library));
   const folderDisplay = folderName || 'Not assigned';
   const displaySource = detail?.sourceLibrary || sourceLibrary || '';
 
@@ -320,9 +344,14 @@ function CollectionDetailPage() {
         <Link className="btn" to={backLink}>
           ← Back
         </Link>
-        <h1>{headerTitle}</h1>
-        {headerYear ? <span className="detail-year">({headerYear})</span> : null}
-        {displaySource ? <span className="detail-source">• {displaySource}</span> : null}
+        <div className="detail-heading">
+          <span className="page-eyebrow">Collection artwork</span>
+          <div className="detail-heading-title">
+            <h1>{headerTitle}</h1>
+            {headerYear ? <span className="detail-year">{headerYear}</span> : null}
+            {displaySource ? <span className="detail-source">• {displaySource}</span> : null}
+          </div>
+        </div>
         <span className="detail-header-gap" aria-hidden="true" />
         <button
           type="button"
@@ -381,6 +410,7 @@ function CollectionDetailPage() {
                 operation={operations.poster}
                 onUpload={(file) => handleUpload('poster', file)}
                 onImport={() => handleImport('poster')}
+                onSendToPlex={() => handleSendToPlex('poster')}
               />
               <ArtworkCard
                 label="Background"
@@ -390,6 +420,7 @@ function CollectionDetailPage() {
                 operation={operations.background}
                 onUpload={(file) => handleUpload('background', file)}
                 onImport={() => handleImport('background')}
+                onSendToPlex={() => handleSendToPlex('background')}
               />
             </section>
             <div className="detail-status" aria-live="polite">

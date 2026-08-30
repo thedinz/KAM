@@ -5,9 +5,6 @@ import LibraryToolbar from '../LibraryToolbar.jsx';
 
 function renderToolbar(overrides = {}) {
   const props = {
-    libraries: ['Movies', 'TV Shows'],
-    selectedLibrary: 'Movies',
-    onLibraryChange: vi.fn(),
     searchValue: '',
     onSearchChange: vi.fn(),
     sortValue: 'title',
@@ -21,7 +18,6 @@ function renderToolbar(overrides = {}) {
     onPrev: vi.fn(),
     onNext: vi.fn(),
     onLast: vi.fn(),
-    countLabel: '120 items',
     ...overrides,
   };
 
@@ -30,6 +26,12 @@ function renderToolbar(overrides = {}) {
 }
 
 describe('LibraryToolbar', () => {
+  it('does not duplicate library navigation from the sidebar', () => {
+    renderToolbar();
+
+    expect(screen.queryByLabelText('Plex library')).not.toBeInTheDocument();
+  });
+
   it('notifies when the sort mode changes', () => {
     const props = renderToolbar();
 
@@ -44,5 +46,21 @@ describe('LibraryToolbar', () => {
     renderToolbar();
 
     expect(screen.getByLabelText('Sort library items')).toHaveValue('title');
+  });
+
+  it('keeps sort, search, scan, and import controls in one toolbar row', () => {
+    renderToolbar({ onScanMapping: vi.fn() });
+
+    const toolbarRow = screen.getByLabelText('Sort library items').closest('.toolbar-main-row');
+    expect(toolbarRow).toContainElement(screen.getByRole('searchbox'));
+    expect(toolbarRow).toContainElement(screen.getByRole('button', { name: 'Scan Mapping' }));
+    expect(toolbarRow).toContainElement(screen.getByRole('button', { name: 'Import Assets' }));
+  });
+
+  it('keeps readiness status out of the grid toolbar', () => {
+    renderToolbar();
+
+    expect(screen.queryByText('Ready')).not.toBeInTheDocument();
+    expect(screen.queryByText('Needs Attention')).not.toBeInTheDocument();
   });
 });

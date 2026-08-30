@@ -29,6 +29,7 @@ def tv_env(tmp_path, monkeypatch):
     (show_folder / "background.jpg").write_bytes(b"background")
     (show_folder / "Season01.jpg").write_bytes(b"s1")
     (show_folder / "Season01_background.jpg").write_bytes(b"s1-bg")
+    (show_folder / "S01E01.jpg").write_bytes(b"title-card")
 
     overrides_path = tmp_path / "overrides.json"
 
@@ -63,7 +64,7 @@ def tv_env(tmp_path, monkeypatch):
     tv_router = importlib.reload(importlib.import_module("app.routers.tv"))
 
     def fake_plex(path):
-        if path.endswith("/children"):
+        if path == "/library/metadata/101/children":
             payload = {
                 "MediaContainer": {
                     "Metadata": [
@@ -74,6 +75,22 @@ def tv_env(tmp_path, monkeypatch):
                             "ratingKey": "201",
                             "thumb": "/season/thumb",
                             "art": "/season/art",
+                        }
+                    ]
+                }
+            }
+        elif path == "/library/metadata/201/children":
+            payload = {
+                "MediaContainer": {
+                    "Metadata": [
+                        {
+                            "type": "episode",
+                            "index": 1,
+                            "parentIndex": 1,
+                            "title": "Pilot",
+                            "ratingKey": "301",
+                            "thumb": "/episode/thumb",
+                            "art": "/episode/art",
                         }
                     ]
                 }
@@ -117,6 +134,11 @@ def test_tv_route_prefers_override(tv_env):
     assert data["seasons"][0]["posterUrl"].startswith("/fileproxy")
     assert data["seasons"][0]["backgroundUrl"].startswith("/fileproxy")
     assert data["seasons"][0]["backgroundExists"] is True
+    assert data["seasons"][0]["episodes"][0]["title"] == "Pilot"
+    assert data["seasons"][0]["episodes"][0]["filename"] == "S01E01.jpg"
+    assert data["seasons"][0]["episodes"][0]["titleCardUrl"].startswith("/fileproxy")
+    assert data["seasons"][0]["episodes"][0]["titleCardExists"] is True
+    assert data["seasons"][0]["episodes"][0]["plexTitleCardUrl"].startswith("http://plex.test")
     assert data["plexPosterUrl"].startswith("http://plex.test")
     assert data["plexBackgroundUrl"].startswith("http://plex.test")
     assert data["seasons"][0]["plexBackgroundUrl"].startswith("http://plex.test")

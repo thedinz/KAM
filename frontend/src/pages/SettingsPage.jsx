@@ -42,7 +42,9 @@ function SettingsPage() {
     savedTheme,
     plexUrl,
     plexToken,
+    autoApplyToPlex,
     authMode,
+    authUsername,
     authPassword,
     savedSettings,
     libraryMappings,
@@ -86,15 +88,20 @@ function SettingsPage() {
 
   const savedPlexUrl = savedSettings?.plexUrl || '';
   const savedPlexToken = savedSettings?.plexToken || '';
+  const savedAutoApplyToPlex = Boolean(savedSettings?.autoApplyToPlex);
   const savedAuthMode = savedSettings?.authMode || 'builtin';
+  const savedAuthUsername = savedSettings?.authUsername || '';
   const savedAuthPassword = savedSettings?.authPassword || '';
   const effectiveAuthMode = authMode === 'reverse_proxy' ? 'reverse_proxy' : 'builtin';
+  const effectiveAuthUsername = authUsername ?? '';
   const effectiveAuthPassword = authPassword ?? '';
   const normalizedPlexUrl = normalizeText(plexUrl);
   const normalizedPlexToken = normalizeText(plexToken);
+  const normalizedAuthUsername = normalizeText(effectiveAuthUsername);
   const normalizedAuthPassword = normalizeText(effectiveAuthPassword);
   const hasPlexCredentials = Boolean(normalizedPlexUrl && normalizedPlexToken);
   const hasAuthPassword = Boolean(normalizedAuthPassword);
+  const hasAuthUsername = Boolean(normalizedAuthUsername);
   const reverseProxyAuth = effectiveAuthMode === 'reverse_proxy';
 
   useEffect(() => {
@@ -437,7 +444,9 @@ function SettingsPage() {
       theme !== savedTheme ||
       plexUrl !== savedPlexUrl ||
       plexToken !== savedPlexToken ||
+      Boolean(autoApplyToPlex) !== savedAutoApplyToPlex ||
       effectiveAuthMode !== savedAuthMode ||
+      effectiveAuthUsername !== savedAuthUsername ||
       effectiveAuthPassword !== savedAuthPassword;
     return settingsChanged || mappingsDirty;
   }, [
@@ -448,8 +457,12 @@ function SettingsPage() {
     savedPlexUrl,
     plexToken,
     savedPlexToken,
+    autoApplyToPlex,
+    savedAutoApplyToPlex,
     effectiveAuthMode,
     savedAuthMode,
+    effectiveAuthUsername,
+    savedAuthUsername,
     effectiveAuthPassword,
     savedAuthPassword,
     mappingsDirty,
@@ -475,8 +488,18 @@ function SettingsPage() {
     setStatus(null);
   };
 
+  const handleAutoApplyToPlexChange = (event) => {
+    updateSettings({ autoApplyToPlex: event.target.checked });
+    setStatus(null);
+  };
+
   const handleAuthModeChange = (event) => {
     updateSettings({ authMode: event.target.value });
+    setStatus(null);
+  };
+
+  const handleAuthUsernameChange = (event) => {
+    updateSettings({ authUsername: event.target.value });
     setStatus(null);
   };
 
@@ -815,6 +838,10 @@ function SettingsPage() {
   );
 
   const performSave = useCallback(async () => {
+    if (effectiveAuthMode === 'builtin' && hasAuthPassword && !hasAuthUsername) {
+      setStatus({ type: 'error', message: 'Enter a login username before saving.' });
+      return;
+    }
     if (!isDirty) {
       setStatus({ type: 'success', message: 'Settings are already up to date.' });
       return;
@@ -834,7 +861,18 @@ function SettingsPage() {
       revertSettings();
       setStatus({ type: 'error', message });
     }
-  }, [isDirty, navigate, refreshAuth, refreshHealth, saveSettings, revertSettings, setStatus]);
+  }, [
+    effectiveAuthMode,
+    hasAuthPassword,
+    hasAuthUsername,
+    isDirty,
+    navigate,
+    refreshAuth,
+    refreshHealth,
+    saveSettings,
+    revertSettings,
+    setStatus,
+  ]);
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -857,7 +895,12 @@ function SettingsPage() {
         <Link className="btn" to="/libraries">
           ← Back
         </Link>
-        <h1>Settings</h1>
+        <div className="detail-heading">
+          <span className="page-eyebrow">Configuration</span>
+          <div className="detail-heading-title">
+            <h1>Settings</h1>
+          </div>
+        </div>
       </header>
       <main className="settings-page">
         <div className="settings-actions settings-global-actions settings-global-actions-top">
@@ -1012,28 +1055,45 @@ function SettingsPage() {
               </label>
             </div>
             {!reverseProxyAuth ? (
-              <label className="settings-input">
-                <span>Login password</span>
-                <input
-                  type="password"
-                  name="authPassword"
-                  value={effectiveAuthPassword}
-                  onChange={handleAuthPasswordChange}
-                  placeholder={
-                    savedAuthPassword
-                      ? 'Saved password (leave blank to clear)'
-                      : 'Enter a password'
-                  }
-                  autoComplete="new-password"
-                  disabled={busy}
-                />
-              </label>
+              <>
+                <label className="settings-input">
+                  <span>Login username</span>
+                  <input
+                    type="text"
+                    name="authUsername"
+                    value={effectiveAuthUsername}
+                    onChange={handleAuthUsernameChange}
+                    placeholder="Enter a username"
+                    autoComplete="username"
+                    required={hasAuthPassword}
+                    disabled={busy}
+                  />
+                </label>
+                <label className="settings-input">
+                  <span>Login password</span>
+                  <input
+                    type="password"
+                    name="authPassword"
+                    value={effectiveAuthPassword}
+                    onChange={handleAuthPasswordChange}
+                    placeholder={
+                      savedAuthPassword
+                        ? 'Saved password (leave blank to clear)'
+                        : 'Enter a password'
+                    }
+                    autoComplete="new-password"
+                    disabled={busy}
+                  />
+                </label>
+              </>
             ) : null}
             <p className="settings-help">
               {reverseProxyAuth
                 ? 'KAM will skip built-in login and trust the upstream proxy.'
+                : hasAuthPassword && !hasAuthUsername
+                ? 'Choose a username before saving. Password-only installs can also create one at their next login.'
                 : hasAuthPassword
-                ? 'Login is currently enabled. Save changes to update the password.'
+                ? 'Login is currently enabled. Save changes to update the username or password.'
                 : 'Login is currently disabled.'}
             </p>
           </section>
@@ -1067,6 +1127,21 @@ function SettingsPage() {
                 disabled={busy}
               />
             </label>
+            <label className="settings-radio">
+              <input
+                type="checkbox"
+                name="autoApplyToPlex"
+                checked={Boolean(autoApplyToPlex)}
+                onChange={handleAutoApplyToPlexChange}
+                disabled={busy}
+              />
+              <span>Send artwork to Plex automatically after uploads</span>
+            </label>
+            <p className="settings-help">
+              KAM always keeps the Kometa asset file. When enabled, it also sends direct uploads
+              to Plex immediately using the URL and token above; Kometa can reapply overlays
+              during its next run.
+            </p>
           </section>
         </form>
 

@@ -40,12 +40,18 @@ describe('SettingsPage', () => {
     const mockSave = vi.fn().mockResolvedValue({});
     const mockRefresh = vi.fn().mockResolvedValue([]);
     const mockRefreshExclusions = vi.fn().mockResolvedValue([]);
+    const updateSettings = vi.fn();
     useTheme.mockReturnValue({
       theme: 'dark',
       savedTheme: 'dark',
       plexUrl: 'http://plex.local',
       plexToken: 'token',
-      savedSettings: { plexUrl: 'http://plex.local', plexToken: 'token' },
+      autoApplyToPlex: false,
+      savedSettings: {
+        plexUrl: 'http://plex.local',
+        plexToken: 'token',
+        autoApplyToPlex: false,
+      },
       libraryMappings: [
         { library: 'Movies', assetPath: '/assets/Movies', collectionsPath: '' },
       ],
@@ -64,7 +70,7 @@ describe('SettingsPage', () => {
       libraryMappingsDirty: false,
       hasUnsavedChanges: false,
       applyTheme: vi.fn(),
-      updateSettings: vi.fn(),
+      updateSettings,
       saveSettings: mockSave,
       revertSettings: vi.fn(),
       refreshLibraries: mockRefresh,
@@ -86,6 +92,11 @@ describe('SettingsPage', () => {
 
     expect(screen.getByRole('heading', { name: /Plex Libraries/i })).toBeInTheDocument();
     expect(screen.getByText('Movies')).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByLabelText('Send artwork to Plex automatically after uploads')
+    );
+    expect(updateSettings).toHaveBeenCalledWith({ autoApplyToPlex: true });
 
     const bulkButton = screen.getByRole('button', { name: /Set asset folder for selected/i });
     expect(bulkButton).toBeDisabled();
@@ -220,11 +231,13 @@ describe('SettingsPage', () => {
       plexUrl: '',
       plexToken: '',
       authMode: 'builtin',
+      authUsername: 'admin',
       authPassword: 'secret',
       savedSettings: {
         plexUrl: '',
         plexToken: '',
         authMode: 'builtin',
+        authUsername: 'admin',
         authPassword: 'secret',
       },
       libraryMappings: [],
@@ -261,6 +274,11 @@ describe('SettingsPage', () => {
     fireEvent.click(screen.getByRole('radio', { name: 'Reverse proxy auth' }));
 
     expect(updateSettings).toHaveBeenCalledWith({ authMode: 'reverse_proxy' });
+
+    fireEvent.change(screen.getByLabelText('Login username'), {
+      target: { value: 'new-admin' },
+    });
+    expect(updateSettings).toHaveBeenCalledWith({ authUsername: 'new-admin' });
   });
 
   it('hides the password field in reverse proxy authentication mode', () => {
@@ -270,11 +288,13 @@ describe('SettingsPage', () => {
       plexUrl: '',
       plexToken: '',
       authMode: 'reverse_proxy',
+      authUsername: 'admin',
       authPassword: 'stored-password',
       savedSettings: {
         plexUrl: '',
         plexToken: '',
         authMode: 'reverse_proxy',
+        authUsername: 'admin',
         authPassword: 'stored-password',
       },
       libraryMappings: [],
@@ -309,6 +329,7 @@ describe('SettingsPage', () => {
     );
 
     expect(screen.getByRole('radio', { name: 'Reverse proxy auth' })).toBeChecked();
+    expect(screen.queryByLabelText('Login username')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Login password')).not.toBeInTheDocument();
     expect(screen.getByText('KAM will skip built-in login and trust the upstream proxy.')).toBeInTheDocument();
   });

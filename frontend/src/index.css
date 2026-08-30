@@ -1316,99 +1316,6 @@ main {
   gap: 16px;
 }
 
-.detail-hero {
-  display: flex;
-  flex-direction: column;
-  border-radius: 16px;
-  overflow: hidden;
-  border: 1px solid var(--border);
-  background: var(--card);
-}
-
-.detail-hero-image {
-  position: relative;
-  width: 100%;
-  background: rgba(255, 255, 255, 0.04);
-}
-
-.detail-hero-image::before {
-  content: '';
-  display: block;
-  width: 100%;
-  padding-bottom: 42%;
-}
-
-@supports (aspect-ratio: 1 / 1) {
-  .detail-hero-image {
-    aspect-ratio: 16 / 9;
-  }
-
-  .detail-hero-image::before {
-    display: none;
-  }
-}
-
-.detail-hero-image-src,
-.detail-hero-placeholder {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-}
-
-.detail-hero-image-src {
-  object-fit: cover;
-}
-
-.detail-hero-placeholder {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--muted);
-  font-size: 15px;
-  padding: 16px;
-  text-align: center;
-}
-
-.detail-hero-body {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 16px;
-  border-top: 1px solid var(--border);
-}
-
-.detail-hero-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 13px;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  color: var(--muted);
-}
-
-.detail-hero-title {
-  font-weight: 600;
-}
-
-.detail-hero-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-.detail-hero-actions .btn {
-  flex: 0 0 auto;
-  min-width: 120px;
-}
-
-.detail-series-cards {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
 .detail-warning {
   display: flex;
   align-items: flex-start;
@@ -1431,17 +1338,42 @@ main {
   line-height: 1;
 }
 
+.detail-asset-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
 .detail-folder {
   font-size: 14px;
   color: var(--muted);
   display: flex;
   gap: 6px;
   align-items: baseline;
+  min-width: 0;
+}
+
+.detail-asset-bar .detail-folder {
+  flex: 1 1 260px;
 }
 
 .detail-folder-name {
   color: var(--fg);
   font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.detail-asset-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.detail-asset-actions .btn {
+  white-space: nowrap;
 }
 
 .detail-year {
@@ -1529,6 +1461,141 @@ main {
 
 .asset-card-grid--seasons {
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.detail-seasons {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.detail-subsection-title {
+  font-size: 16px;
+  margin: 4px 0 0;
+}
+
+.season-panel-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 300px));
+  gap: 16px;
+  align-items: start;
+  justify-content: start;
+}
+
+.season-panel {
+  min-width: 0;
+}
+
+.season-panel.is-expanded {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(180px, 260px) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.season-summary-card {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  color: var(--fg);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  text-align: left;
+}
+
+.season-summary-card:hover,
+.season-summary-card:focus-visible {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.season-summary-image {
+  width: 100%;
+}
+
+.season-summary-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding-right: 28px;
+}
+
+.season-summary-title {
+  color: var(--fg);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.season-summary-count {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.season-summary-toggle {
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  display: inline-flex;
+  font-size: 18px;
+  font-weight: 700;
+  height: 28px;
+  justify-content: center;
+  line-height: 1;
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  width: 28px;
+}
+
+.season-detail-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+.asset-card-grid--season-detail {
+  grid-template-columns: minmax(220px, 300px) minmax(280px, 1fr);
+}
+
+.asset-card-grid--season-detail-single {
+  grid-template-columns: minmax(220px, 300px);
+}
+
+.season-title-card-group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.asset-card-grid--title-cards {
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+@media (max-width: 760px) {
+  .season-panel-grid {
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  }
+
+  .season-panel.is-expanded {
+    grid-template-columns: 1fr;
+  }
+
+  .asset-card-grid--season-detail {
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  }
 }
 
 .asset-card {

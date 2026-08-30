@@ -148,6 +148,7 @@ function ImportErrorsPage() {
             Back
           </button>
           <div>
+            <span className="page-eyebrow">Import review</span>
             <h1>Import Issues</h1>
             <p>{selectedLibrary}</p>
           </div>
