@@ -17,10 +17,7 @@ function shouldLoadLibraryGrid(pathname) {
 function libraryFromPathname(pathname) {
   const path = String(pathname || '').replace(/\/+$/, '') || '/';
   const segments = path.split('/').filter(Boolean);
-  if (
-    segments[0] !== 'libraries'
-    || (segments.length !== 2 && !(segments.length === 3 && segments[2] === 'collections'))
-  ) return undefined;
+  if (segments[0] !== 'libraries' || segments.length < 2) return undefined;
   try {
     return decodeURIComponent(segments[1]);
   } catch {

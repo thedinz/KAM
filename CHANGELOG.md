@@ -1,5 +1,18 @@
 # Changelog
 
+## 7.1.0 — 2026-08-30
+
+- Add a per-library **Orphaned Assets** audit that compares asset folders with
+  current Plex items and rechecks matches before permanent deletion.
+- Protect valid title, year, and edition folder variations from orphan cleanup,
+  including conservative handling for ambiguous remakes.
+- Let users exclude known orphan false positives, review those exclusions later,
+  and restore them to the audit without removing their artwork.
+- Add a **Duplicate Folders** workflow for choosing the folder to retain while
+  switching KAM to that folder before deleting verified alternatives.
+- Support staging retained-folder choices across the full duplicate list and
+  processing them together with library-neutral asset labels and result counts.
+
 ## 7.0.0 — 2026-08-29
 
 - Redesign the KAM interface around a responsive application sidebar, updated

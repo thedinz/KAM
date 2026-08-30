@@ -6,7 +6,7 @@ import logging
 import os
 import threading
 from pathlib import Path
-from typing import Dict, Mapping, Optional
+from typing import Collection, Dict, Mapping, Optional
 
 from .resolve import resolve_existing_dir_or_422
 
@@ -236,5 +236,39 @@ def clear_override(library: str, rating_key: str) -> bool:
             "Cleared folder override: library=%s ratingKey=%s",
             library,
             key,
+        )
+    return removed
+
+
+def clear_overrides_for_folders(library: str, folder_names: Collection[str]) -> int:
+    """Remove stale overrides that point at folders deleted from a library."""
+
+    if not library or not folder_names:
+        return 0
+    targets = {str(name).strip().casefold() for name in folder_names if str(name).strip()}
+    if not targets:
+        return 0
+
+    removed = 0
+    with _LOCK:
+        data = _load_locked()
+        lib_entries = data.get(library)
+        if not lib_entries:
+            return 0
+        for rating_key, folder_name in list(lib_entries.items()):
+            if str(folder_name).strip().casefold() not in targets:
+                continue
+            lib_entries.pop(rating_key, None)
+            removed += 1
+        if removed:
+            if not lib_entries:
+                data.pop(library, None)
+            _write_locked(data)
+
+    if removed:
+        logger.debug(
+            "Cleared %d stale folder overrides for library=%s",
+            removed,
+            library,
         )
     return removed
