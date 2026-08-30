@@ -35,6 +35,7 @@ from .routers import (
     items,
     libraries,
     movie,
+    orphaned_assets,
     plex_artwork,
     plex_proxy,
     settings,
@@ -46,6 +47,7 @@ from .routers import (
 app.include_router(libraries.router)
 app.include_router(items.router)
 app.include_router(collections.router)
+app.include_router(orphaned_assets.router)
 app.include_router(exclusions.router)
 app.include_router(upload.router)
 app.include_router(tv.router)
