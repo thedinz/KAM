@@ -64,7 +64,11 @@ def test_manual_route_applies_saved_season_background(tmp_path, monkeypatch):
     result = asyncio.run(route.apply_saved_artwork(payload))
 
     assert result["ok"] is True
-    assert calls == [("84", str(artwork), "background")]
+    assert len(calls) == 1
+    rating_key, applied_path, kind = calls[0]
+    assert rating_key == "84"
+    assert Path(applied_path) == artwork
+    assert kind == "background"
 
 
 def test_manual_route_rejects_missing_saved_asset(tmp_path, monkeypatch):

@@ -1,5 +1,21 @@
 # Changelog
 
+## 7.0.0 — 2026-08-29
+
+- Redesign the KAM interface around a responsive application sidebar, updated
+  branding, clearer page hierarchy, and refreshed library, detail, settings,
+  mapping, and status surfaces.
+- Replace duplicate library selectors with navigation generated from mapped
+  Plex libraries, including nested per-library Collections views.
+- Consolidate readiness progress into a contextual **Needs Attention** workflow
+  that preserves movie, TV, and collection scope, counts, navigation, and return
+  paths.
+- Refine series and season artwork layouts, including expanded season cards and
+  more consistent poster, background, title-card, and action placement.
+- Improve route synchronization, initial sidebar library loading, collection
+  hierarchy connectors, detail header alignment, responsive behavior, and the
+  KAM favicon.
+
 ## 6.2.0 — 2026-08-21
 
 - Add username-and-password built-in authentication with username configuration
