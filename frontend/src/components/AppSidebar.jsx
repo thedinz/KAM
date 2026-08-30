@@ -38,6 +38,13 @@ function NavigationIcon({ name }) {
         <path d="M12 7v6m0 4h.01" />
       </>
     ),
+    orphaned: (
+      <>
+        <path d="M4 7h16" />
+        <path d="M9 7V4h6v3" />
+        <path d="m6 7 1 14h10l1-14M10 11v6m4-6v6" />
+      </>
+    ),
     settings: (
       <>
         <circle cx="12" cy="12" r="3" />
@@ -96,6 +103,12 @@ function AppSidebar() {
   const attentionHref = selectedLibrary
     ? `${selectedLibraryHref}/not-ready${attentionUsesCollections ? '?scope=collections' : ''}`
     : '/libraries';
+  const orphanedAssetsHref = selectedLibrary
+    ? `${selectedLibraryHref}/orphaned-assets`
+    : '/libraries';
+  const supportsOrphanedAssets = Boolean(
+    selectedLibrary && selectedLibrary.trim().toLowerCase() !== 'collections'
+  );
 
   return (
     <aside className="app-sidebar">
@@ -168,6 +181,15 @@ function AppSidebar() {
             <span>Needs Attention</span>
           </span>
         )}
+        {supportsOrphanedAssets ? (
+          <NavLink
+            className={({ isActive }) => `app-nav-item app-nav-orphaned${isActive ? ' is-active' : ''}`}
+            to={orphanedAssetsHref}
+          >
+            <NavigationIcon name="orphaned" />
+            <span>Orphaned Assets</span>
+          </NavLink>
+        ) : null}
       </nav>
 
       <div className="app-sidebar-bottom">

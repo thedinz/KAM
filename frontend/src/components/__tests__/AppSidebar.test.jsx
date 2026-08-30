@@ -81,6 +81,19 @@ describe('AppSidebar', () => {
     expect(screen.queryByRole('link', { name: 'Kids TV' })).not.toBeInTheDocument();
   });
 
+  it('links orphaned assets outside needs attention', () => {
+    render(
+      <MemoryRouter initialEntries={['/libraries/Kids%20Movies']}>
+        <AppSidebar />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByRole('link', { name: 'Orphaned Assets' })).toHaveAttribute(
+      'href',
+      '/libraries/Kids%20Movies/orphaned-assets'
+    );
+  });
+
   it('removes the generic library link and nests collections under mapped libraries', () => {
     render(
       <MemoryRouter initialEntries={['/libraries/Kids%20Movies']}>

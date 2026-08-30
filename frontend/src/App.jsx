@@ -8,6 +8,7 @@ import LibraryPage from './pages/LibraryPage.jsx';
 import MovieDetailPage from './pages/MovieDetailPage.jsx';
 import MappingScanPage from './pages/MappingScanPage.jsx';
 import NotReadyPage from './pages/NotReadyPage.jsx';
+import OrphanedAssetsPage from './pages/OrphanedAssetsPage.jsx';
 import SettingsPage from './pages/SettingsPage.jsx';
 import ShowDetailPage from './pages/ShowDetailPage.jsx';
 import { AuthProvider, useAuth } from './hooks/AuthProvider.jsx';
@@ -78,6 +79,7 @@ function App() {
                     <Route path="/libraries/:library/collections" element={<LibraryPage collectionsOnly />} />
                     <Route path="/libraries/:library/import-errors" element={<ImportErrorsPage />} />
                     <Route path="/libraries/:library/not-ready" element={<NotReadyPage />} />
+                    <Route path="/libraries/:library/orphaned-assets" element={<OrphanedAssetsPage />} />
                     <Route path="/libraries/:library/mapping" element={<MappingScanPage />} />
                     <Route path="/libraries/:library/movies/:ratingKey" element={<MovieDetailPage />} />
                     <Route path="/libraries/:library/shows/:ratingKey" element={<ShowDetailPage />} />
