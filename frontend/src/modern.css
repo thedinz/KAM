@@ -680,6 +680,25 @@ button:focus-visible,
 .orphaned-assets-empty-copy strong { color: var(--fg); font-size: 17px; }
 
 /* Duplicate asset folder cleanup */
+.duplicate-folders-batch-toolbar {
+  position: sticky;
+  z-index: 5;
+  top: 81px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: color-mix(in oklab, var(--surface-2) 94%, transparent);
+  box-shadow: var(--shadow-md);
+  backdrop-filter: blur(12px);
+}
+.duplicate-folders-batch-toolbar > div { display: grid; gap: 4px; }
+.duplicate-folders-batch-toolbar strong { color: var(--fg); font-size: 14px; }
+.duplicate-folders-batch-toolbar span { color: var(--muted); font-size: 12px; }
+.duplicate-folder-resolve-all { min-width: 190px; }
 .duplicate-folder-groups { display: grid; gap: 18px; }
 .duplicate-folder-group {
   overflow: hidden;
@@ -717,6 +736,7 @@ button:focus-visible,
 .duplicate-folder-copy strong { overflow: hidden; color: var(--fg); font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
 .duplicate-folder-copy > span { color: var(--muted); font-size: 12px; }
 .duplicate-folder-copy em { width: max-content; padding: 3px 7px; border-radius: 999px; background: var(--success-soft); color: var(--success); font-size: 10px; font-style: normal; font-weight: 750; text-transform: uppercase; }
+.duplicate-folder-copy em.will-use { background: var(--accent-soft); color: var(--accent-strong); }
 
 /* Dialogs */
 .dialog-backdrop { padding: 22px; background: rgba(2, 6, 10, 0.74); backdrop-filter: blur(9px); }
@@ -859,6 +879,8 @@ button:focus-visible,
   .orphaned-asset-preview { width: 48px; }
   .orphaned-asset-actions { grid-column: 2 / -1; justify-content: stretch; }
   .orphaned-asset-actions button { flex: 1 1 auto; }
+  .duplicate-folders-batch-toolbar { top: 133px; align-items: stretch; flex-direction: column; }
+  .duplicate-folder-resolve-all { width: 100%; }
   .duplicate-folder-heading { align-items: stretch; flex-direction: column; }
   .duplicate-folder-resolve { width: 100%; }
   .login-card { padding: 28px 22px; }

@@ -248,6 +248,8 @@ def test_duplicate_resolution_keeps_selection_and_deletes_other_folders(
     data = orphaned_assets_env.route.resolve_duplicate_folders(payload)
 
     assert data["keptFolderName"] == "Present Movie Directors Cut (2020)"
+    assert data["previousActiveFolderName"] == "Present Movie (2020)"
+    assert data["folderAssignmentChanged"] is True
     assert set(data["deleted"]) == {"Present Movie", "Present Movie (2020)"}
     assert orphaned_assets_env.present_directors_cut.is_dir()
     assert not orphaned_assets_env.present.is_dir()
@@ -255,3 +257,31 @@ def test_duplicate_resolution_keeps_selection_and_deletes_other_folders(
     assert orphaned_assets_env.overrides.get_override("Movies", "1") == (
         "Present Movie Directors Cut (2020)"
     )
+
+
+def test_duplicate_batch_resolution_switches_kam_before_deleting_other_folders(
+    orphaned_assets_env,
+):
+    payload = orphaned_assets_env.route.ResolveDuplicateFoldersBatchPayload(
+        library="Movies",
+        selections=[
+            orphaned_assets_env.route.ResolveDuplicateFolderSelection(
+                ratingKey="1",
+                keepFolderName="Present Movie Directors Cut (2020)",
+            )
+        ],
+    )
+
+    data = orphaned_assets_env.route.resolve_all_duplicate_folders(payload)
+
+    assert data["processedCount"] == 1
+    assert data["deletedCount"] == 2
+    assert data["folderAssignmentsChanged"] == 1
+    assert data["failures"] == []
+    assert data["results"][0]["folderAssignmentChanged"] is True
+    assert orphaned_assets_env.overrides.get_override("Movies", "1") == (
+        "Present Movie Directors Cut (2020)"
+    )
+    assert orphaned_assets_env.present_directors_cut.is_dir()
+    assert not orphaned_assets_env.present.is_dir()
+    assert not orphaned_assets_env.present_yearless.is_dir()

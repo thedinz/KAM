@@ -73,7 +73,28 @@ describe('DuplicateFoldersPage', () => {
             keptFolderName: 'Step Brothers Directors Cut (2008)',
             deleted: ['Step Brothers', 'Step Brothers (2008)'],
             deletedCount: 2,
+            folderAssignmentChanged: true,
             errors: [],
+          }),
+        };
+      }
+      if (url === '/api/duplicate-folders/resolve-all' && options.method === 'POST') {
+        return {
+          ok: true,
+          json: async () => ({
+            library: 'Movies',
+            processedCount: 1,
+            deletedCount: 2,
+            folderAssignmentsChanged: 1,
+            results: [{
+              ratingKey: '123',
+              keptFolderName: 'Step Brothers Directors Cut (2008)',
+              folderAssignmentChanged: true,
+              deleted: ['Step Brothers', 'Step Brothers (2008)'],
+              deletedCount: 2,
+              errors: [],
+            }],
+            failures: [],
           }),
         };
       }
@@ -111,6 +132,43 @@ describe('DuplicateFoldersPage', () => {
     expect(await screen.findByText('No duplicate asset folders')).toBeInTheDocument();
     expect(screen.getByRole('status')).toHaveTextContent(
       'Kept Step Brothers Directors Cut (2008) and deleted 2 duplicate folders.'
+    );
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'KAM now uses Step Brothers Directors Cut (2008).'
+    );
+    expect(reload).toHaveBeenCalled();
+  });
+
+  it('stages choices and processes the full list in one action', async () => {
+    renderPage();
+
+    expect(await screen.findByText('1 of 1 movies ready')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('radio', { name: /Step Brothers Directors Cut.*3 files/i }));
+
+    expect(screen.getByText('KAM will switch to this folder')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Process all 1 movie' }));
+
+    expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining(
+      'KAM will switch to any newly selected folder before deleting the old one.'
+    ));
+    await waitFor(() => {
+      const resolveCall = global.fetch.mock.calls.find(
+        ([url]) => url === '/api/duplicate-folders/resolve-all'
+      );
+      expect(JSON.parse(resolveCall[1].body)).toEqual({
+        library: 'Movies',
+        selections: [{
+          ratingKey: '123',
+          keepFolderName: 'Step Brothers Directors Cut (2008)',
+        }],
+      });
+    });
+    expect(await screen.findByText('No duplicate asset folders')).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Processed 1 movie and deleted 2 duplicate folders.'
+    );
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Switched KAM to 1 newly selected folder.'
     );
     expect(reload).toHaveBeenCalled();
   });
