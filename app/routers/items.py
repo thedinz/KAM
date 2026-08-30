@@ -396,8 +396,8 @@ class _RequestDirectoryResolver:
         return entries
 
     def resolve(self, folder_name: str) -> str:
-        raw = (folder_name or "").strip()
-        if not raw:
+        raw = str(folder_name or "")
+        if not raw.strip():
             raise FileNotFoundError("Empty folderName")
 
         for base in self.bases:

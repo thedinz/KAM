@@ -27,6 +27,11 @@ def _path() -> Path:
     return Path(_STORAGE_PATH)
 
 
+def _normalize_scope(value: Any) -> str:
+    text = str(value or "assets").strip().casefold()
+    return "collections" if text in {"collection", "collections"} else "assets"
+
+
 def _read_locked() -> List[Dict[str, Any]]:
     try:
         raw = json.loads(_path().read_text(encoding="utf-8"))
@@ -48,6 +53,9 @@ def _read_locked() -> List[Dict[str, Any]]:
         entries.append({
             "library": library,
             "folderName": folder_name,
+            # Entries written before collection audits existed belong to the
+            # normal library asset scope.
+            "scope": _normalize_scope(item.get("scope")),
             "excludedAt": str(item.get("excludedAt") or ""),
         })
     return entries
@@ -61,30 +69,43 @@ def _write_locked(entries: List[Dict[str, Any]]) -> None:
     temp.replace(path)
 
 
-def list_exclusions(library: str | None = None) -> List[Dict[str, Any]]:
+def list_exclusions(
+    library: str | None = None,
+    scope: str | None = None,
+) -> List[Dict[str, Any]]:
     with _LOCK:
         entries = _read_locked()
     if library:
         key = str(library).strip().casefold()
         entries = [entry for entry in entries if entry["library"].casefold() == key]
+    if scope:
+        scope_key = _normalize_scope(scope)
+        entries = [entry for entry in entries if entry["scope"] == scope_key]
     return entries
 
 
-def is_excluded(library: str, folder_name: str) -> bool:
+def is_excluded(library: str, folder_name: str, scope: str = "assets") -> bool:
     library_key = str(library or "").strip().casefold()
     folder_key = str(folder_name or "").strip().casefold()
+    scope_key = _normalize_scope(scope)
     if not library_key or not folder_key:
         return False
     return any(
         entry["library"].casefold() == library_key
         and entry["folderName"].casefold() == folder_key
+        and entry["scope"] == scope_key
         for entry in list_exclusions()
     )
 
 
-def add_exclusion(library: str, folder_name: str) -> Dict[str, Any]:
+def add_exclusion(
+    library: str,
+    folder_name: str,
+    scope: str = "assets",
+) -> Dict[str, Any]:
     library_name = str(library or "").strip()
     canonical_folder = str(folder_name or "").strip()
+    scope_name = _normalize_scope(scope)
     if not library_name or not canonical_folder:
         raise ValueError("library and folder_name are required")
     with _LOCK:
@@ -93,11 +114,13 @@ def add_exclusion(library: str, folder_name: str) -> Dict[str, Any]:
             if (
                 entry["library"].casefold() == library_name.casefold()
                 and entry["folderName"].casefold() == canonical_folder.casefold()
+                and entry["scope"] == scope_name
             ):
                 return dict(entry)
         stored = {
             "library": library_name,
             "folderName": canonical_folder,
+            "scope": scope_name,
             "excludedAt": datetime.now(timezone.utc).isoformat(),
         }
         entries.append(stored)
@@ -105,9 +128,14 @@ def add_exclusion(library: str, folder_name: str) -> Dict[str, Any]:
     return dict(stored)
 
 
-def remove_exclusion(library: str, folder_name: str) -> bool:
+def remove_exclusion(
+    library: str,
+    folder_name: str,
+    scope: str = "assets",
+) -> bool:
     library_key = str(library or "").strip().casefold()
     folder_key = str(folder_name or "").strip().casefold()
+    scope_key = _normalize_scope(scope)
     if not library_key or not folder_key:
         return False
     with _LOCK:
@@ -117,6 +145,7 @@ def remove_exclusion(library: str, folder_name: str) -> bool:
             if not (
                 entry["library"].casefold() == library_key
                 and entry["folderName"].casefold() == folder_key
+                and entry["scope"] == scope_key
             )
         ]
         if len(kept) == len(entries):

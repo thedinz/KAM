@@ -2,9 +2,9 @@
 
 KAM is a small web app that makes Kometa/Plex artwork management painless. It lets you upload artwork for **movies, TV series, seasons, and collections** and will:
 
-> ## KAM 6.2 released with username-and-password login!
+> ## KAM 7.2 adds asset cleanup for libraries and collections!
 >
-> KAM 6.2 adds configurable usernames to built-in authentication. Existing password-only installations get a safe one-time username setup on their next login without losing access.
+> KAM can now find orphaned asset folders and duplicate folders in movie, TV, and collection roots. Review each result, keep or exclude what belongs, and process duplicate choices individually or all at once.
 
 * **Import existing Plex assets** — movie posters/backgrounds, series posters/backgrounds, **season posters/backgrounds**, and title cards — into your mapped Kometa assets structure
 * **Import Mediux series zip files** from a show page and map the files into Kometa names automatically
@@ -14,6 +14,8 @@ KAM is a small web app that makes Kometa/Plex artwork management painless. It le
 * Keep everything in the **same structure Kometa expects**
 * Provide a simple web UI with a **fallback** image to quickly spot missing artwork
 * Let you **exclude** specific movies, shows, or collections from KAM until you re-include them
+* Find **orphaned asset folders**, with persistent exclusions for known false positives
+* Resolve **duplicate asset folders** individually or in one staged batch, switching KAM to the retained folder before removing alternatives
 * Use either KAM's lightweight built-in login or authentication handled by your reverse proxy
 * Run a **Setup Check** from Settings to confirm saved Plex credentials, writable asset paths, collection folders, and config persistence
 
@@ -252,6 +254,44 @@ To re-include an item, visit **Settings → Exclusions**. The page lists every e
 item, including its library and type, with a one-click **Include** button that restores
 it immediately. You can also refresh the list from the same screen if you make changes
 from another browser tab.
+
+---
+
+## Cleaning up orphaned and duplicate asset folders
+
+Each mapped library has **Orphaned Assets** and **Duplicate Folders** tools in the
+sidebar. Open them from a movie or TV library to audit that library's normal asset
+root. Open them while viewing **Collections** to audit the mapped collections root
+instead; the page shows **Collections cleanup** and the exact asset root being checked.
+
+### Orphaned Assets
+
+The orphan audit compares every direct child folder with the current Plex items in
+that scope. KAM recognizes plausible title, year, edition, and collection-name
+variations and rechecks the selected folders immediately before deletion.
+
+* Select one or more confirmed orphan folders and delete them together.
+* Choose **Exclude — asset exists** for a known false positive. The folder and its
+  artwork remain in place and the decision is saved in `orphan_exclusions.json`.
+* Enable **Show excluded** to review exclusions and include a folder in future audits
+  again.
+* Library-asset and collection-asset exclusions are stored separately, even when
+  their folder names are the same.
+
+### Duplicate Folders
+
+The duplicate audit groups multiple folders that plausibly belong to the same Plex
+asset. Select the folder to retain on each card, then use **Keep selected folder** for
+one result or **Process all** to apply the full staged list.
+
+If the retained folder is not the one KAM currently uses, KAM saves that folder
+assignment first and only then removes the verified alternatives. Exact filesystem
+names are preserved, including folders that differ only by case or otherwise look
+identical in the browser.
+
+> **Cleanup deletion is permanent.** Review the displayed asset root, retained-folder
+> choices, and confirmation summary carefully. Keep a backup of your asset directories
+> if you may need to restore removed artwork later.
 
 ---
 
