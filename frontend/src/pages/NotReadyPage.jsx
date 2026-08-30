@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import FolderFinderModal from '../components/FolderFinderModal.jsx';
 import ItemGrid from '../components/ItemGrid.jsx';
 import { useLibraryItemsContext } from '../hooks/LibraryItemsProvider.jsx';
@@ -7,7 +7,9 @@ import { useLibraryItemsContext } from '../hooks/LibraryItemsProvider.jsx';
 function NotReadyPage() {
   const navigate = useNavigate();
   const { library: libraryParam } = useParams();
+  const [searchParams] = useSearchParams();
   const targetLibrary = libraryParam ? decodeURIComponent(libraryParam) : '';
+  const collectionsScope = searchParams.get('scope') === 'collections';
   const {
     library,
     setLibrary,
@@ -34,16 +36,15 @@ function NotReadyPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [targetLibrary]);
+  }, [targetLibrary, collectionsScope]);
 
   const backHref = useMemo(() => {
     if (!targetLibrary) {
       return '/libraries';
     }
-    const search = new URLSearchParams();
-    search.set('lib', targetLibrary);
-    return `/libraries?${search.toString()}`;
-  }, [targetLibrary]);
+    const libraryHref = `/libraries/${encodeURIComponent(targetLibrary)}`;
+    return collectionsScope ? `${libraryHref}/collections` : libraryHref;
+  }, [targetLibrary, collectionsScope]);
 
   const fetchItems = useCallback(
     async (desiredPage = 1) => {
@@ -57,14 +58,18 @@ function NotReadyPage() {
       setError('');
       const params = new URLSearchParams();
       const trimmedLibrary = targetLibrary.trim();
-      const isCollections = trimmedLibrary.toLowerCase() === 'collections';
+      const isGlobalCollections = trimmedLibrary.toLowerCase() === 'collections';
+      const useCollectionsEndpoint = collectionsScope || isGlobalCollections;
       params.set('page', String(desiredPage));
       params.set('page_size', String(pageSize));
       params.set('not_ready_only', '1');
       try {
         let endpoint = '/api/items';
-        if (isCollections) {
+        if (useCollectionsEndpoint) {
           endpoint = '/collections';
+          if (!isGlobalCollections) {
+            params.set('library', trimmedLibrary);
+          }
         } else {
           params.set('library', trimmedLibrary);
         }
@@ -96,7 +101,7 @@ function NotReadyPage() {
         setLoading(false);
       }
     },
-    [targetLibrary, pageSize, setNotReadyCount]
+    [targetLibrary, collectionsScope, pageSize, setNotReadyCount]
   );
 
   useEffect(() => {
@@ -140,8 +145,9 @@ function NotReadyPage() {
 
   const notReadyLabel = useMemo(() => {
     const count = Number(notReadyCount) || 0;
-    return `${count.toLocaleString()} not-ready item${count === 1 ? '' : 's'}`;
-  }, [notReadyCount]);
+    const noun = collectionsScope ? 'collection' : 'item';
+    return `${count.toLocaleString()} not-ready ${noun}${count === 1 ? '' : 's'}`;
+  }, [notReadyCount, collectionsScope]);
 
   const pageLabel = useMemo(() => {
     return `Page ${page} / ${totalPages || 1}`;
@@ -160,9 +166,11 @@ function NotReadyPage() {
           </button>
           <div>
             <span className="page-eyebrow">Needs attention</span>
-            <h1>Not Ready Items</h1>
+            <h1>{collectionsScope ? 'Not Ready Collections' : 'Not Ready Items'}</h1>
             <p>
-              {targetLibrary ? `Library: ${targetLibrary}` : 'Select a library to review not-ready items.'}
+              {targetLibrary
+                ? `Library: ${targetLibrary}${collectionsScope ? ' • Collections' : ''}`
+                : 'Select a library to review not-ready items.'}
             </p>
           </div>
         </div>

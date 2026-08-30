@@ -40,6 +40,36 @@ describe('AppSidebar', () => {
     expect(attentionLink).toHaveTextContent('4 / 28');
   });
 
+  it('preserves collection scope in the needs-attention link', () => {
+    render(
+      <MemoryRouter initialEntries={['/libraries/Kids%20Movies/collections']}>
+        <AppSidebar />
+      </MemoryRouter>
+    );
+
+    const attentionLink = screen.getByRole('link', { name: 'Needs Attention 4 / 28' });
+    expect(attentionLink).toHaveAttribute(
+      'href',
+      '/libraries/Kids%20Movies/not-ready?scope=collections'
+    );
+    expect(screen.getByRole('link', { name: 'Kids Movies Collections' })).toHaveClass('is-active');
+  });
+
+  it('keeps Collections selected on the scoped needs-attention page', () => {
+    render(
+      <MemoryRouter initialEntries={['/libraries/Kids%20Movies/not-ready?scope=collections']}>
+        <AppSidebar />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByRole('link', { name: 'Kids Movies Collections' })).toHaveClass('is-active');
+    expect(screen.getByRole('link', { name: 'Kids Movies' })).not.toHaveClass('is-active');
+    expect(screen.getByRole('link', { name: 'Needs Attention 4 / 28' })).toHaveAttribute(
+      'href',
+      '/libraries/Kids%20Movies/not-ready?scope=collections'
+    );
+  });
+
   it('only lists mapped libraries', () => {
     render(
       <MemoryRouter initialEntries={['/libraries/Kids%20Movies']}>
