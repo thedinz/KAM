@@ -453,7 +453,7 @@ button:focus-visible,
 .asset-card-grid { gap: 18px; }
 .asset-card { border-color: var(--border); border-radius: var(--radius-lg); background: linear-gradient(180deg, var(--surface-2), var(--surface-1)); box-shadow: var(--shadow-sm); }
 .asset-label { padding: 14px 15px; border-bottom: 1px solid var(--border); font-size: 13px; font-weight: 720; }
-.asset-image-wrapper { margin: 14px 14px 0; border-color: var(--border); border-radius: var(--radius-md); background: linear-gradient(135deg, rgba(32, 184, 243, 0.04), transparent), #070b10; }
+.asset-image-wrapper { margin: 14px 14px 0; border-color: var(--border); border-radius: var(--radius-md); background: linear-gradient(135deg, rgba(32, 184, 243, 0.04), transparent), #070b10; width: auto; }
 .asset-actions { padding: 13px 14px 5px; gap: 8px; }
 .asset-actions .btn { background: var(--surface-3); }
 .asset-flag { border-radius: 999px; padding: 3px 8px; font-size: 10px; text-transform: capitalize; }

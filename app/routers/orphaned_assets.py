@@ -18,6 +18,7 @@ from . import items as items_router
 from ..services import folder_overrides, orphan_exclusions
 from ..services import library_mappings as library_mappings_service
 from ..services import resolve as resolve_service
+from ..services.plex import get_plex
 
 router = APIRouter()
 
@@ -260,7 +261,11 @@ class _RootDirectoryResolver:
         if not raw.strip():
             raise FileNotFoundError("Empty folderName")
         exact = self.root / raw
-        if exact.is_dir() and not exact.is_symlink():
+        if (
+            resolve_service.is_direct_child_name(raw)
+            and exact.is_dir()
+            and not exact.is_symlink()
+        ):
             return str(exact)
         match = resolve_service._best_match(self._entries(), raw)
         if match:
@@ -274,15 +279,18 @@ def _active_folder_paths(
     root: Path,
 ) -> Dict[str, str]:
     resolver = _RootDirectoryResolver(root)
-    overrides = folder_overrides.get_library_overrides(library)
+    overrides_by_library: Dict[str, Dict[str, str]] = {}
     active: Dict[str, str] = {}
 
     for row in rows:
         rating_key = str(row.get("ratingKey") or "").strip()
         if not rating_key:
             continue
-        override = overrides.get(rating_key)
-        _name, folder_path = items_router._resolve_override_folder(library, override, resolver)
+        row_library = str(row.get("library") or library)
+        if row_library not in overrides_by_library:
+            overrides_by_library[row_library] = folder_overrides.get_library_overrides(row_library)
+        override = overrides_by_library[row_library].get(rating_key)
+        _name, folder_path = items_router._resolve_override_folder(row_library, override, resolver)
         if not folder_path:
             for candidate in _row_match_targets(row):
                 try:
@@ -438,6 +446,55 @@ def _folder_payload(folder: Path) -> Dict[str, Any]:
     }
 
 
+def _plex_section_names() -> List[str]:
+    return [
+        str(getattr(section, "title", "") or "").strip()
+        for section in get_plex().library.sections()
+        if str(getattr(section, "title", "") or "").strip()
+    ]
+
+
+def _shared_root_rows(library: str, scope: str, root: Path) -> List[Dict[str, Any]]:
+    """Return Plex rows from other libraries or scopes whose folders live in *root*.
+
+    Kometa setups often share one directory between libraries, or between
+    items and collections (for example one Collections folder for every
+    library). A folder only counts as orphaned when nothing using the same
+    directory claims it, so those neighbours must protect their folders too.
+    Lookups are allowed to fail loudly; guessing here would delete artwork.
+    """
+
+    root_key = _path_key(root)
+    rows: List[Dict[str, Any]] = []
+
+    for entry in library_mappings_service.load_library_mappings():
+        name = str(entry.get("library") or "").strip()
+        if not name or name == "Collections":
+            continue
+        if scope == "assets" and name == library:
+            continue
+        asset_path = library_mappings_service.get_asset_path(name)
+        if not asset_path or _path_key(asset_path) != root_key:
+            continue
+        rows.extend({**row, "library": name} for row in items_router._library_rows(name))
+
+    for section_name in _plex_section_names():
+        if scope == "collections" and section_name.casefold() == library.casefold():
+            continue
+        try:
+            section_root = _library_root(section_name, "collections")
+        except HTTPException:
+            continue
+        if _path_key(section_root) != root_key:
+            continue
+        rows.extend(
+            {**row, "library": section_name}
+            for row in collections_router._collection_audit_rows(section_name)
+        )
+
+    return rows
+
+
 def _asset_audit(library: str, scope: str = "assets") -> Dict[str, Any]:
     scope_name = _normalize_scope(scope)
     root = _library_root(library, scope_name)
@@ -446,9 +503,12 @@ def _asset_audit(library: str, scope: str = "assets") -> Dict[str, Any]:
         if scope_name == "collections"
         else items_router._library_rows(library)
     )
+    # Rows from neighbours sharing this root only protect folders; duplicate
+    # resolution stays limited to the audited library's own rows.
+    claim_rows = rows + _shared_root_rows(library, scope_name, root)
     folders = _direct_asset_folders(root)
-    active_by_rating = _active_folder_paths(library, rows, root)
-    records, normalized_index, token_index, prefix_index = _build_match_index(rows)
+    active_by_rating = _active_folder_paths(library, claim_rows, root)
+    records, normalized_index, token_index, prefix_index = _build_match_index(claim_rows)
     matches_by_path: Dict[str, set[str]] = {}
 
     active_by_path: Dict[str, set[str]] = defaultdict(set)

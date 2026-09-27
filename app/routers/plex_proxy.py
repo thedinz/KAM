@@ -32,7 +32,7 @@ def plex_image(
         path = f"/library/metadata/{ratingKey}/{kind_normalized}"
 
     if path.startswith("http://") or path.startswith("https://"):
-        if not path.startswith(cfg.url):
+        if not plex_settings.is_plex_url(path):
             raise HTTPException(status_code=403, detail="URL not allowed")
         url = path
     else:
@@ -49,6 +49,7 @@ def plex_image(
             params={"X-Plex-Token": cfg.token},
             stream=True,
             timeout=30,
+            verify=plex_settings.verify_ssl(),
         )
         response.raise_for_status()
     except requests.RequestException as exc:

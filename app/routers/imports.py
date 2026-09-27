@@ -12,9 +12,6 @@ from ..services.resolve import resolve_existing_dir_or_422
 
 router = APIRouter()
 
-# Allow opting out for self-signed Plex certs: export PLEX_VERIFY_SSL=false
-PLEX_VERIFY_SSL = os.environ.get("PLEX_VERIFY_SSL", "true").lower() != "false"
-
 logger = logging.getLogger(__name__)
 TOKEN_MASK = "***"
 
@@ -85,12 +82,12 @@ def _get(url: str, params: Optional[dict] = None, headers: Optional[dict] = None
             _safe_params(params),
             _safe_headers(headers),
         )
-        r = requests.get(url, params=params, headers=headers, timeout=30, verify=PLEX_VERIFY_SSL)
+        r = requests.get(url, params=params, headers=headers, timeout=30, verify=plex_settings.verify_ssl())
         r.raise_for_status()
         return r
     except requests.HTTPError as e:
         status = e.response.status_code if e.response is not None else 502
-        detail = f"Plex request failed [{status}] for {url}"
+        detail = f"Plex request failed [{status}] for {_safe_url(url)}"
         logger.warning(
             "Plex HTTP error [%s] for %s: %s",
             status,
@@ -100,27 +97,42 @@ def _get(url: str, params: Optional[dict] = None, headers: Optional[dict] = None
         raise HTTPException(status_code=502, detail=detail)
     except Exception as e:
         logger.warning("Plex request error for %s: %s", _safe_url(url), e)
-        raise HTTPException(status_code=502, detail=f"Plex request error for {url}: {e}")
+        raise HTTPException(status_code=502, detail=f"Plex request error for {_safe_url(url)}: {_mask_token(str(e))}")
 
 def _download_to(path: str, url: str):
+    # Import URLs can come from the browser; only ever send the token to Plex.
+    if not plex_settings.is_plex_url(url):
+        raise HTTPException(
+            status_code=422,
+            detail="Import URLs must point at the configured Plex server",
+        )
+    tmp_path = f"{path}.kam-download.tmp"
     try:
         logger.debug("Downloading %s to %s", _safe_url(url), path)
-        with requests.get(url, timeout=60, stream=True, verify=PLEX_VERIFY_SSL) as r:
+        with requests.get(url, timeout=60, stream=True, verify=plex_settings.verify_ssl()) as r:
             r.raise_for_status()
-            with open(path, "wb") as f:
+            with open(tmp_path, "wb") as f:
                 for chunk in r.iter_content(chunk_size=1024 * 64):
                     if chunk:
                         f.write(chunk)
+        # Only replace existing artwork once the full download succeeded.
+        os.replace(tmp_path, path)
         logger.debug("Download complete for %s", path)
     except requests.HTTPError as e:
         status = e.response.status_code if e.response is not None else 502
         logger.warning(
             "Download failed [%s] for %s: %s", status, _safe_url(url), e
         )
-        raise HTTPException(status_code=502, detail=f"Download failed [{status}] for {url}")
+        raise HTTPException(status_code=502, detail=f"Download failed [{status}] for {_safe_url(url)}")
     except Exception as e:
         logger.warning("Download error for %s: %s", _safe_url(url), e)
-        raise HTTPException(status_code=502, detail=f"Download error for {url}: {e}")
+        raise HTTPException(status_code=502, detail=f"Download error for {_safe_url(url)}: {_mask_token(str(e))}")
+    finally:
+        if os.path.exists(tmp_path):
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass
 
 
 def _download_result(path: str, src: str) -> Dict[str, Any]:

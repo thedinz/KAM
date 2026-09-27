@@ -154,10 +154,15 @@ def _collection_audit_rows(library: str) -> List[Dict[str, Any]]:
         section_name = str(getattr(section, "title", "") or "").strip()
         if section_name.casefold() != selected_library.casefold():
             continue
+        # Audits delete folders that no row claims, so an unreadable section
+        # must fail the audit instead of looking like "no collections".
         try:
             section_collections = section.collections()
-        except Exception:
-            continue
+        except Exception as exc:
+            raise HTTPException(
+                status_code=502,
+                detail=f"Unable to read collections for Plex library '{section_name}': {exc}",
+            ) from exc
         for collection_item in section_collections:
             rating_key = str(
                 getattr(collection_item, "ratingKey", None) or ""
@@ -172,8 +177,8 @@ def _collection_audit_rows(library: str) -> List[Dict[str, Any]]:
                 "type": "collection",
                 "titleCandidates": [],
             })
-        break
-    return rows
+        return rows
+    raise HTTPException(status_code=404, detail=f"Plex library not found: {selected_library}")
 
 
 def _strip_year_suffix(name: str) -> str:

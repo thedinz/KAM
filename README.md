@@ -406,6 +406,9 @@ Additional auth environment variables:
 * `KAM_AUTH_COOKIE` changes the session cookie name.
 * `KAM_AUTH_TOKEN_TTL_SECONDS` changes the session lifetime.
 * `KAM_AUTH_COOKIE_SECURE=true` forces the login cookie to be HTTPS-only.
+* `KAM_CORS_ORIGINS` allows cross-origin browser access from a comma-separated list of
+  origins (for example `https://dashboard.example.com`). It is off by default because
+  the KAM UI does not need it.
 
 Run KAM on a trusted LAN, or put it behind a reverse proxy (Caddy/Traefik/Nginx) for TLS and external access. Bind to localhost and reverse-proxy if you don't want it exposed directly.
 

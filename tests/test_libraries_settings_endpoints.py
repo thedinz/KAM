@@ -38,6 +38,8 @@ def _create_libraries_client(
 ) -> TestClient:
     settings_module = importlib.reload(importlib.import_module("app.services.settings"))
     monkeypatch.setattr(settings_module, "load_settings", lambda: load_settings_payload)
+    # Mappings are cached per process; clear them so each test sees its own payload.
+    importlib.import_module("app.services.library_mappings").clear_cache()
 
     plex_settings_module = importlib.reload(importlib.import_module("app.services.plex_settings"))
     plex_settings_module.clear_cache()
@@ -94,6 +96,7 @@ def test_settings_libraries_endpoint_lists_sections(monkeypatch):
             "assetPath": None,
             "collectionsPath": None,
             "collectionAssetPaths": [],
+            "collectionOverrides": [],
         },
         {
             "name": "Movies",
@@ -102,6 +105,7 @@ def test_settings_libraries_endpoint_lists_sections(monkeypatch):
             "assetPath": "/assets/Movies",
             "collectionsPath": "/collections/movies",
             "collectionAssetPaths": [],
+            "collectionOverrides": [],
         },
         {
             "name": "TV Shows",
@@ -110,6 +114,7 @@ def test_settings_libraries_endpoint_lists_sections(monkeypatch):
             "assetPath": None,
             "collectionsPath": None,
             "collectionAssetPaths": [],
+            "collectionOverrides": [],
         },
     ]
 
@@ -143,6 +148,7 @@ def test_settings_libraries_endpoint_omits_music_sections(monkeypatch):
             "assetPath": None,
             "collectionsPath": None,
             "collectionAssetPaths": [],
+            "collectionOverrides": [],
         }
     ]
 
@@ -194,6 +200,7 @@ def test_update_library_mappings_endpoint(monkeypatch):
             "library": "Movies",
             "assetPath": "/assets/Movies",
             "collectionsPath": None,
+            "collectionSections": [],
         }
     ]
 
@@ -202,6 +209,7 @@ def test_update_library_mappings_endpoint(monkeypatch):
             "library": "Movies",
             "assetPath": "/assets/Movies",
             "collectionsPath": None,
+            "collectionSections": [],
         }
     ]
 
@@ -231,6 +239,8 @@ def test_settings_libraries_endpoint_handles_empty_mappings(monkeypatch):
             "key": "1",
             "assetPath": None,
             "collectionsPath": None,
+            "collectionAssetPaths": [],
+            "collectionOverrides": [],
         },
         {
             "name": "TV Shows",
@@ -238,6 +248,8 @@ def test_settings_libraries_endpoint_handles_empty_mappings(monkeypatch):
             "key": "2",
             "assetPath": None,
             "collectionsPath": None,
+            "collectionAssetPaths": [],
+            "collectionOverrides": [],
         },
     ]
 
