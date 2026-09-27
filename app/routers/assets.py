@@ -158,7 +158,7 @@ def _library_root(
             if can_expand:
                 root = assets_root_resolved
                 relative = mapped_resolved.relative_to(assets_root_resolved)
-                default_relative = str(relative) if str(relative) != "." else ""
+                default_relative = relative.as_posix() if str(relative) != "." else ""
             else:
                 root = mapped_resolved
         else:
@@ -261,7 +261,7 @@ def list_asset_folders(
                 matches.append(child)
             matches.sort(key=lambda p: (not p.is_dir(), str(p.relative_to(root)).lower()))
             for child in matches:
-                rel_path = "" if child == root else str(child.relative_to(root))
+                rel_path = "" if child == root else child.relative_to(root).as_posix()
                 items.append({
                     "name": child.name,
                     "isDir": child.is_dir(),
@@ -270,7 +270,7 @@ def list_asset_folders(
                 })
         else:
             for child in sorted(current.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower())):
-                rel_path = "" if child == root else str(child.relative_to(root))
+                rel_path = "" if child == root else child.relative_to(root).as_posix()
                 items.append({
                     "name": child.name,
                     "isDir": child.is_dir(),
@@ -280,7 +280,7 @@ def list_asset_folders(
     except PermissionError:
         raise HTTPException(status_code=403, detail="Permission denied")
 
-    parent_rel = "" if current == root else str(current.relative_to(root))
+    parent_rel = "" if current == root else current.relative_to(root).as_posix()
 
     return {
         "library": library,

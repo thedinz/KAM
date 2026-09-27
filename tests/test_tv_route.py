@@ -1,5 +1,6 @@
 import importlib
-import importlib
+import os
+from urllib.parse import unquote
 from types import SimpleNamespace
 
 import pytest
@@ -19,10 +20,11 @@ class _DummyResponse:
 
 
 @pytest.fixture
-def tv_env(tmp_path, monkeypatch):
+def tv_env(tmp_path, monkeypatch, request):
     assets_root = tmp_path / "assets"
     library = "TV Shows"
-    library_path = assets_root / library
+    # Tests can map the library to a directory that is not named after it.
+    library_path = assets_root / getattr(request, "param", library)
     show_folder = library_path / "My Show (2023)"
     show_folder.mkdir(parents=True)
     (show_folder / "poster.jpg").write_bytes(b"poster")
@@ -142,3 +144,30 @@ def test_tv_route_prefers_override(tv_env):
     assert data["plexPosterUrl"].startswith("http://plex.test")
     assert data["plexBackgroundUrl"].startswith("http://plex.test")
     assert data["seasons"][0]["plexBackgroundUrl"].startswith("http://plex.test")
+
+
+@pytest.mark.parametrize("tv_env", ["kometa-tv"], indirect=True)
+def test_tv_route_reads_art_from_the_mapped_library_folder(tv_env):
+    data = tv_env.call()
+
+    assert data["folderName"] == tv_env.show_folder.name
+    assert data["folderExists"] is True
+    assert data["posterExists"] is True
+    assert data["backgroundExists"] is True
+    poster_path = unquote(data["posterUrl"].split("path=", 1)[1].split("&", 1)[0])
+    assert os.path.normpath(poster_path) == os.path.normpath(tv_env.show_folder / "poster.jpg")
+    season = data["seasons"][0]
+    assert season["posterExists"] is True
+    assert season["backgroundExists"] is True
+    assert season["episodes"][0]["titleCardExists"] is True
+
+
+def test_tv_route_reports_missing_override_folder(tv_env):
+    tv_env.folder_overrides.set_override("TV Shows", "101", tv_env.show_folder.name)
+    tv_env.show_folder.rename(tv_env.show_folder.with_name("Renamed Elsewhere"))
+
+    data = tv_env.call()
+
+    assert data["folderName"] == tv_env.show_folder.name
+    assert data["folderExists"] is False
+    assert data["posterExists"] is False

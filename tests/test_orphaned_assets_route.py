@@ -73,6 +73,7 @@ def orphaned_assets_env(tmp_path, monkeypatch):
     ]
     overrides.set_canonical_overrides("Movies", {"2": custom.name})
     monkeypatch.setattr(route.items_router, "_library_rows", lambda _library: list(rows))
+    monkeypatch.setattr(route, "_plex_section_names", lambda: ["Movies"])
 
     return SimpleNamespace(
         route=route,
@@ -156,6 +157,7 @@ def collection_cleanup_env(tmp_path, monkeypatch):
         lambda _library: list(collection_rows),
     )
     monkeypatch.setattr(route.items_router, "_library_rows", lambda _library: [])
+    monkeypatch.setattr(route, "_plex_section_names", lambda: ["Movies"])
 
     return SimpleNamespace(
         route=route,
@@ -571,3 +573,142 @@ def test_collection_audit_never_falls_back_to_the_regular_asset_root(
 
     assert exc_info.value.status_code == 404
     assert collection_cleanup_env.regular_same_name.is_dir()
+
+
+def _collection_row(title, rating_key):
+    return {
+        "title": title,
+        "year": None,
+        "ratingKey": rating_key,
+        "type": "collection",
+        "titleCandidates": [],
+    }
+
+
+def test_shared_collections_root_protects_other_libraries_collections(
+    collection_cleanup_env,
+    tmp_path,
+    monkeypatch,
+):
+    env = collection_cleanup_env
+    settings = importlib.import_module("app.services.settings")
+    settings.save_settings({
+        "plexUrl": "http://plex.test",
+        "plexToken": "token",
+        "libraryMappings": [
+            {
+                "library": "Movies",
+                "assetPath": str(env.library_root),
+                "collectionsPath": str(env.root),
+            },
+            {
+                "library": "TV Shows",
+                "assetPath": str(tmp_path / "assets" / "TV Shows"),
+                "collectionsPath": str(env.root),
+            },
+        ],
+    })
+    tv_collection = env.root / "Only On TV Collection"
+    tv_collection.mkdir()
+    rows_by_library = {
+        "Movies": [_collection_row("Hero Collection", "collection-1")],
+        "TV Shows": [_collection_row("Only On TV Collection", "tv-collection-1")],
+    }
+    monkeypatch.setattr(
+        env.route.collections_router,
+        "_collection_audit_rows",
+        lambda library: list(rows_by_library[library]),
+    )
+    monkeypatch.setattr(env.route, "_plex_section_names", lambda: ["Movies", "TV Shows"])
+
+    data = env.route.list_orphaned_assets(library="Movies", scope="collections")
+    orphaned = [item["folderName"] for item in data["items"]]
+    assert "Only On TV Collection" not in orphaned
+    assert "Retired Collection" in orphaned
+
+    result = env.route.delete_orphaned_assets(
+        env.route.DeleteOrphanedAssetsPayload(
+            library="Movies",
+            scope="collections",
+            folderNames=["Only On TV Collection"],
+        )
+    )
+    assert result["deleted"] == []
+    assert tv_collection.is_dir()
+
+
+def test_collections_inside_the_library_root_are_not_movie_orphans(
+    orphaned_assets_env,
+    monkeypatch,
+):
+    env = orphaned_assets_env
+    settings = importlib.import_module("app.services.settings")
+    settings.save_settings({
+        "plexUrl": "http://plex.test",
+        "plexToken": "token",
+        "libraryMappings": [{
+            "library": "Movies",
+            "assetPath": str(env.root),
+            "collectionsPath": str(env.root),
+        }],
+    })
+    collection_folder = env.root / "Hero Collection"
+    collection_folder.mkdir()
+    monkeypatch.setattr(
+        env.route.collections_router,
+        "_collection_audit_rows",
+        lambda _library: [_collection_row("Hero Collection", "collection-1")],
+    )
+
+    data = env.route.list_orphaned_assets(library="Movies")
+    orphaned = [item["folderName"] for item in data["items"]]
+
+    assert "Hero Collection" not in orphaned
+    assert "Step Brothers (2008)" in orphaned
+
+
+class _Section:
+    def __init__(self, title, collections=None, error=None):
+        self.title = title
+        self._collections = collections or []
+        self._error = error
+
+    def collections(self):
+        if self._error:
+            raise self._error
+        return list(self._collections)
+
+
+def _collections_router_with_sections(monkeypatch, sections):
+    router = importlib.reload(importlib.import_module("app.routers.collections"))
+    plex = SimpleNamespace(library=SimpleNamespace(sections=lambda: list(sections)))
+    monkeypatch.setattr(router, "get_plex", lambda: plex)
+    return router
+
+
+def test_collection_audit_rows_fail_when_plex_collections_cannot_be_read(monkeypatch):
+    router = _collections_router_with_sections(
+        monkeypatch,
+        [_Section("Movies", error=RuntimeError("timed out"))],
+    )
+
+    with pytest.raises(router.HTTPException) as exc_info:
+        router._collection_audit_rows("Movies")
+
+    assert exc_info.value.status_code == 502
+
+
+def test_collection_audit_rows_fail_when_library_is_missing_from_plex(monkeypatch):
+    router = _collections_router_with_sections(monkeypatch, [_Section("TV Shows")])
+
+    with pytest.raises(router.HTTPException) as exc_info:
+        router._collection_audit_rows("Movies")
+
+    assert exc_info.value.status_code == 404
+
+
+def test_collection_audit_rows_allow_a_library_without_collections(monkeypatch):
+    router = _collections_router_with_sections(monkeypatch, [_Section("Movies")])
+
+    assert router._collection_audit_rows("Movies") == []
+
