@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 7.2.1 — 2026-09-28
 
 - Protect asset folders from orphan cleanup when their directory is shared with
   another library or with collections (for example one shared `Collections`
