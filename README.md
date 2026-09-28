@@ -1,175 +1,144 @@
 # KAM — Kometa Asset Manager
 
-KAM is a small web app that makes Kometa/Plex artwork management painless. It lets you upload artwork for **movies, TV series, seasons, and collections** and will:
+KAM is a web app for managing the artwork in your [Kometa](https://kometa.wiki) asset
+folders. It connects to your Plex server, shows every movie, TV show, and collection
+next to the artwork Kometa will use, and lets you upload, import, and clean up that
+artwork from your browser. Files are always saved with the exact names and layout
+Kometa expects.
 
-> ## KAM 7.2 adds asset cleanup for libraries and collections!
->
-> KAM can now find orphaned asset folders and duplicate folders in movie, TV, and collection roots. Review each result, keep or exclude what belongs, and process duplicate choices individually or all at once.
+> KAM is an add-on for Kometa, not a replacement. Kometa still applies the artwork to
+> Plex on its normal runs; KAM manages the files in its asset directories.
 
-* **Import existing Plex assets** — movie posters/backgrounds, series posters/backgrounds, **season posters/backgrounds**, and title cards — into your mapped Kometa assets structure
-* **Import Mediux series zip files** from a show page and map the files into Kometa names automatically
-* Convert uploads to **`.jpg`**
-* **Replace** existing `poster.*`, `background.*`, `SeasonNN.*`, `SeasonNN_background.*`, or `SNNENN.*` in the correct asset folder
-* **Send saved artwork directly to Plex** on demand, or automatically after uploads when enabled
-* Keep everything in the **same structure Kometa expects**
-* Provide a simple web UI with a **fallback** image to quickly spot missing artwork
-* Let you **exclude** specific movies, shows, or collections from KAM until you re-include them
-* Find **orphaned asset folders**, with persistent exclusions for known false positives
-* Resolve **duplicate asset folders** individually or in one staged batch, switching KAM to the retained folder before removing alternatives
-* Use either KAM's lightweight built-in login or authentication handled by your reverse proxy
-* Run a **Setup Check** from Settings to confirm saved Plex credentials, writable asset paths, collection folders, and config persistence
+**Latest release:** [github.com/thedinz/KAM/releases/latest](https://github.com/thedinz/KAM/releases/latest)
 
 ---
 
-## Latest release
+## Contents
 
-**Download the latest stable release:** [github.com/thedinz/KAM/releases/latest](https://github.com/thedinz/KAM/releases/latest)
-
-For Docker installs, pull the current stable image:
-
-```bash
-docker pull ghcr.io/thedinz/kam:latest
-```
-
-Older releases remain available for rollbacks and pinned installs, but start with the latest release unless you specifically need an older version.
-
----
-
-## ⚠️ Important constraints
-
-> **KAM maps each Plex library to a single assets directory inside the container (e.g., Kids Movies → `/assets/Kids Movies`).**
->
-> **Collections can use a shared directory such as `/assets/Collections`, and you can override that per library or per Plex collection section from the Settings UI.**
-
-What this means in practice:
-
-* Pick **one** assets root for a given library and stick with it.
-* If you have multiple Plex libraries, each should have its **own** mapped asset directory.
-* Keep collection folders in a shared `Collections` directory, or opt into per-library/section overrides (see **Settings → Libraries**).
+- [What KAM does](#what-kam-does)
+- [How it works](#how-it-works)
+- [Requirements](#requirements)
+- [Installation](#installation)
+  - [1. Prepare Kometa](#1-prepare-kometa)
+  - [2. Run KAM with Docker Compose](#2-run-kam-with-docker-compose)
+  - [Docker run](#docker-run)
+  - [Unraid](#unraid)
+  - [3. First-time setup](#3-first-time-setup)
+- [Using KAM](#using-kam)
+- [Configuration reference](#configuration-reference)
+- [Security](#security)
+- [Updating](#updating)
+- [Troubleshooting](#troubleshooting)
+- [FAQ](#faq)
+- [Development](#development)
 
 ---
 
-## Required Kometa settings
+## What KAM does
 
-For KAM to function properly, Kometa needs to be configured to create and manage asset folders ahead of time.  
-In your Kometa configuration (example shown for **Movies**), make sure these settings are enabled:
+**Browse your libraries**
+- Every mapped Plex library appears in the sidebar, with its collections nested below it.
+- Each item shows its local poster (or the Plex poster, when there is no local one) and
+  whether KAM found its Kometa asset folder.
+- Search, sort by title or recently added, and filter to items that **Need Attention**.
 
-```yaml
-Movies:
-  operations:
-    assets_for_all: true
-    assets_for_all_collections: true
-  settings:
-    create_asset_folders: true
-```
+**Manage artwork**
+- Upload posters and backgrounds for movies, shows, and collections.
+- Upload season posters, season backgrounds, and episode title cards for TV shows.
+- Uploads are converted to `.jpg`, and any older `poster.png` / `poster.webp` style
+  variants are removed so Kometa uses the new file.
+- **Import Assets** copies the artwork currently in Plex into your asset folders, for a
+  single item or a whole library at once.
+- **Import Mediux zip** on a show page maps a Mediux set (show poster, backdrop,
+  seasons, and title cards) to Kometa file names automatically.
+- **Send to Plex** pushes a saved asset straight to Plex, or enable it automatically
+  after every upload.
 
-### Why this is required
-- **KAM does not create folders.** It only places artwork into existing Kometa asset folders.  
-- These Kometa options ensure asset folders are created automatically for every movie, show, and collection.  
-- Once the folders exist, KAM will safely upload and replace artwork inside them.  
+**Keep folders matched**
+- KAM matches Plex items to existing asset folders, tolerating year, edition, and
+  punctuation differences.
+- Anything it cannot match safely is marked **Not Ready**; pick the right folder with
+  the built-in folder finder.
+- **Mapping Scan** checks a whole library at once and lets you confirm matches in bulk.
 
-⚠️ If the folders don’t exist first, uploads from KAM will fail.
+**Clean up**
+- **Orphaned Assets** finds folders that no longer belong to anything in Plex.
+- **Duplicate Folders** finds items with more than one folder and keeps the one you
+  choose.
+- Exclude items from KAM, or mark known orphan false positives, and restore them later.
 
-⚠️ REMEMBER, this is an addon for Kometa, not a standalone application.
+**Everything else**
+- **Setup Check** confirms Plex access, writable asset paths, collection folders, and
+  that your settings will survive container updates.
+- Optional built-in login, or hand authentication to your reverse proxy.
+- Light and dark themes.
 
 ---
 
-## How asset mapping works (flexible)
+## How it works
 
-Inside the container, KAM writes to an **assets root** (examples assume `/assets` inside the container).
-You can bind-mount **any** host path to that internal path.
-
-Examples:
-
-* Unraid/host → container
-
-  * `/mnt/user/media/assets` → `/assets`
-* Custom mapping
-
-  * `/mystuff` → `/assets`
-
-KAM only cares about the **internal** path (e.g., `/assets`). You choose what host path it points to.
-
-**Typical structure under the mapped root:**
+KAM reads your library contents from Plex and reads/writes files in the asset folders
+you mount into its container. It never creates asset folders; Kometa does that. The
+layout KAM writes is Kometa's standard asset layout:
 
 ```
 /assets
-  /Movies
-    /The Matrix (1999)
-      poster.jpg
-      background.jpg
-
-  /TV Shows
-    /Breaking Bad
-      poster.jpg
-      background.jpg
-      Season01.jpg
-      Season01_background.jpg
-      Season02.jpg
-      Season02_background.jpg
-      Season03.jpg
-      Season03_background.jpg
-      S01E01.jpg
-      S01E02.jpg
-
-  /Collections
-    /Batman Collection
-      poster.jpg
-      background.jpg
+├── Movies
+│   └── The Matrix (1999)
+│       ├── poster.jpg
+│       └── background.jpg
+├── TV Shows
+│   └── Breaking Bad
+│       ├── poster.jpg
+│       ├── background.jpg
+│       ├── Season01.jpg              ← season poster
+│       ├── Season01_background.jpg   ← season background
+│       ├── S01E01.jpg                ← episode title card
+│       └── ...
+└── Collections
+    └── Batman Collection
+        ├── poster.jpg
+        └── background.jpg
 ```
 
-> ✅ **Season posters, season backgrounds, and title cards** are stored as flat files **in the series folder** (`Season01.jpg`, `Season01_background.jpg`, `S01E01.jpg`, …).
-> ❌ No `Season 01/` subfolders are used by KAM.
-
-### Collection directory overrides
-
-KAM can read collections from `COLLECTIONS_ROOT` (commonly `/assets/Collections`) and from collection folders saved in **Settings → Libraries**. If you organize collections in multiple roots, set a library's **collections folder** or add collection-section overrides. Behind the scenes, each library supports a `collectionSections` array so you can:
-
-* Point a whole library at a different collections path.
-* Target a specific Plex collection section and bind it to its own collections directory.
-
-Overrides inherit the normal sanitization rules, and the folder finder offers suggestions for any directories KAM sees under `/assets`.
+Season artwork and title cards are flat files in the show folder. KAM does not use
+`Season 01/` subfolders.
 
 ---
 
 ## Requirements
 
-* Docker (Unraid, Linux, macOS, or Windows)
-* Read/write access to your media **assets** directories (bind-mounted)
-* Optional: Reverse proxy (Caddy/Traefik/Nginx) if you want TLS or external auth
+- **Docker** (Linux, Unraid, macOS, or Windows).
+- **Plex Media Server** and a Plex token
+  ([how to find your token](https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/)).
+- **Kometa** set up to create asset folders (see below).
+- Read/write access to your Kometa asset directory.
 
 ---
 
-## Quick Start (Docker)
+## Installation
 
-### 1) Pull the image
+### 1. Prepare Kometa
 
-```bash
-docker pull ghcr.io/thedinz/kam:latest
+KAM only writes into folders that already exist, so Kometa must create a folder for
+every item. In your Kometa config, enable these for each library you want to manage:
+
+```yaml
+libraries:
+  Movies:
+    operations:
+      assets_for_all: true
+      assets_for_all_collections: true
+    settings:
+      create_asset_folders: true
 ```
 
-### 2) Run (simple)
+Run Kometa once afterwards so the folders exist. If a folder is missing, KAM reports
+the item as **Not Ready** and uploads for it fail.
 
-Expose KAM on **7171** (mapped to the container's port **8000**) and map your assets
-and persistent configuration storage:
+### 2. Run KAM with Docker Compose
 
-```bash
-docker run -d \
-  --name kam \
-  -p 7171:8000 \
-  -e KAM_ASSETS_ROOT=/assets \
-  -e COLLECTIONS_ROOT=/assets/Collections \
-  -v /mnt/user/appdata/kam:/config \
-  -v /mnt/user/media/assets:/assets \
-  ghcr.io/thedinz/kam:latest
-```
-
-Open: `http://<your-host>:7171/`
-
-> If your assets live elsewhere, just change the host side of `-v` (e.g., `-v /mystuff:/assets`).
-> The published image listens on container port `8000`; change the host side of `-p 7171:8000` if you want a different external port.
-
-### 3) Docker Compose
+Create a `docker-compose.yml`:
 
 ```yaml
 services:
@@ -183,329 +152,320 @@ services:
       COLLECTIONS_ROOT: /assets/Collections
       PLEX_VERIFY_SSL: "true"
     volumes:
-      - /mnt/user/appdata/kam:/config
-      - /mnt/user/media/assets:/assets
+      - /path/to/kam/config:/config
+      - /path/to/kometa/assets:/assets
     restart: unless-stopped
 ```
 
-Bring it up:
+Replace the two host paths on the left of each volume:
+
+| Volume | What to point it at |
+|---|---|
+| `/config` | An empty folder where KAM stores its settings. Required, or settings are lost when the container is recreated. |
+| `/assets` | Your Kometa asset directory (the folder Kometa's `asset_directory` uses). |
+
+Then start it:
 
 ```bash
 docker compose up -d
 ```
 
-Set `PLEX_VERIFY_SSL=false` if your Plex server uses a self-signed certificate and you need KAM to skip TLS verification when contacting Plex.
+Open `http://<your-server>:7171/`.
 
-### Migrating older Compose installs
+The container listens on port `8000`. Change the left side of `7171:8000` to use a
+different port.
 
-Older Compose examples used `env_file: .env`. That still works because Docker passes
-those values into KAM as normal environment variables.
+### Docker run
 
-To remove the extra file, copy any values you still use from `.env` into the
-`environment:` block shown above, remove the `env_file:` block from your Compose
-file, then run:
+The same setup without Compose:
 
 ```bash
+docker run -d \
+  --name kam \
+  -p 7171:8000 \
+  -e KAM_ASSETS_ROOT=/assets \
+  -e COLLECTIONS_ROOT=/assets/Collections \
+  -v /path/to/kam/config:/config \
+  -v /path/to/kometa/assets:/assets \
+  --restart unless-stopped \
+  ghcr.io/thedinz/kam:latest
+```
+
+### Unraid
+
+Install **Kometa Asset Manager** from Community Applications, then in the template:
+
+1. Map a config folder such as `/mnt/user/appdata/kam` to `/config`.
+2. Map your Kometa asset folder (for example `/mnt/user/appdata/kometa/assets`) to `/assets`.
+3. Leave `KAM_ASSETS_ROOT=/assets` and `COLLECTIONS_ROOT=/assets/Collections` unless your
+   collection folders live elsewhere.
+4. Set `PLEX_VERIFY_SSL=false` only if Plex uses a self-signed HTTPS certificate.
+
+### 3. First-time setup
+
+Open KAM and go to **Settings**:
+
+1. **Plex** — enter your Plex URL (for example `http://192.168.1.10:32400`) and Plex
+   token, then save.
+2. **Libraries** — for each Plex library you want to manage, choose its **asset folder**
+   inside `/assets` (for example `/assets/Movies`). Optionally set a **collections
+   folder** if that library's collections are not in `COLLECTIONS_ROOT`.
+3. **Setup Check** — run it to confirm Plex, folders, and config persistence are working.
+4. **Login** (optional) — set a username and password, or choose reverse proxy auth. See
+   [Security](#security).
+
+Your mapped libraries now appear in the sidebar.
+
+> Give each Plex library its own asset folder. Collections can share one folder such as
+> `/assets/Collections`, or be overridden per library.
+
+---
+
+## Using KAM
+
+### Uploading artwork
+
+Open a movie, show, or collection and use the upload button on any artwork card. Any
+common image format works; KAM saves it as `poster.jpg`, `background.jpg`,
+`SeasonNN.jpg`, `SeasonNN_background.jpg`, or `SNNENN.jpg` and replaces the previous
+file.
+
+On a show page, **Import Mediux zip** accepts a Mediux set with names such as
+`Show (2024).jpg`, `Show (2024) - Backdrop.jpg`, `Show (2024) - Season 1.jpg`, and
+`Show (2024) - S1 E1.jpg`.
+
+### Importing artwork from Plex
+
+Use **Import Assets** on a library to copy what Plex currently shows into your asset
+folders, choosing which artwork types to include. Individual detail pages also have
+import buttons. Anything that fails is listed under **Import Errors** so you can retry.
+
+### Sending artwork to Plex
+
+Each saved asset has **Send to Plex**, which uploads the local file to the matching Plex
+item without changing the asset. To do this automatically after every upload, enable
+**Send artwork to Plex automatically after uploads** under **Settings → Plex** (off by
+default). If Plex rejects the update, the upload is still saved. If you use Kometa
+overlays, Kometa re-applies them on its next run.
+
+### Fixing unmatched items
+
+Items without a matched folder show a **Not Ready** badge and are listed under
+**Needs Attention**. Click the badge to open the folder finder, browse or search your
+asset folders, and assign the right one. KAM remembers the choice.
+
+For a whole library, open **Mapping Scan** to review suggested matches and assign them in
+bulk.
+
+### Excluding items
+
+Exclude any movie, show, or collection from its detail page to hide it from KAM.
+Restore it from **Settings → Exclusions**.
+
+### Cleaning up folders
+
+The **Library maintenance** section of the sidebar has two tools. Open them from a
+library to audit its asset folder, or from that library's **Collections** view to audit
+the collections folder. The page always shows the exact folder being checked.
+
+- **Orphaned Assets** lists folders that nothing in Plex claims. Select folders to
+  delete, or mark a false positive **Exclude — asset exists** to hide it from future
+  audits (use **Show excluded** to bring it back).
+- **Duplicate Folders** lists items that match more than one folder. Pick the folder to
+  keep on each card, then **Keep selected folder** or **Process all**. KAM switches to the
+  kept folder before removing the others.
+
+Folders shared with other libraries or collections are protected, and KAM re-checks Plex
+immediately before deleting anything.
+
+> **Deletion is permanent.** Review the list and keep a backup of your asset folders.
+
+---
+
+## Configuration reference
+
+Most settings are made in the UI and saved to `/config/settings.json`. Environment
+variables cover paths and deployment options.
+
+### Paths
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `KAM_ASSETS_ROOT` | `/assets` | Asset root inside the container. |
+| `COLLECTIONS_ROOT` | `<assets root>/Collections` | Default folder for collection assets. |
+| `KAM_STATE_ROOT` | `/config` | Folder for KAM's saved state. |
+| `KAM_SETTINGS_PATH` | `<state root>/settings.json` | Override the settings file location. |
+| `KAM_FOLDER_OVERRIDES_PATH` | `<state root>/folder_overrides.json` | Override the saved folder assignments file. |
+| `KAM_EXCLUSIONS_PATH` | `<state root>/exclusions.json` | Override the excluded items file. |
+| `KAM_ORPHAN_EXCLUSIONS_PATH` | `<state root>/orphan_exclusions.json` | Override the orphan audit exclusions file. |
+| `KAM_LEGACY_STATE_ROOT` | — | Older state folder to read folder assignments from after a migration. |
+
+### Plex and logging
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `PLEX_VERIFY_SSL` | `true` | Set to `false` for a Plex server with a self-signed HTTPS certificate. |
+| `KAM_LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING`, or `ERROR`. |
+
+### Authentication and access
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `KAM_AUTH_MODE` | from Settings | `builtin` or `reverse_proxy`. |
+| `KAM_AUTH_USERNAME` | from Settings | Built-in login username. |
+| `KAM_AUTH_PASSWORD` | from Settings | Built-in login password. Setting a password turns the login on. |
+| `KAM_AUTH_COOKIE` | `kam_auth` | Session cookie name. |
+| `KAM_AUTH_TOKEN_TTL_SECONDS` | `604800` (7 days) | How long a login lasts. |
+| `KAM_AUTH_COOKIE_SECURE` | auto | `true` forces an HTTPS-only cookie; auto-detected otherwise. |
+| `KAM_CORS_ORIGINS` | off | Comma-separated origins allowed to call the API from another website. |
+
+### Saved files
+
+| File | Contents |
+|---|---|
+| `settings.json` | Theme, Plex URL and token, login settings, and library mappings. |
+| `folder_overrides.json` | Folders you assigned with the folder finder or Mapping Scan. |
+| `exclusions.json` | Items hidden from KAM. |
+| `orphan_exclusions.json` | Folders hidden from the orphan audit. |
+
+Installs that stored these files in `/data` are migrated automatically: KAM keeps using
+an existing `/data/*.json` file until a `/config` copy exists.
+
+---
+
+## Security
+
+KAM can read your Plex token and delete asset folders, so do not expose it to the
+internet without protection.
+
+- **Built-in login:** set a username and password under **Settings → Login** (or with
+  `KAM_AUTH_USERNAME` / `KAM_AUTH_PASSWORD`). Without a password, anyone who can reach KAM
+  can use it.
+- **Reverse proxy auth:** choose **Reverse proxy auth** (or `KAM_AUTH_MODE=reverse_proxy`)
+  if a proxy such as Authelia, Authentik, or an Nginx/Traefik/Caddy auth layer already
+  protects KAM. KAM then skips its own login, so only use this behind a proxy that
+  enforces authentication.
+- For remote access, put KAM behind a reverse proxy with HTTPS rather than forwarding the
+  port directly.
+
+Installs that only had a password from older versions keep working. The first login asks
+you to choose a username.
+
+---
+
+## Updating
+
+```bash
+docker compose pull
 docker compose up -d
 ```
 
-After the container starts with the inline values, the old `.env` file is no longer
-needed.
+With `docker run`, pull `ghcr.io/thedinz/kam:latest`, remove the old container, and
+start it again with the same options. On Unraid, use **Update** on the container.
 
----
+Your settings and artwork are safe as long as `/config` and `/assets` are mounted from
+the host.
 
-## Persistent configuration
+**Image tags**
 
-KAM stores persistent JSON files in `/config` by default. Bind-mount `/config` to a
-directory on the host (for example, `/mnt/user/appdata/kam`) to persist these values
-across image updates, container recreation, and Unraid upgrades.
+| Tag | Use |
+|---|---|
+| `latest` | Current stable release. |
+| `vX.Y.Z` | A specific release, for pinning or rolling back. |
+| `dev` | Development builds. May be unstable. |
 
-The main files are:
-
-* `settings.json` — theme, Plex URL/token, auth mode/username/password, and library mappings.
-* `folder_overrides.json` — per-item folder assignments made by the folder finder.
-* `exclusions.json` — movies, shows, and collections hidden from KAM until re-included.
-* `orphan_exclusions.json` — asset folders hidden from orphan audits until restored.
-
-You can split state into another mounted directory by setting `KAM_STATE_ROOT`, or use
-the explicit file overrides `KAM_SETTINGS_PATH`, `KAM_FOLDER_OVERRIDES_PATH`, and
-`KAM_EXCLUSIONS_PATH`. Orphan-audit exclusions can be stored separately with
-`KAM_ORPHAN_EXCLUSIONS_PATH`. If an older install kept per-item folder assignments
-in a separate location, set `KAM_LEGACY_STATE_ROOT` to that directory so KAM can
-still read the old `folder_overrides.json` while it writes new state to the
-current config location.
-
-> Upgrades from previous versions automatically reuse an existing
-> `/data/*.json` file if it is present and no newer `/config` file exists, so saved
-> settings, folder assignments, and exclusions are retained while migrating to `/config`.
-> Folder assignments are also merged from legacy fallback locations when the current
-> `folder_overrides.json` is missing entries.
-
----
-
-## Managing exclusions
-
-Sometimes you may want to temporarily hide a title from KAM—for example, if you are
-still preparing artwork or simply do not want it managed. Any movie, TV show, or
-collection can be excluded directly from its detail page. The item will disappear from
-library searches and lists while excluded.
-
-To re-include an item, visit **Settings → Exclusions**. The page lists every excluded
-item, including its library and type, with a one-click **Include** button that restores
-it immediately. You can also refresh the list from the same screen if you make changes
-from another browser tab.
-
----
-
-## Cleaning up orphaned and duplicate asset folders
-
-Each mapped library has **Orphaned Assets** and **Duplicate Folders** tools in the
-sidebar. Open them from a movie or TV library to audit that library's normal asset
-root. Open them while viewing **Collections** to audit the mapped collections root
-instead; the page shows **Collections cleanup** and the exact asset root being checked.
-
-### Orphaned Assets
-
-The orphan audit compares every direct child folder with the current Plex items in
-that scope. KAM recognizes plausible title, year, edition, and collection-name
-variations and rechecks the selected folders immediately before deletion.
-
-* Select one or more confirmed orphan folders and delete them together.
-* Choose **Exclude — asset exists** for a known false positive. The folder and its
-  artwork remain in place and the decision is saved in `orphan_exclusions.json`.
-* Enable **Show excluded** to review exclusions and include a folder in future audits
-  again.
-* Library-asset and collection-asset exclusions are stored separately, even when
-  their folder names are the same.
-
-### Duplicate Folders
-
-The duplicate audit groups multiple folders that plausibly belong to the same Plex
-asset. Select the folder to retain on each card, then use **Keep selected folder** for
-one result or **Process all** to apply the full staged list.
-
-If the retained folder is not the one KAM currently uses, KAM saves that folder
-assignment first and only then removes the verified alternatives. Exact filesystem
-names are preserved, including folders that differ only by case or otherwise look
-identical in the browser.
-
-> **Cleanup deletion is permanent.** Review the displayed asset root, retained-folder
-> choices, and confirmation summary carefully. Keep a backup of your asset directories
-> if you may need to restore removed artwork later.
-
----
-
-## Sending artwork to Plex
-
-Every saved poster, background, season image, and episode title card has a
-**Send to Plex** action on its detail page. KAM uploads the existing local asset to the
-matching Plex item while leaving the Kometa asset file unchanged.
-
-To send new uploads to Plex immediately, enable **Send artwork to Plex automatically
-after uploads** in **Settings → Plex**. This setting is off by default so upgrades do not
-unexpectedly change Plex artwork.
-
-If the Plex update fails, the KAM upload still succeeds and the asset remains available
-for a manual retry or a later Kometa run. When Kometa overlays are configured, the
-direct Plex update shows the clean asset first; Kometa can rebuild the overlaid version
-during its next normal run.
-
----
-
-## Unraid setup
-
-Kometa Asset Manager can now be found in the Unraid app store. Mount both your Kometa
-asset directory **and** a persistent config directory (e.g., `/mnt/user/appdata/kam ->
-/config`), set `KAM_ASSETS_ROOT` and `COLLECTIONS_ROOT` to match the container paths,
-set `PLEX_VERIFY_SSL=false` only if your Plex server uses a self-signed HTTPS
-certificate, edit the template variables, and GO!
-
----
-
-## Usage overview
-
-1. Open the web UI.
-2. Open **Settings → Setup Check** if you want to verify Plex, asset paths, collection folders, and config persistence before importing artwork.
-3. Choose the item (movie, series, collection, season, or title card) you want to update.
-4. If the item shows a red “Not Ready” badge, activate it to open the **folder finder** dialog, browse/search your Kometa assets, and assign the correct folder. Once paired the badge flips to ✔ Ready.
-5. Upload artwork. KAM will:
-
-   * Convert to `.jpg`
-   * Remove any existing `poster.*`, `background.*`, `SeasonNN.*`, `SeasonNN_background.*`, or `SNNENN.*` for that item
-   * Save the new file with the correct name
-
-If an item has **no** artwork yet, KAM shows a **fallback** image in the UI so you can spot what’s missing fast.
-
-On a TV series page, **Import Mediux zip** accepts files such as `Show (2024).jpg`, `Show (2024) - Backdrop.jpg`, `Show (2024) - Season 1.jpg`, and `Show (2024) - S1 E1.jpg`, then saves them as `poster.jpg`, `background.jpg`, `Season01.jpg`, and `S01E01.jpg`.
-
----
-
-## Folder rules & naming (exact)
-
-KAM follows Kometa’s layout and **does not** invent proprietary paths.
-
-* **Movies**
-
-  ```
-  Movies/<Title (Year)>/
-    poster.jpg
-    background.jpg
-  ```
-
-* **TV Series** (series poster/background + seasons + title cards)
-
-  ```
-  TV Shows/<Show Name>/
-    poster.jpg
-    background.jpg
-    Season01.jpg
-    Season01_background.jpg
-    Season02.jpg
-    Season02_background.jpg
-    Season03.jpg
-    Season03_background.jpg
-    S01E01.jpg
-    S01E02.jpg
-    S02E01.jpg
-    ...
-    # (Optionally Season00.jpg if you use Specials)
-  ```
-
-* **Collections**
-
-  ```
-  Collections/<Collection Name>/
-    poster.jpg
-    background.jpg
-  ```
-
-**Sanitization:** KAM applies a **sane level** of filename/folder sanitization to avoid OS/share problems while preserving Plex/Kometa conventions.
-
----
-
-## Multiple libraries (recommended patterns)
-
-Because of the “1 library ↔ 1 directory” constraint,
-
-Keep all library roots **under one** top-level directory and mount that top-level to `/assets`.
-Collections can share a single `/assets/Collections` directory, or you can map specific Plex libraries/sections to alternate collection directories using the **Settings → Libraries** overrides.
-
----
-
-## Security & networking
-
-KAM supports two authentication modes:
-
-* **Built-in auth** — set **Settings → Login → Built-in auth** and enter a username and password. You can also provide `KAM_AUTH_USERNAME` and `KAM_AUTH_PASSWORD` as environment variables.
-* **Reverse proxy auth** — set **Settings → Login → Reverse proxy auth** or `KAM_AUTH_MODE=reverse_proxy`. In this mode KAM skips its own login screen and trusts the upstream proxy.
-
-Existing password-only installations remain compatible. On the first login after upgrading, KAM asks the user to choose a username and verifies the existing password before saving it. Older integrations that post only a password continue to work until a username is configured.
-
-Additional auth environment variables:
-
-* `KAM_AUTH_COOKIE` changes the session cookie name.
-* `KAM_AUTH_TOKEN_TTL_SECONDS` changes the session lifetime.
-* `KAM_AUTH_COOKIE_SECURE=true` forces the login cookie to be HTTPS-only.
-* `KAM_CORS_ORIGINS` allows cross-origin browser access from a comma-separated list of
-  origins (for example `https://dashboard.example.com`). It is off by default because
-  the KAM UI does not need it.
-
-Run KAM on a trusted LAN, or put it behind a reverse proxy (Caddy/Traefik/Nginx) for TLS and external access. Bind to localhost and reverse-proxy if you don't want it exposed directly.
-
-**Example (Traefik labels)** — keep on your proxy if desired (not required):
-
-```yaml
-labels:
-  - "traefik.enable=true"
-  - "traefik.http.routers.kam.rule=Host(`kam.local`)"
-  - "traefik.http.routers.kam.entrypoints=websecure"
-  - "traefik.http.routers.kam.tls=true"
-```
-
----
-
-## Building the frontend SPA
-
-The React single-page app lives under `frontend/`.
-To rebuild the production bundle (outputs to `app/web/`):
-
-```bash
-cd frontend
-npm install
-npm run build
-```
-
-Only the shared fallback image (`app/web/fallback.png`) and the direct movie-page fallback (`app/web/movie.html`) are tracked in Git.
-The compiled bundle (`app/web/index.html` and `app/web/spa-assets/`) is generated at build-time.
-Re-run `npm run build` whenever frontend dependencies change or before packaging/deploying the app.
-Because `app/web/` is also the build output directory, check `git status` after local builds and do not commit generated bundle files.
-
----
-
-## Updates
-
-```bash
-docker pull ghcr.io/thedinz/kam:latest
-docker stop kam && docker rm kam
-# re-create with your docker run or docker compose up -d
-```
-
-> You can pin a release tag such as `ghcr.io/thedinz/kam:v4.5`, or use SHA tags if you prefer pinning a specific build (e.g., `ghcr.io/thedinz/kam:sha-xxxxxxxx`). On Unraid, use the **Update** action in the container UI.
+See [CHANGELOG.md](CHANGELOG.md) for what changed in each release.
 
 ---
 
 ## Troubleshooting
 
-**Artwork isn’t appearing in Plex/Kometa**
+**No libraries in the sidebar**
+Add Plex credentials under **Settings → Plex**, then map at least one library under
+**Settings → Libraries**.
 
-* Plex may cache images. Try “Refresh Metadata” or give it time.
-* Confirm the file exists and is correctly named in the expected asset folder.
-* For **seasons/title cards**, verify the file names are `Season01.jpg`, `Season02.jpg`, `Season01_background.jpg`, `S01E01.jpg`, etc. (no subfolders).
+**Everything is Not Ready**
+The library's asset folder is probably wrong, or Kometa has not created folders yet.
+Check the mapping, run **Setup Check**, and confirm `assets_for_all` and
+`create_asset_folders` are enabled in Kometa.
 
-**Nothing changes after upload**
+**"Plex connect failed" or certificate errors**
+Check the Plex URL is reachable from inside the container (use the server's IP rather
+than `localhost`). For a self-signed HTTPS certificate, set `PLEX_VERIFY_SSL=false`.
 
-* Double-check your volume mapping: `-v <host-path>:/assets`.
-* Ensure you’re pairing the right **library** with the right **directory** (see constraint).
-* Verify filesystem **permissions** allow the container to write.
+**Uploads fail with a permission error**
+The container needs write access to your asset folders. Check the folder's owner and
+permissions on the host.
 
-**Permission errors (EPERM/EACCES)**
+**New artwork does not show in Plex**
+KAM saves files for Kometa, which applies them on its next run. Use **Send to Plex** for
+an immediate update. Plex may also cache images for a while.
 
-* On Unraid, mapping under `/mnt/user/...` typically avoids permission headaches.
-* Ensure your host user/group can read/write the assets directories.
+**Settings disappear after an update**
+`/config` is not mapped to a host folder. Add the volume and save your settings again.
 
-**Fallback image shows**
+**Collections are missing or show the wrong folder**
+Check `COLLECTIONS_ROOT` and any collections folder set for the library under
+**Settings → Libraries**.
 
-* That item has no `poster.jpg` or `background.jpg` (or `SeasonNN.jpg` / `SeasonNN_background.jpg` for seasons, `SNNENN.jpg` for title cards).
-* Upload the file, or confirm the item’s folder/filename matches exactly.
-
-**Collections missing**
-
-* Ensure KAM can reach the collections directory you configured—either the shared `/assets/Collections` folder or any override set under **Settings → Libraries**.
+**More detail**
+Set `KAM_LOG_LEVEL=DEBUG` and check the container logs with `docker logs kam`.
 
 ---
 
 ## FAQ
 
-**Q: Can I use multiple asset roots at the same time?**
-A: KAM expects one main container assets root for browsing, usually `/assets`. Each Plex library then maps to one directory under that root, and collections can use a shared folder or per-library/section overrides from **Settings → Libraries**.
+**Does KAM change my Plex library?**
+Only when you use **Send to Plex** or turn on automatic sending. Otherwise it only reads
+from Plex.
 
-**Q: Can I map the assets directory to any host path?**  
-A: Yes. Bind-mount any host folder to the container’s internal assets path (examples use `/assets`).  
-You could map `/mnt/user/kometa/assets` to `/assets` or map `/mystuff` to `/assets` — KAM doesn’t care.
+**Does KAM keep old artwork?**
+No. Uploading replaces the existing file for that asset. Back up your asset folders if you
+want history.
 
-**Q: What artwork types does KAM handle?**  
-A: `poster.jpg` and `background.jpg` for movies, series, and collections; `SeasonNN.jpg` and `SeasonNN_background.jpg` for seasons; `SNNENN.jpg` for episode title cards (in the series folder).
+**Which image formats can I upload?**
+JPEG, PNG, and WebP. Non-JPEG uploads are converted to `.jpg`; JPEG uploads are saved
+unchanged.
 
-**Q: Does KAM keep the old files?**  
-A: No. It **replaces** any existing `poster.*`, `background.*`, `SeasonNN.*`, `SeasonNN_background.*`, or `SNNENN.*` for the selected item.
+**Can I map any host folder?**
+Yes. Only the path inside the container matters, so mount your Kometa asset folder at
+`/assets` from wherever it lives.
 
-**Q: Which image formats can I upload?**  
-A: Any common format; KAM converts to `.jpg` on save.
+**Can two libraries share one asset folder?**
+Give each library its own folder. Collections can share a single folder.
 
 ---
 
-## Backup & restore
+## Development
 
-* Your artwork lives in the **host assets** directories you mapped (not inside the container).
-* Back up those folders using your usual NAS/server backup tool.
-* Container can be recreated at any time without losing artwork.
+KAM is a FastAPI backend (`app/`) with a React + Vite frontend (`frontend/`).
+
+**Backend**
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt pytest httpx
+uvicorn app.main:app --reload --port 8000
+pytest
+```
+
+**Frontend**
+
+```bash
+cd frontend
+npm install
+npm run dev     # http://localhost:5173, proxies API calls to port 8000
+npm test
+npm run build   # writes the production bundle to app/web/
+```
+
+The production bundle in `app/web/` is generated at build time and is not committed;
+only `fallback.png` and `movie.html` are tracked there. Check `git status` after a local
+build.
+
+**Docker image**
+
+```bash
+docker build -t kam .
+```
