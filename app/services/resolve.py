@@ -621,6 +621,20 @@ def resolve_existing_dir_or_422(library: str, folder_name: str) -> str:
     raise FileNotFoundError(f"Assets library not found: {last_base}")
 
 
+def is_direct_child_name(name: str) -> bool:
+    """Return whether *name* can only address a direct child of a base folder.
+
+    Folder names come from the browser, so absolute paths, separators, and
+    dot segments must never be joined onto an asset root.
+    """
+    text = str(name or "")
+    if not text.strip() or text in (".", ".."):
+        return False
+    if "/" in text or "\\" in text or "\x00" in text:
+        return False
+    return not os.path.isabs(text) and not os.path.splitdrive(text)[0]
+
+
 def _resolve_within_base(base: str, library: str, folder_name: str) -> Optional[str]:
     if not os.path.isdir(base):
         return None
@@ -631,7 +645,7 @@ def _resolve_within_base(base: str, library: str, folder_name: str) -> Optional[
 
     # 1) Fast path: exact dir exists
     exact = os.path.join(base, raw)
-    if os.path.isdir(exact):
+    if is_direct_child_name(raw) and os.path.isdir(exact):
         return exact
 
     # 2) Try normalized match among existing dirs

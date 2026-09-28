@@ -7,12 +7,23 @@ import zipfile
 
 import pytest
 from fastapi import HTTPException
+from PIL import Image
 from starlette.datastructures import UploadFile
 
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
+
+
+def _image_bytes(image_format: str, color=(200, 30, 30)) -> bytes:
+    buffer = io.BytesIO()
+    mode = "RGBA" if image_format == "PNG" else "RGB"
+    Image.new(mode, (4, 6), color).save(buffer, format=image_format)
+    return buffer.getvalue()
+
+
+JPEG_BYTES = _image_bytes("JPEG")
 
 
 def _setup_env(tmp_path, monkeypatch):
@@ -90,12 +101,13 @@ async def _invoke_title_card_upload(upload_module, library, folder, content: byt
 def test_upload_movie_writes_file(tmp_path, monkeypatch):
     upload_module, target_dir, library, folder = _setup_env(tmp_path, monkeypatch)
 
-    response = asyncio.run(_invoke_upload(upload_module, library, folder, b"poster-bytes"))
+    response = asyncio.run(_invoke_upload(upload_module, library, folder, JPEG_BYTES))
 
     assert response == {"ok": True, "path": str(target_dir / "poster.jpg")}
     poster_path = target_dir / "poster.jpg"
     assert poster_path.exists()
-    assert poster_path.read_bytes() == b"poster-bytes"
+    # JPEG uploads are stored untouched so they are never recompressed.
+    assert poster_path.read_bytes() == JPEG_BYTES
 
 
 def test_upload_movie_reports_automatic_plex_result(tmp_path, monkeypatch):
@@ -112,7 +124,7 @@ def test_upload_movie_reports_automatic_plex_result(tmp_path, monkeypatch):
             "kind": kind,
         },
     )
-    upload_file = UploadFile(filename="poster.jpg", file=io.BytesIO(b"poster-bytes"))
+    upload_file = UploadFile(filename="poster.jpg", file=io.BytesIO(JPEG_BYTES))
 
     response = asyncio.run(
         upload_module.upload_movie_asset(
@@ -149,24 +161,98 @@ def test_upload_season_background_uses_kometa_filename(tmp_path, monkeypatch):
     upload_module, target_dir, library, folder = _setup_env(tmp_path, monkeypatch)
 
     response = asyncio.run(
-        _invoke_season_upload(upload_module, library, folder, b"season-background", "background")
+        _invoke_season_upload(upload_module, library, folder, JPEG_BYTES, "background")
     )
 
     background_path = target_dir / "Season02_background.jpg"
     assert response == {"ok": True, "path": str(background_path)}
-    assert background_path.read_bytes() == b"season-background"
+    assert background_path.read_bytes() == JPEG_BYTES
 
 
 def test_upload_title_card_uses_kometa_episode_filename(tmp_path, monkeypatch):
     upload_module, target_dir, library, folder = _setup_env(tmp_path, monkeypatch)
 
     response = asyncio.run(
-        _invoke_title_card_upload(upload_module, library, folder, b"title-card")
+        _invoke_title_card_upload(upload_module, library, folder, JPEG_BYTES)
     )
 
     title_card_path = target_dir / "S02E03.jpg"
     assert response == {"ok": True, "path": str(title_card_path)}
-    assert title_card_path.read_bytes() == b"title-card"
+    assert title_card_path.read_bytes() == JPEG_BYTES
+
+
+def test_upload_converts_other_formats_and_removes_stale_variants(tmp_path, monkeypatch):
+    upload_module, target_dir, library, folder = _setup_env(tmp_path, monkeypatch)
+    (target_dir / "poster.png").write_bytes(b"old-png-poster")
+    (target_dir / "poster.webp").write_bytes(b"old-webp-poster")
+
+    response = asyncio.run(
+        _invoke_upload(upload_module, library, folder, _image_bytes("PNG"))
+    )
+
+    poster_path = target_dir / "poster.jpg"
+    assert response == {"ok": True, "path": str(poster_path)}
+    with Image.open(poster_path) as saved:
+        assert saved.format == "JPEG"
+    assert not (target_dir / "poster.png").exists()
+    assert not (target_dir / "poster.webp").exists()
+    assert not list(target_dir.glob(".*tmp"))
+
+
+def test_invalid_image_is_rejected_without_touching_existing_art(tmp_path, monkeypatch):
+    upload_module, target_dir, library, folder = _setup_env(tmp_path, monkeypatch)
+    (target_dir / "poster.jpg").write_bytes(JPEG_BYTES)
+
+    with pytest.raises(HTTPException) as excinfo:
+        asyncio.run(_invoke_upload(upload_module, library, folder, b"not an image"))
+
+    assert excinfo.value.status_code == 422
+    assert "Invalid image" in str(excinfo.value.detail)
+    assert (target_dir / "poster.jpg").read_bytes() == JPEG_BYTES
+
+
+@pytest.mark.parametrize(
+    "folder_name",
+    ["../../outside", "Example Movie (2020)/../../../outside", "ABSOLUTE"],
+)
+def test_upload_never_writes_outside_the_assets_root(tmp_path, monkeypatch, folder_name):
+    upload_module, target_dir, library, _folder = _setup_env(tmp_path, monkeypatch)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    if folder_name == "ABSOLUTE":
+        folder_name = str(outside)
+
+    with pytest.raises(HTTPException) as excinfo:
+        asyncio.run(_invoke_upload(upload_module, library, folder_name, JPEG_BYTES))
+
+    assert excinfo.value.status_code == 422
+    assert not (outside / "poster.jpg").exists()
+
+
+def test_mediux_zip_bad_image_keeps_existing_asset(tmp_path, monkeypatch):
+    upload_module, target_dir, library, folder = _setup_env(tmp_path, monkeypatch)
+    (target_dir / "poster.png").write_bytes(b"existing-poster")
+
+    archive_bytes = io.BytesIO()
+    with zipfile.ZipFile(archive_bytes, "w") as archive:
+        archive.writestr("Show (2024).jpg", b"corrupt")
+        archive.writestr("Show (2024) - Backdrop.png", _image_bytes("PNG"))
+    archive_bytes.seek(0)
+
+    response = asyncio.run(
+        upload_module.import_mediux_zip_asset(
+            library=library,
+            folderName=folder,
+            file=UploadFile(filename="Show (2024).zip", file=archive_bytes),
+        )
+    )
+
+    assert response["importedCount"] == 1
+    assert response["errorCount"] == 1
+    assert (target_dir / "poster.png").read_bytes() == b"existing-poster"
+    assert not (target_dir / "poster.jpg").exists()
+    with Image.open(target_dir / "background.jpg") as saved:
+        assert saved.format == "JPEG"
 
 
 def test_mediux_zip_import_maps_sample_names_to_kometa_assets(tmp_path, monkeypatch):

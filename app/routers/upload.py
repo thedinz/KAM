@@ -6,7 +6,6 @@ import io
 import os
 import posixpath
 import re
-import shutil
 from zipfile import BadZipFile, ZipFile
 
 from PIL import Image
@@ -28,12 +27,8 @@ MEDIUX_SEASON_RE = re.compile(
 )
 MEDIUX_POSTER_RE = re.compile(r"(?<![A-Za-z0-9])Poster(?![A-Za-z0-9])", re.IGNORECASE)
 
-def _write_file(dest_path: str, up: UploadFile) -> None:
-    # ensure parent exists (we only ever write into an existing dir)
-    parent = os.path.dirname(dest_path)
-    if not os.path.isdir(parent):
-        raise HTTPException(status_code=422, detail="Asset folder does not exist")
-
+def _save_upload(dest_dir: str, base_name: str, up: UploadFile) -> str:
+    """Store an uploaded image as <base_name>.jpg inside an existing folder."""
     try:
         up.file.seek(0)
     except Exception:
@@ -41,13 +36,15 @@ def _write_file(dest_path: str, up: UploadFile) -> None:
         # but if they don't we simply continue from the current position.
         pass
 
-    first_chunk = up.file.read(1024 * 1024)
-    if not first_chunk:
+    data = up.file.read()
+    if not data:
         raise HTTPException(status_code=422, detail="Empty file")
 
-    with open(dest_path, "wb") as f:
-        f.write(first_chunk)
-        shutil.copyfileobj(up.file, f)
+    try:
+        path, _replaced = _save_image_bytes_as_jpg(data, dest_dir, base_name)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return path
 
 def _parse_positive_index(value: str, label: str) -> int:
     try:
@@ -65,31 +62,50 @@ def _existing_asset_variants(dest_dir: str, base_name: str) -> List[str]:
         if os.path.isfile(os.path.join(dest_dir, f"{base_name}{ext}"))
     ]
 
-def _remove_asset_variants(dest_dir: str, base_name: str) -> None:
-    for path in _existing_asset_variants(dest_dir, base_name):
-        try:
-            os.remove(path)
-        except Exception as exc:
-            raise HTTPException(status_code=500, detail=f"Failed to replace existing asset {path}: {exc}")
+def _encode_as_jpg(data: bytes) -> bytes:
+    """Return JPEG bytes for an image, keeping uploads that are already JPEG untouched."""
+    try:
+        with Image.open(io.BytesIO(data)) as image:
+            if image.format == "JPEG":
+                image.verify()
+                return data
+            converted = image if image.mode == "RGB" else image.convert("RGB")
+            output = io.BytesIO()
+            converted.save(output, format="JPEG", quality=92, optimize=True)
+            return output.getvalue()
+    except Exception as exc:
+        raise ValueError(f"Invalid image: {exc}") from exc
 
 def _save_image_bytes_as_jpg(data: bytes, dest_dir: str, base_name: str) -> Tuple[str, bool]:
     parent = os.path.abspath(dest_dir)
     if not os.path.isdir(parent):
         raise HTTPException(status_code=422, detail="Asset folder does not exist")
 
-    replaced = bool(_existing_asset_variants(parent, base_name))
-    _remove_asset_variants(parent, base_name)
+    # Decode before touching the folder so a bad upload never removes existing art.
+    jpg_bytes = _encode_as_jpg(data)
+    existing = _existing_asset_variants(parent, base_name)
     dest_path = os.path.join(parent, f"{base_name}.jpg")
+    tmp_path = os.path.join(parent, f".{base_name}.kam-upload.tmp")
     try:
-        image = Image.open(io.BytesIO(data))
-        if image.mode != "RGB":
-            image = image.convert("RGB")
-        image.save(dest_path, format="JPEG", quality=92, optimize=True)
-    except HTTPException:
-        raise
+        with open(tmp_path, "wb") as f:
+            f.write(jpg_bytes)
+        os.replace(tmp_path, dest_path)
     except Exception as exc:
-        raise ValueError(f"Invalid image: {exc}")
-    return dest_path, replaced
+        try:
+            os.remove(tmp_path)
+        except OSError:
+            pass
+        raise HTTPException(status_code=500, detail=f"Failed to save {base_name}.jpg: {exc}") from exc
+
+    # Kometa may pick up any poster.* variant, so leave only the new .jpg behind.
+    for path in existing:
+        if os.path.normcase(path) == os.path.normcase(dest_path):
+            continue
+        try:
+            os.remove(path)
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"Failed to replace existing asset {path}: {exc}")
+    return dest_path, bool(existing)
 
 def _asset_label(base_name: str, asset_kind: str) -> str:
     if asset_kind == "poster":
@@ -236,10 +252,8 @@ async def upload_movie_asset(
     except FileNotFoundError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
-    filename = "background.jpg" if (kind or "").lower() == "background" else "poster.jpg"
-    dest_path = os.path.join(dest_dir, filename)
-    await run_in_threadpool(_write_file, dest_path, file)
-    normalized_kind = "background" if filename == "background.jpg" else "poster"
+    normalized_kind = "background" if (kind or "").lower() == "background" else "poster"
+    dest_path = await run_in_threadpool(_save_upload, dest_dir, normalized_kind, file)
     return await _upload_response(
         dest_path,
         rating_key=ratingKey,
@@ -266,9 +280,7 @@ async def upload_show_asset(
         raise HTTPException(status_code=422, detail=str(e))
 
     normalized_kind = "poster" if kind == "poster" else "background"
-    dest_name = "poster.jpg" if normalized_kind == "poster" else "background.jpg"
-    dest_path = os.path.join(dest_dir, dest_name)
-    await run_in_threadpool(_write_file, dest_path, file)
+    dest_path = await run_in_threadpool(_save_upload, dest_dir, normalized_kind, file)
     return await _upload_response(
         dest_path,
         rating_key=ratingKey,
@@ -287,10 +299,7 @@ async def upload_season_asset(
     """
     Season upload: write ONLY into an existing Kometa folder.
     """
-    try:
-        idx = int(str(season).strip())
-    except Exception:
-        raise HTTPException(status_code=422, detail=f"Invalid season: {season!r}")
+    idx = _parse_positive_index(season, "season")
 
     normalized_kind = (kind or "poster").strip().lower()
     if normalized_kind not in ("poster", "background"):
@@ -301,13 +310,12 @@ async def upload_season_asset(
     except FileNotFoundError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
-    dest_name = (
-        f"Season{idx:02d}_background.jpg"
+    base_name = (
+        f"Season{idx:02d}_background"
         if normalized_kind == "background"
-        else f"Season{idx:02d}.jpg"
+        else f"Season{idx:02d}"
     )
-    dest_path = os.path.join(dest_dir, dest_name)
-    await run_in_threadpool(_write_file, dest_path, file)
+    dest_path = await run_in_threadpool(_save_upload, dest_dir, base_name, file)
     return await _upload_response(
         dest_path,
         rating_key=ratingKey,
@@ -334,9 +342,8 @@ async def upload_title_card_asset(
     except FileNotFoundError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
-    dest_name = f"S{season_idx:02d}E{episode_idx:02d}.jpg"
-    dest_path = os.path.join(dest_dir, dest_name)
-    await run_in_threadpool(_write_file, dest_path, file)
+    base_name = f"S{season_idx:02d}E{episode_idx:02d}"
+    dest_path = await run_in_threadpool(_save_upload, dest_dir, base_name, file)
     return await _upload_response(dest_path, rating_key=ratingKey, kind="poster")
 
 @router.post("/api/import/mediux-zip")

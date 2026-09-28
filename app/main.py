@@ -17,13 +17,22 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="KAM")
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# The bundled UI is same-origin and needs no CORS. A wildcard policy would let
+# any website a user visits read /api/settings (including the Plex token) from
+# an install without a login, so cross-origin access is opt-in.
+_CORS_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv("KAM_CORS_ORIGINS", "").split(",")
+    if origin.strip()
+]
+if _CORS_ORIGINS:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=_CORS_ORIGINS,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 from .routers import (
     assets,

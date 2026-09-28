@@ -31,6 +31,7 @@ def _plex_sections_raw():
         headers=headers,
         params={"X-Plex-Token": plex_token},
         timeout=20,
+        verify=plex_settings.verify_ssl(),
     )
     r.raise_for_status()
     return r
@@ -103,7 +104,13 @@ def _plex_list(path: str, params: Optional[dict] = None) -> List[Dict[str, Any]]
     params = dict(params or {})
     params["X-Plex-Token"] = plex_token
     headers = {"Accept": "application/json", "X-Plex-Token": plex_token}
-    r = requests.get(url, params=params, headers=headers, timeout=25)
+    r = requests.get(
+        url,
+        params=params,
+        headers=headers,
+        timeout=25,
+        verify=plex_settings.verify_ssl(),
+    )
     r.raise_for_status()
     if (r.headers.get("Content-Type") or "").lower().startswith("application/json"):
         data = r.json()
@@ -126,7 +133,13 @@ def _plex_list_page(path: str, params: Optional[dict] = None) -> Tuple[List[Dict
     params = dict(params or {})
     params["X-Plex-Token"] = plex_token
     headers = {"Accept": "application/json", "X-Plex-Token": plex_token}
-    r = requests.get(url, params=params, headers=headers, timeout=25)
+    r = requests.get(
+        url,
+        params=params,
+        headers=headers,
+        timeout=25,
+        verify=plex_settings.verify_ssl(),
+    )
     r.raise_for_status()
     if "application/json" in (r.headers.get("Content-Type") or "").lower():
         data = r.json()
@@ -404,7 +417,7 @@ class _RequestDirectoryResolver:
             if not os.path.isdir(base):
                 continue
             exact = os.path.join(base, raw)
-            if os.path.isdir(exact):
+            if resolve_service.is_direct_child_name(raw) and os.path.isdir(exact):
                 return exact
             match = resolve_service._best_match(self._entries(base), raw)
             if match:

@@ -1,9 +1,11 @@
 """Helpers for resolving Plex connection details from persisted settings."""
 from __future__ import annotations
 
+import os
 import threading
 from dataclasses import dataclass
 from typing import Optional
+from urllib.parse import urlsplit
 
 from . import settings as settings_service
 
@@ -75,3 +77,31 @@ def get_plex_url(*, force_refresh: bool = False) -> str:
 
 def get_plex_token(*, force_refresh: bool = False) -> str:
     return get_plex_config(force_refresh=force_refresh).token
+
+
+def verify_ssl() -> bool:
+    """Return whether TLS certificates should be verified for Plex requests."""
+    raw = os.environ.get("PLEX_VERIFY_SSL", "true")
+    return raw.strip().lower() not in {"false", "0", "no", "off"}
+
+
+def is_plex_url(url: Optional[str]) -> bool:
+    """Return whether *url* points at the configured Plex server.
+
+    A plain prefix check would accept hosts such as ``plex:32400.example.com``
+    and leak the Plex token to them, so compare the parsed origin instead.
+    """
+    base_url = get_plex_url()
+    if not url or not base_url:
+        return False
+    try:
+        base = urlsplit(base_url)
+        target = urlsplit(str(url))
+    except ValueError:
+        return False
+    if target.scheme.lower() != base.scheme.lower():
+        return False
+    if target.netloc.lower() != base.netloc.lower():
+        return False
+    base_path = base.path.rstrip("/")
+    return not base_path or target.path == base_path or target.path.startswith(base_path + "/")

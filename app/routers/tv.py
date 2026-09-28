@@ -16,8 +16,6 @@ from ..services.sanitize import kometa_sanitize_folder
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-ASSETS_ROOT = os.environ.get("KAM_ASSETS_ROOT", "/assets")
-
 def _require_plex() -> Tuple[str, str]:
     cfg = plex_settings.get_plex_config()
     if not cfg.url or not cfg.token:
@@ -33,6 +31,7 @@ def _plex_json_or_xml(path: str):
         headers=headers,
         params={"X-Plex-Token": plex_token},
         timeout=25,
+        verify=plex_settings.verify_ssl(),
     )
     r.raise_for_status()
     return r
@@ -155,17 +154,17 @@ def _to_int(x) -> Optional[int]:
     try: return int(str(x))
     except Exception: return None
 
-def _existing_folder_name(library: str, title: str, year: Optional[int]) -> Optional[str]:
+def _existing_folder(library: str, title: str, year: Optional[int]) -> Tuple[Optional[str], Optional[str]]:
     candidates: List[str] = []
     if year: candidates.append(f"{title} ({year})")
     candidates.append(title)
     for cand in candidates:
         try:
             path = resolve_existing_dir_or_422(library, cand)
-            return os.path.basename(path.rstrip(os.sep))
+            return os.path.basename(path.rstrip(os.sep)), path
         except Exception:
             continue
-    return None
+    return None, None
 
 def _local_exists(path: str) -> bool:
     try:
@@ -179,12 +178,10 @@ def _mtime(path: str) -> int:
     except Exception:
         return 0
 
-def _fileproxy_abs_path(library: str, folder: str, filename: str, bust: int = 0) -> str:
-    lib_enc = quote(library, safe="")
-    fol_enc = quote(folder,  safe="")
-    fn_enc  = quote(filename, safe="")
+def _fileproxy_url(path: str) -> str:
+    bust = _mtime(path)
     t = f"&t={bust}" if bust else ""
-    return f"/fileproxy?path=/assets/{lib_enc}/{fol_enc}/{fn_enc}{t}"
+    return f"/fileproxy?path={quote(path, safe='')}{t}"
 
 def _plex_thumb_url(thumb: Optional[str], rk: Optional[str]) -> Optional[str]:
     return build_plex_asset_url(thumb, rk, "thumb")
@@ -216,31 +213,39 @@ def get_show(library: str = Query(...), ratingKey: str = Query(...)):
     all_seasons = _seasons(ratingKey)
 
     override_folder = folder_overrides.get_override(library, ratingKey)
-    folder_exists = False
+    series_dir_fs: Optional[str] = None
     folder = override_folder
-    if folder:
-        folder_exists = True
+    if override_folder:
+        try:
+            series_dir_fs = resolve_existing_dir_or_422(library, override_folder)
+        except FileNotFoundError:
+            series_dir_fs = None
     else:
-        folder = _existing_folder_name(library, title, year)
-        folder_exists = folder is not None
+        folder, series_dir_fs = _existing_folder(library, title, year)
         if not folder:
             folder = kometa_sanitize_folder(f"{title} ({year})" if year else title)
+    folder_exists = series_dir_fs is not None
 
-    series_dir_fs = os.path.join(ASSETS_ROOT, library, folder)
+    def local_asset(filename: str) -> Optional[str]:
+        # Resolve through the library mapping so non-default asset roots work.
+        if not series_dir_fs:
+            return None
+        path = os.path.join(series_dir_fs, filename)
+        return path if _local_exists(path) else None
 
     # Local-first with cache-busting
-    poster_local = os.path.join(series_dir_fs, "poster.jpg")
-    poster_exists = _local_exists(poster_local)
-    if poster_exists:
-        poster_url = _fileproxy_abs_path(library, folder, "poster.jpg", _mtime(poster_local))
+    poster_local = local_asset("poster.jpg")
+    poster_exists = poster_local is not None
+    if poster_local:
+        poster_url = _fileproxy_url(poster_local)
     else:
         poster_url = _plex_thumb_proxy_url(thumb, ratingKey)
     plex_poster_url = _plex_thumb_url(thumb, ratingKey)
 
-    bg_local = os.path.join(series_dir_fs, "background.jpg")
-    background_exists = _local_exists(bg_local)
-    if background_exists:
-        background_url = _fileproxy_abs_path(library, folder, "background.jpg", _mtime(bg_local))
+    bg_local = local_asset("background.jpg")
+    background_exists = bg_local is not None
+    if bg_local:
+        background_url = _fileproxy_url(bg_local)
     else:
         background_url = _plex_art_proxy_url(art, ratingKey)
     plex_background_url = _plex_art_url(art, ratingKey)
@@ -248,18 +253,16 @@ def get_show(library: str = Query(...), ratingKey: str = Query(...)):
     seasons_out: List[Dict[str, Any]] = []
     for s in all_seasons:
         idx = s["index"]
-        sea_name = f"Season{idx:02d}.jpg"
-        sea_local = os.path.join(series_dir_fs, sea_name)
-        sea_bg_name = f"Season{idx:02d}_background.jpg"
-        sea_bg_local = os.path.join(series_dir_fs, sea_bg_name)
-        sea_exists = _local_exists(sea_local)
-        sea_bg_exists = _local_exists(sea_bg_local)
-        if _local_exists(sea_local):
-            sea_url = _fileproxy_abs_path(library, folder, sea_name, _mtime(sea_local))
+        sea_local = local_asset(f"Season{idx:02d}.jpg")
+        sea_bg_local = local_asset(f"Season{idx:02d}_background.jpg")
+        sea_exists = sea_local is not None
+        sea_bg_exists = sea_bg_local is not None
+        if sea_local:
+            sea_url = _fileproxy_url(sea_local)
         else:
             sea_url = _plex_thumb_proxy_url(s.get("thumb"), s.get("ratingKey"))
-        if _local_exists(sea_bg_local):
-            sea_bg_url = _fileproxy_abs_path(library, folder, sea_bg_name, _mtime(sea_bg_local))
+        if sea_bg_local:
+            sea_bg_url = _fileproxy_url(sea_bg_local)
         else:
             sea_bg_url = _plex_art_proxy_url(s.get("art"), s.get("ratingKey"))
 
@@ -267,15 +270,10 @@ def get_show(library: str = Query(...), ratingKey: str = Query(...)):
         for episode in _episodes_for_season(s.get("ratingKey"), idx):
             episode_idx = episode["index"]
             title_card_name = f"S{idx:02d}E{episode_idx:02d}.jpg"
-            title_card_local = os.path.join(series_dir_fs, title_card_name)
-            title_card_exists = _local_exists(title_card_local)
-            if title_card_exists:
-                title_card_url = _fileproxy_abs_path(
-                    library,
-                    folder,
-                    title_card_name,
-                    _mtime(title_card_local),
-                )
+            title_card_local = local_asset(title_card_name)
+            title_card_exists = title_card_local is not None
+            if title_card_local:
+                title_card_url = _fileproxy_url(title_card_local)
             else:
                 title_card_url = _plex_thumb_proxy_url(episode.get("thumb"), episode.get("ratingKey"))
             episodes_out.append({

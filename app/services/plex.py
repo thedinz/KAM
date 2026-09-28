@@ -1,5 +1,6 @@
 import logging
 
+import requests
 from plexapi.server import PlexServer
 from fastapi import HTTPException
 
@@ -26,7 +27,9 @@ def get_plex():
     creds = (cfg.url, cfg.token)
     if _plex is None or creds != _last_creds:
         try:
-            _plex = PlexServer(cfg.url, cfg.token)
+            session = requests.Session()
+            session.verify = plex_settings.verify_ssl()
+            _plex = PlexServer(cfg.url, cfg.token, session=session)
             _last_creds = creds
         except Exception as e:
             logger.exception("Failed to connect to Plex")

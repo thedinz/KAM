@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+- Protect asset folders from orphan cleanup when their directory is shared with
+  another library or with collections (for example one shared `Collections`
+  folder), and fail collection audits instead of treating unreadable Plex
+  collections as "no collections".
+- Convert uploaded PNG/WebP artwork to real JPEG files again, remove leftover
+  `poster.png`/`poster.webp` style variants, and reject invalid images without
+  deleting existing artwork.
+- Reject folder names that try to leave the asset library folder.
+- Show local TV artwork for libraries mapped to folders not named after the
+  library.
+- Honor `PLEX_VERIFY_SSL` for every Plex request, only send the Plex token to the
+  configured Plex server, and keep the token out of import error messages.
+- Disable cross-origin API access by default; set `KAM_CORS_ORIGINS` to allow
+  specific origins.
+
 ## 7.2.0 — 2026-08-30
 
 - Extend **Orphaned Assets** and **Duplicate Folders** cleanup to mapped collection
