@@ -1,0 +1,73 @@
+name: Authorship check
+
+# Fails if a pushed commit or tag is authored, committed or tagged by an AI tool
+# or bot, or carries an AI co-author trailer / attribution footer.
+# Other identities that aren't thedinz's noreply address are reported as warnings.
+on:
+  push:
+    branches: ["**"]
+    tags: ["**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  authorship:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check new commits and tags
+        env:
+          EVENT: ${{ github.event_name }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.sha }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          ID="thedinz <68015411+thedinz@users.noreply.github.com>"
+          WEB="GitHub <noreply@github.com>"
+          AI_ID='claude|codex|openai|anthropic|chatgpt|copilot|cursor|devin|\[bot\]'
+          AI_MSG='^(co-authored-by:|.*generated with \[?(claude|codex|chatgpt|copilot))|(noreply@anthropic\.com|codex@openai\.com)'
+          bad=0
+
+          check_id() {  # $1 = label, $2 = "name <email>"
+            [ "$2" = "$ID" ] && return
+            [ "$1" = committer ] && [ "$2" = "$WEB" ] && return
+            if echo "$2" | grep -qiE "$AI_ID"; then
+              echo "::error::$c $1 is '$2' (AI or bot)"; bad=1
+            else
+              echo "::warning::$c $1 is '$2' (expected $ID)"
+            fi
+          }
+
+          if [ "$EVENT" = pull_request ]; then
+            commits=$(git rev-list "$PR_BASE..$PR_HEAD")
+          elif [ "$REF_TYPE" = tag ]; then
+            commits=""
+            if [ "$(git cat-file -t "refs/tags/$REF_NAME")" = tag ]; then
+              c="tag $REF_NAME"
+              check_id tagger "$(git cat-file -p "refs/tags/$REF_NAME" | sed -n 's/^tagger \(.*>\).*/\1/p')"
+            fi
+          elif echo "$BEFORE" | grep -q '^0*$' || ! git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+            others=$(git for-each-ref --format='%(refname)' refs/remotes/origin | grep -vx "refs/remotes/origin/$REF_NAME" | grep -v '/HEAD$')
+            commits=$(git rev-list "$AFTER" --not $others)
+          else
+            commits=$(git rev-list "$BEFORE..$AFTER")
+          fi
+
+          for c in $commits; do
+            check_id author "$(git log -1 --format='%an <%ae>' "$c")"
+            check_id committer "$(git log -1 --format='%cn <%ce>' "$c")"
+            if git log -1 --format=%B "$c" | grep -qiE "$AI_MSG"; then
+              echo "::error::$c message has an AI trailer/footer: $(git log -1 --format=%B "$c" | grep -iE "$AI_MSG" | head -1)"; bad=1
+            fi
+          done
+          echo "Checked $(echo "$commits" | grep -c .) commit(s)."
+          exit $bad
