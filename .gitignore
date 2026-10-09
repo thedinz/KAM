@@ -25,5 +25,3 @@ docker-compose.yml
 !/app/web/show-react.html
 !/app/web/movie.html
 
-# Claude Code local settings
-.claude/settings.local.json
