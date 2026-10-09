@@ -22,8 +22,8 @@ pytest
 
 ```bash
 cd frontend
-npm install
-npm test
+npm ci
+npx vitest run
 npm run build
 ```
 
