@@ -1,8 +1,8 @@
 # KAM: instructions for Claude
 
-Before anything else, read `../project-notes/KAM.md` if it exists. It is the private handbook and continues earlier conversations, so don't ask the owner to re-explain anything written there. A SessionStart hook pulls `project-notes` and loads the handbook automatically. If it's missing, clone `thedinz/project-notes` next to this repo.
+## Project handbook
 
-Whenever you change something it describes or finish an open item, update it (Current status and Decisions log) and push `project-notes` immediately. Never put anything from it into this repo: this repo is public.
+Before anything else, read `standards.md` and `KAM.md` in the owner's private `project-notes` repo. The SessionStart hook in `.claude/settings.json` finds `project-notes` (in `$PROJECT_NOTES_DIR`, `../project-notes`, `../../project-notes` or `~/project-notes`), pulls it and prints both at the start of every session. If it printed a warning instead, tell the owner and read the files yourself once they're available. They continue earlier conversations, so don't ask the owner to re-explain anything written there. Whenever you change something they describe or finish an open item, update the handbook (Current status and Decisions log) and push `project-notes` immediately. Never put anything from `project-notes` into this repo.
 
 ## Conventions
 

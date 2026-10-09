@@ -5,9 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "git -C \"$CLAUDE_PROJECT_DIR/../project-notes\" pull -q --ff-only 2>/dev/null; cat \"$CLAUDE_PROJECT_DIR/../project-notes/KAM.md\" 2>/dev/null || true",
-            "timeout": 30,
-            "statusMessage": "Loading the KAM handbook"
+            "command": "n=KAM; for d in \"$PROJECT_NOTES_DIR\" \"$CLAUDE_PROJECT_DIR/../project-notes\" \"$CLAUDE_PROJECT_DIR/../../project-notes\" \"$HOME/project-notes\"; do if [ -n \"$d\" ] && [ -d \"$d/.git\" ]; then git -C \"$d\" pull -q --ff-only 2>/dev/null; cat \"$d/standards.md\" \"$d/$n.md\" 2>/dev/null; exit 0; fi; done; echo \"WARNING: project-notes was not found (checked \\$PROJECT_NOTES_DIR, ../project-notes, ../../project-notes and ~/project-notes), so the standards and the $n handbook were NOT loaded. Tell the owner. Fix: clone https://github.com/thedinz/project-notes.git next to this project, or set PROJECT_NOTES_DIR to where it is.\""
           }
         ]
       }
