@@ -13,7 +13,7 @@ Whenever you change something it describes or finish an open item, update it (Cu
 
 ## Build and test
 
-CI only builds the Docker image, so run the tests locally before merging code changes.
+The Tests workflow runs pytest (Python 3.11) and vitest plus the build (Node 20) on every pull request; merge only when it passes.
 
 ```bash
 pip install -r requirements.txt pytest httpx
@@ -22,8 +22,8 @@ pytest
 
 ```bash
 cd frontend
-npm install
-npm test
+npm ci
+npx vitest run
 npm run build
 ```
 
