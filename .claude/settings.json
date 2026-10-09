@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "git -C \"$CLAUDE_PROJECT_DIR/../project-notes\" pull -q --ff-only 2>/dev/null; cat \"$CLAUDE_PROJECT_DIR/../project-notes/KAM.md\" 2>/dev/null || true",
+            "timeout": 30,
+            "statusMessage": "Loading the KAM handbook"
+          }
+        ]
+      }
+    ]
+  }
+}
