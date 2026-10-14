@@ -4,8 +4,10 @@ from __future__ import annotations
 import os
 import threading
 from dataclasses import dataclass
-from typing import Optional
-from urllib.parse import urlsplit
+from typing import Any, Optional
+from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit, urlunsplit
+
+import requests
 
 from . import settings as settings_service
 
@@ -20,6 +22,9 @@ class PlexConfig:
 
 _TOKEN_KEYS = ("plexToken", "plex_token")
 _URL_KEYS = ("plexUrl", "plex_url")
+
+_TOKEN_PARAM = "X-Plex-Token"
+_MAX_REDIRECTS = 5
 
 _LOCK = threading.Lock()
 _CACHE: Optional[PlexConfig] = None
@@ -105,3 +110,51 @@ def is_plex_url(url: Optional[str]) -> bool:
         return False
     base_path = base.path.rstrip("/")
     return not base_path or target.path == base_path or target.path.startswith(base_path + "/")
+
+
+def _without_token(url: str) -> str:
+    """Return *url* without an X-Plex-Token query parameter."""
+    parts = urlsplit(url)
+    query = [
+        (key, value)
+        for key, value in parse_qsl(parts.query, keep_blank_values=True)
+        if key.lower() != _TOKEN_PARAM.lower()
+    ]
+    return urlunsplit(parts._replace(query=urlencode(query)))
+
+
+def plex_get(url: str, **kwargs: Any) -> requests.Response:
+    """GET *url* on the configured Plex server.
+
+    The token travels only in the X-Plex-Token header, never in the URL, so
+    it can't end up in exception messages or logs. Redirects are followed
+    only while they stay on the configured Plex server.
+    """
+    params = {
+        key: value
+        for key, value in (kwargs.pop("params", None) or {}).items()
+        if key.lower() != _TOKEN_PARAM.lower()
+    }
+    headers = dict(kwargs.pop("headers", None) or {})
+    token = get_plex_token()
+    if token:
+        headers[_TOKEN_PARAM] = token
+    kwargs.setdefault("verify", verify_ssl())
+
+    url = _without_token(url)
+    for _ in range(_MAX_REDIRECTS + 1):
+        response = requests.get(
+            url,
+            params=params or None,
+            headers=headers,
+            allow_redirects=False,
+            **kwargs,
+        )
+        if not response.is_redirect:
+            return response
+        location = urljoin(url, response.headers.get("Location") or "")
+        response.close()
+        if not is_plex_url(location):
+            raise requests.RequestException("Plex redirected outside the configured server")
+        url = _without_token(location)
+    raise requests.TooManyRedirects("Too many Plex redirects")

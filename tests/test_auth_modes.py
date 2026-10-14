@@ -180,3 +180,50 @@ def test_blank_cookie_secure_env_keeps_auto_detection(auth_modules, monkeypatch)
 
     monkeypatch.setenv("KAM_AUTH_COOKIE_SECURE", "false")
     assert auth_service.cookie_secure(request) is False
+
+
+def _login_request(host="198.51.100.7"):
+    return SimpleNamespace(
+        cookies={},
+        headers={},
+        url=SimpleNamespace(scheme="http"),
+        client=SimpleNamespace(host=host),
+    )
+
+
+def test_changing_the_password_signs_out_existing_sessions(auth_modules):
+    settings_service, auth_service, auth_router = auth_modules
+    settings_service.save_settings(
+        {"authMode": "builtin", "authUsername": "admin", "authPassword": "old-secret"}
+    )
+    token = auth_service.create_session()
+    assert auth_service.validate_session(token) is True
+
+    settings_service.save_settings(
+        {"authMode": "builtin", "authUsername": "admin", "authPassword": "new-secret"}
+    )
+
+    assert auth_service.validate_session(token) is False
+
+
+def test_repeated_failed_logins_are_throttled(auth_modules):
+    settings_service, auth_service, auth_router = auth_modules
+    settings_service.save_settings(
+        {"authMode": "builtin", "authUsername": "admin", "authPassword": "local-secret"}
+    )
+    payload = auth_router.LoginPayload(username="admin", password="wrong")
+
+    for _ in range(auth_service._LOGIN_MAX_FAILURES):
+        with pytest.raises(HTTPException) as exc:
+            auth_router.auth_login(payload, _login_request(), Response())
+        assert exc.value.status_code == 401
+
+    correct = auth_router.LoginPayload(username="admin", password="local-secret")
+    with pytest.raises(HTTPException) as exc:
+        auth_router.auth_login(correct, _login_request(), Response())
+    assert exc.value.status_code == 429
+    assert int(exc.value.headers["Retry-After"]) > 0
+
+    # Other addresses are not affected.
+    result = auth_router.auth_login(correct, _login_request("198.51.100.8"), Response())
+    assert result["ok"] is True

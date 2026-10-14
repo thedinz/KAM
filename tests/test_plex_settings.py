@@ -118,3 +118,95 @@ def test_imports_refuse_urls_outside_plex(monkeypatch, tmp_path):
 
     assert exc_info.value.status_code == 422
     assert target.read_bytes() == b"existing"
+
+
+class _FakeResponse:
+    def __init__(self, status=200, location=None):
+        self.status_code = status
+        self.headers = {"Location": location} if location else {}
+        self.is_redirect = location is not None
+        self.closed = False
+
+    def close(self):
+        self.closed = True
+
+
+def test_plex_get_sends_the_token_only_as_a_header(monkeypatch):
+    plex_settings = _plex_settings_for(monkeypatch, "http://plex.local:32400")
+    calls = []
+
+    def fake_get(url, **kwargs):
+        calls.append((url, kwargs))
+        return _FakeResponse()
+
+    monkeypatch.setattr(plex_settings.requests, "get", fake_get)
+
+    plex_settings.plex_get(
+        "http://plex.local:32400/library/metadata/1/thumb?X-Plex-Token=secret&width=10",
+        params={"X-Plex-Token": "secret"},
+    )
+
+    url, kwargs = calls[0]
+    assert "secret" not in url
+    assert "width=10" in url
+    assert not kwargs.get("params")
+    assert kwargs["headers"]["X-Plex-Token"] == plex_settings.get_plex_token()
+    assert kwargs["allow_redirects"] is False
+
+
+def test_plex_get_does_not_follow_redirects_off_the_plex_server(monkeypatch):
+    import pytest
+    import requests
+
+    plex_settings = _plex_settings_for(monkeypatch, "http://plex.local:32400")
+    calls = []
+
+    def fake_get(url, **kwargs):
+        calls.append(url)
+        return _FakeResponse(302, "http://169.254.169.254/latest/meta-data/")
+
+    monkeypatch.setattr(plex_settings.requests, "get", fake_get)
+
+    with pytest.raises(requests.RequestException):
+        plex_settings.plex_get("http://plex.local:32400/library/metadata/1/thumb")
+
+    assert calls == ["http://plex.local:32400/library/metadata/1/thumb"]
+
+
+def test_plex_get_follows_redirects_that_stay_on_the_plex_server(monkeypatch):
+    plex_settings = _plex_settings_for(monkeypatch, "http://plex.local:32400")
+    responses = [_FakeResponse(302, "/photo/thumb.jpg"), _FakeResponse()]
+    calls = []
+
+    def fake_get(url, **kwargs):
+        calls.append(url)
+        return responses.pop(0)
+
+    monkeypatch.setattr(plex_settings.requests, "get", fake_get)
+
+    response = plex_settings.plex_get("http://plex.local:32400/library/metadata/1/thumb")
+
+    assert response.status_code == 200
+    assert calls[-1] == "http://plex.local:32400/photo/thumb.jpg"
+
+
+def test_failed_plex_requests_keep_the_token_out_of_logs(monkeypatch, caplog):
+    import pytest
+    import requests
+    from fastapi import HTTPException
+
+    plex_settings = _plex_settings_for(monkeypatch, "http://plex.local:32400")
+    imports = importlib.reload(importlib.import_module("app.routers.imports"))
+    token = plex_settings.get_plex_token()
+
+    def fail_request(url, **kwargs):
+        response = _FakeResponse(401)
+        raise requests.HTTPError(f"401 Unauthorized for url: {url}?X-Plex-Token={token}", response=response)
+
+    monkeypatch.setattr(imports.requests, "get", fail_request)
+
+    with pytest.raises(HTTPException):
+        imports._get("http://plex.local:32400/library/metadata/1")
+
+    assert token
+    assert token not in caplog.text

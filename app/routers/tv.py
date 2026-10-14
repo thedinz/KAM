@@ -3,7 +3,6 @@ from fastapi import APIRouter, HTTPException, Query
 from typing import Any, Dict, List, Optional, Tuple
 import logging
 import os
-import requests
 import xml.etree.ElementTree as ET
 from urllib.parse import quote
 
@@ -26,7 +25,7 @@ def _plex_json_or_xml(path: str):
     plex_url, plex_token = _require_plex()
     url = f"{plex_url}{path}"
     headers = {"Accept": "application/json", "X-Plex-Token": plex_token}
-    r = requests.get(
+    r = plex_settings.plex_get(
         url,
         headers=headers,
         params={"X-Plex-Token": plex_token},

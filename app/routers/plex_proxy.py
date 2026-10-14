@@ -40,20 +40,17 @@ def plex_image(
             path = f"/{path}"
         url = f"{cfg.url}{path}"
 
-    headers = {"X-Plex-Token": cfg.token}
-
     try:
-        response = requests.get(
-            url,
-            headers=headers,
-            params={"X-Plex-Token": cfg.token},
-            stream=True,
-            timeout=30,
-            verify=plex_settings.verify_ssl(),
-        )
+        response = plex_settings.plex_get(url, stream=True, timeout=30)
         response.raise_for_status()
     except requests.RequestException as exc:
-        logger.warning("Plex image proxy failed for %s: %s", urlsplit(url).path, exc)
+        status = getattr(getattr(exc, "response", None), "status_code", None)
+        logger.warning(
+            "Plex image proxy failed for %s: %s%s",
+            urlsplit(url).path,
+            type(exc).__name__,
+            f" [{status}]" if status else "",
+        )
         raise HTTPException(status_code=502, detail="Plex image proxy failed") from exc
 
     content_type = response.headers.get("Content-Type") or "application/octet-stream"

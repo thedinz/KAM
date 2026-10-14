@@ -16,6 +16,12 @@ from ..services.resolve import resolve_existing_dir_or_422
 router = APIRouter()
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
+# Generous limits for real artwork (an 8K background is about 33 megapixels)
+# that still stop one request from exhausting memory, CPU or disk.
+MAX_IMAGE_BYTES = 50 * 1024 * 1024
+MAX_IMAGE_PIXELS = 100_000_000
+MAX_ZIP_MEMBERS = 5000
+MAX_ZIP_TOTAL_BYTES = 2 * 1024 * 1024 * 1024
 ASSET_VARIANT_EXTENSIONS = (".jpg", ".jpeg", ".png", ".webp")
 MEDIUX_EPISODE_RE = re.compile(
     r"(?<![A-Za-z0-9])S(?:eason)?\s*0*(\d{1,3})\s*[-_. ]*E(?:pisode)?\s*0*(\d{1,3})(?![A-Za-z0-9])",
@@ -36,9 +42,11 @@ def _save_upload(dest_dir: str, base_name: str, up: UploadFile) -> str:
         # but if they don't we simply continue from the current position.
         pass
 
-    data = up.file.read()
+    data = up.file.read(MAX_IMAGE_BYTES + 1)
     if not data:
         raise HTTPException(status_code=422, detail="Empty file")
+    if len(data) > MAX_IMAGE_BYTES:
+        raise HTTPException(status_code=413, detail=_too_large_message())
 
     try:
         path, _replaced = _save_image_bytes_as_jpg(data, dest_dir, base_name)
@@ -62,10 +70,17 @@ def _existing_asset_variants(dest_dir: str, base_name: str) -> List[str]:
         if os.path.isfile(os.path.join(dest_dir, f"{base_name}{ext}"))
     ]
 
+def _too_large_message() -> str:
+    return f"Image is larger than {MAX_IMAGE_BYTES // (1024 * 1024)} MB"
+
+
 def _encode_as_jpg(data: bytes) -> bytes:
     """Return JPEG bytes for an image, keeping uploads that are already JPEG untouched."""
     try:
         with Image.open(io.BytesIO(data)) as image:
+            # Checked from the header, before any pixels are decoded.
+            if image.width * image.height > MAX_IMAGE_PIXELS:
+                raise ValueError("Image dimensions are too large")
             if image.format == "JPEG":
                 image.verify()
                 return data
@@ -194,13 +209,25 @@ def _import_mediux_zip_file(dest_dir: str, upload: UploadFile) -> Dict[str, Any]
     seen_targets = set()
 
     with archive:
-        for info in archive.infolist():
+        members = archive.infolist()
+        # file_size is what zipfile will actually inflate each member to, so
+        # these checks bound the work before anything is extracted.
+        if len(members) > MAX_ZIP_MEMBERS:
+            raise HTTPException(status_code=413, detail="Zip file has too many entries")
+        if sum(info.file_size for info in members) > MAX_ZIP_TOTAL_BYTES:
+            raise HTTPException(status_code=413, detail="Zip file expands to too much data")
+
+        for info in members:
             if info.is_dir():
                 continue
             original_name = info.filename
             classification = _classify_mediux_asset(original_name)
             if not classification:
                 skipped.append({"filename": original_name, "reason": "Unrecognized Mediux asset name"})
+                continue
+
+            if info.file_size > MAX_IMAGE_BYTES:
+                skipped.append({"filename": original_name, "reason": _too_large_message()})
                 continue
 
             base_name = classification["baseName"]
