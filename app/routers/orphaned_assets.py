@@ -574,6 +574,7 @@ def _duplicate_groups(
         if str(row.get("ratingKey") or "").strip()
     }
     grouped: Dict[str, List[Path]] = defaultdict(list)
+    claimants_by_path: Dict[str, set[str]] = {}
 
     for folder in audit["folders"]:
         path_key = _path_key(folder)
@@ -582,6 +583,7 @@ def _duplicate_groups(
             for rating_key, active_path in audit["activeByRating"].items()
             if active_path == path_key
         ]
+        claimants_by_path[path_key] = set(active_ratings)
         matches = audit["matchesByPath"].get(path_key, set())
         if active_ratings:
             grouped[active_ratings[0]].append(folder)
@@ -600,6 +602,10 @@ def _duplicate_groups(
         for folder in sorted(folders, key=lambda path: path.name.casefold()):
             item = _folder_payload(folder)
             item["isActive"] = _path_key(folder) == active_path
+            # Other items still using this folder keep it from being deleted.
+            item["sharedWith"] = sorted(
+                claimants_by_path.get(_path_key(folder), set()) - {rating_key}
+            )
             folder_items.append(item)
         groups.append({
             "ratingKey": rating_key,
@@ -616,11 +622,33 @@ def _duplicate_groups(
     return audit["root"], groups
 
 
+def _protected_roots() -> set[str]:
+    """Return the configured roots that cleanup must never delete."""
+
+    paths = list(library_mappings_service.allowed_roots())
+    collections_root = library_mappings_service.get_collections_path()
+    if collections_root:
+        paths.append(collections_root)
+    for entry in library_mappings_service.load_library_mappings():
+        name = str(entry.get("library") or "").strip()
+        if not name:
+            continue
+        paths.append(library_mappings_service.get_asset_path(name) or "")
+        paths.append(library_mappings_service.get_collections_path(name) or "")
+    return {_path_key(path) for path in paths if path}
+
+
 def _delete_direct_folder(root: Path, folder_name: str) -> None:
     target = root / folder_name
     resolved = target.resolve(strict=True)
     if resolved.parent != root or target.is_symlink() or not resolved.is_dir():
         raise ValueError("Invalid asset folder")
+    # A library or collections root can sit directly inside another mapping's
+    # root; deleting it would take every asset folder below it.
+    resolved_key = _path_key(resolved)
+    prefix = resolved_key.rstrip(os.sep) + os.sep
+    if any(key == resolved_key or key.startswith(prefix) for key in _protected_roots()):
+        raise ValueError("Folder holds a configured library root")
     shutil.rmtree(resolved)
 
 
@@ -825,10 +853,20 @@ def _resolve_duplicate_group(
 
     # Persist this first so KAM never points at one of the folders being removed.
     folder_overrides.set_canonical_overrides(library, {rating_key: keep_name})
+    shared_names = {
+        item["folderName"] for item in group["folders"] if item.get("sharedWith")
+    }
     deleted: List[str] = []
+    skipped: List[Dict[str, str]] = []
     errors: List[Dict[str, str]] = []
     for folder_name in folder_names:
         if folder_name == keep_name:
+            continue
+        if folder_name in shared_names:
+            skipped.append({
+                "folderName": folder_name,
+                "reason": "Another item still uses this folder.",
+            })
             continue
         try:
             _delete_direct_folder(root, folder_name)
@@ -853,6 +891,7 @@ def _resolve_duplicate_group(
         "folderAssignmentChanged": assignment_changed,
         "deleted": deleted,
         "deletedCount": len(deleted),
+        "skipped": skipped,
         "errors": errors,
     }
 

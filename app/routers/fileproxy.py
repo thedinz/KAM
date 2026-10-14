@@ -30,6 +30,8 @@ def _allowed_roots():
     return normalized
 
 def _is_allowed(path: str) -> bool:
+    if not library_mappings_service.is_allowed_path(path):
+        return False
     rp = os.path.realpath(path)
     for root in _allowed_roots():
         if rp.startswith(root + os.sep) or rp == root:

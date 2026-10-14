@@ -26,6 +26,11 @@ function initialChoices(groups) {
   ]));
 }
 
+function sharedFolderMessage(count) {
+  if (!count) return '';
+  return ` Kept ${count} ${count === 1 ? 'folder' : 'folders'} that another item still uses.`;
+}
+
 function DuplicateFoldersPage() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -123,9 +128,10 @@ function DuplicateFoldersPage() {
       const deleted = Array.isArray(data?.deleted) ? data.deleted : [];
       const failures = Array.isArray(data?.errors) ? data.errors : [];
       const keptFolderName = data?.keptFolderName || keepFolderName;
-      const assignmentMessage = data?.folderAssignmentChanged
+      const sharedCount = Array.isArray(data?.skipped) ? data.skipped.length : 0;
+      const assignmentMessage = (data?.folderAssignmentChanged
         ? ` KAM now uses ${keptFolderName}.`
-        : '';
+        : '') + sharedFolderMessage(sharedCount);
       if (failures.length) {
         setStatus(deleted.length
           ? `Kept ${keptFolderName} and deleted ${deleted.length} duplicate ${deleted.length === 1 ? 'folder' : 'folders'}.${assignmentMessage}`
@@ -176,6 +182,8 @@ function DuplicateFoldersPage() {
       const processedCount = Number(data?.processedCount) || 0;
       const deletedCount = Number(data?.deletedCount) || 0;
       const changedCount = Number(data?.folderAssignmentsChanged) || 0;
+      const sharedCount = (Array.isArray(data?.results) ? data.results : [])
+        .reduce((total, result) => total + (Array.isArray(result?.skipped) ? result.skipped.length : 0), 0);
       const resultErrors = (Array.isArray(data?.results) ? data.results : [])
         .flatMap((result) => (Array.isArray(result?.errors) ? result.errors : [])
           .map((entry) => `${result.keptFolderName}: ${entry.folderName}: ${entry.error}`));
@@ -185,6 +193,7 @@ function DuplicateFoldersPage() {
       setStatus(
         `Processed ${processedCount} ${processedCount === 1 ? 'asset' : 'assets'} and deleted ${deletedCount} duplicate ${deletedCount === 1 ? 'folder' : 'folders'}.`
         + (changedCount ? ` Switched KAM to ${changedCount} newly selected ${changedCount === 1 ? 'folder' : 'folders'}.` : '')
+        + sharedFolderMessage(sharedCount)
       );
       if (resultErrors.length || failures.length) {
         setError([...resultErrors, ...failures].join(' '));

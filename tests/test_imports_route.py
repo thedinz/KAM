@@ -63,3 +63,15 @@ def test_import_title_card_uses_kometa_episode_filename(tmp_path, monkeypatch):
     assert response["ok"] is True
     assert captured["path"] == str(expected_path)
     assert response["path"] == str(expected_path)
+
+
+def test_imports_are_not_reachable_with_get():
+    imports_router = importlib.import_module("app.routers.imports")
+
+    get_import_paths = [
+        route.path
+        for route in imports_router.router.routes
+        if route.path.startswith("/api/import/") and "GET" in getattr(route, "methods", set())
+    ]
+
+    assert get_import_paths == []

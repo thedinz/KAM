@@ -209,7 +209,8 @@ Open KAM and go to **Settings**:
    token, then save.
 2. **Libraries** — for each Plex library you want to manage, choose its **asset folder**
    inside `/assets` (for example `/assets/Movies`). Optionally set a **collections
-   folder** if that library's collections are not in `COLLECTIONS_ROOT`.
+   folder** if that library's collections are not in `COLLECTIONS_ROOT`. Folders must be
+   inside `/assets` or `COLLECTIONS_ROOT`; KAM won't save or use folders anywhere else.
 3. **Setup Check** — run it to confirm Plex, folders, and config persistence are working.
 4. **Login** (optional) — set a username and password, or choose reverse proxy auth. See
    [Security](#security).

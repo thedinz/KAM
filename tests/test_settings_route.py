@@ -404,3 +404,40 @@ def test_save_library_mappings_updates_only_mapping_data(settings_modules):
     ]
 
     assert library_module.get_cached_mappings() is None
+
+
+def test_update_settings_rejects_library_folders_outside_the_asset_root(settings_modules):
+    router, _, _, _ = settings_modules
+
+    payload = router.SettingsPayload(
+        theme="dark",
+        libraryMappings=[{"library": "Movies", "assetPath": "/etc"}],
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        router.update_settings(payload)
+    assert exc.value.status_code == 422
+
+    with pytest.raises(HTTPException) as exc:
+        router.update_library_mappings(
+            router.LibraryMappingsUpdatePayload(
+                libraryMappings=[{"library": "Movies", "assetPath": "/"}]
+            )
+        )
+    assert exc.value.status_code == 422
+
+
+def test_update_settings_keeps_an_already_saved_folder_outside_the_asset_root(
+    settings_modules,
+):
+    router, service, _, _ = settings_modules
+    service.save_settings(
+        {"libraryMappings": [{"library": "Movies", "assetPath": "/legacy/Movies"}]}
+    )
+
+    payload = router.SettingsPayload(
+        theme="light",
+        libraryMappings=[{"library": "Movies", "assetPath": "/legacy/Movies"}],
+    )
+
+    assert router.update_settings(payload).theme == "light"

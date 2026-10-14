@@ -366,15 +366,6 @@ def import_poster_post(
     )
     return _download_result(path, src)
 
-@router.get("/api/import/poster")
-def import_poster_get(
-    library: str = Query(...),
-    folderName: str = Query(...),
-    ratingKey: str = Query(...),
-    url: Optional[str] = Query(None),
-):
-    return import_poster_post(library=library, folderName=folderName, ratingKey=ratingKey, url=url)
-
 @router.post("/api/import/background")
 def import_background_post(
     library: str = Form(...),
@@ -399,15 +390,6 @@ def import_background_post(
         _safe_url(src),
     )
     return _download_result(path, src)
-
-@router.get("/api/import/background")
-def import_background_get(
-    library: str = Query(...),
-    folderName: str = Query(...),
-    ratingKey: str = Query(...),
-    url: Optional[str] = Query(None),
-):
-    return import_background_post(library=library, folderName=folderName, ratingKey=ratingKey, url=url)
 
 @router.post("/api/import/season")
 def import_season_post(
@@ -465,24 +447,6 @@ def import_season_post(
     )
     return _download_result(path, src)
 
-@router.get("/api/import/season")
-def import_season_get(
-    library: str = Query(...),
-    folderName: str = Query(...),
-    season: str = Query(...),
-    kind: str = Query("poster"),
-    ratingKey: Optional[str] = Query(None),
-    url: Optional[str] = Query(None),
-):
-    return import_season_post(
-        library=library,
-        folderName=folderName,
-        season=season,
-        kind=kind,
-        ratingKey=ratingKey,
-        url=url,
-    )
-
 @router.post("/api/import/title-card")
 def import_title_card_post(
     library: str = Form(...),
@@ -522,24 +486,6 @@ def import_title_card_post(
         _safe_url(src),
     )
     return _download_result(path, src)
-
-@router.get("/api/import/title-card")
-def import_title_card_get(
-    library: str = Query(...),
-    folderName: str = Query(...),
-    season: str = Query(...),
-    episode: str = Query(...),
-    ratingKey: Optional[str] = Query(None),
-    url: Optional[str] = Query(None),
-):
-    return import_title_card_post(
-        library=library,
-        folderName=folderName,
-        season=season,
-        episode=episode,
-        ratingKey=ratingKey,
-        url=url,
-    )
 
 # NEW: combined import for movies (poster + background in one call)
 @router.post("/api/import/movie")
