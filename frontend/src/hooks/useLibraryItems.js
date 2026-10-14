@@ -4,9 +4,34 @@ import { useAuth } from './AuthProvider.jsx';
 import { useTheme } from '../theme/ThemeProvider.jsx';
 
 import { responseErrorMessage, safeJson } from '../utils/api.js';
+import {
+  GRID_IMAGE_WIDTH,
+  canPreload,
+  preloadImages,
+  sizedImageUrl,
+  whenIdle,
+} from '../utils/images.js';
+import { normalizePoster } from '../utils/items.js';
 
 const PAGE_SIZE = 60;
 const COLLECTIONS_LIBRARY = 'Collections';
+const PREFETCH_TTL_MS = 60 * 1000;
+
+// The next page of results, fetched in the background so Next is instant.
+const prefetchedPages = new Map();
+
+function takePrefetched(url) {
+  const entry = prefetchedPages.get(url);
+  prefetchedPages.delete(url);
+  if (!entry || Date.now() - entry.at > PREFETCH_TTL_MS) return null;
+  return entry.data;
+}
+
+function gridPosterUrls(items) {
+  return (Array.isArray(items) ? items : []).map((item) =>
+    sizedImageUrl(normalizePoster(item), GRID_IMAGE_WIDTH)
+  );
+}
 
 function isCollectionsLibrary(value) {
   return String(value || '').trim().toLowerCase() === COLLECTIONS_LIBRARY.toLowerCase();
@@ -78,6 +103,7 @@ export function useLibraryItems({ initialLibrary, enabled = true, collectionsOnl
   const [error, setError] = useState(null);
 
   const fetchAbort = useRef(null);
+  const preloadCancel = useRef(null);
   const initialLibraryRef = useRef(initialLibrary);
   const libraryRef = useRef(library);
 
@@ -118,6 +144,37 @@ export function useLibraryItems({ initialLibrary, enabled = true, collectionsOnl
     fetchLibraries();
   }, [canFetch, fetchLibraries, savedLibraryMappingsKey]);
 
+  // Once a page has loaded: finish loading its posters, then fetch the next
+  // page and its posters while the connection is otherwise idle.
+  const schedulePreload = useCallback((url, data, currentPage) => {
+    preloadCancel.current?.();
+    const cancels = [preloadImages(gridPosterUrls(data?.items))];
+    let stopped = false;
+    const controller = new AbortController();
+    cancels.push(() => {
+      stopped = true;
+      controller.abort();
+    });
+
+    if (currentPage < (data?.total_pages || 1) && canPreload()) {
+      const nextUrl = url.replace(/([?&]page=)\d+/, (_match, prefix) => `${prefix}${currentPage + 1}`);
+      cancels.push(
+        whenIdle(() => {
+          if (stopped || prefetchedPages.has(nextUrl)) return;
+          fetchJson(nextUrl, { signal: controller.signal })
+            .then((nextData) => {
+              if (stopped) return;
+              prefetchedPages.set(nextUrl, { data: nextData, at: Date.now() });
+              cancels.push(preloadImages(gridPosterUrls(nextData?.items)));
+            })
+            .catch(() => {});
+        })
+      );
+    }
+
+    preloadCancel.current = () => cancels.forEach((cancel) => cancel());
+  }, []);
+
   const loadItems = useCallback(
     async ({
       targetLibrary,
@@ -156,18 +213,9 @@ export function useLibraryItems({ initialLibrary, enabled = true, collectionsOnl
       if (fetchAbort.current) {
         fetchAbort.current.abort();
       }
-      const controller = new AbortController();
-      fetchAbort.current = controller;
-      setLoading(true);
-      setError(null);
-
-      try {
-        const response = await fetch(`${base}?${params.toString()}`, { signal: controller.signal });
-        const data = await safeJson(response);
-        if (!response.ok) {
-          const message = responseErrorMessage(response, data);
-          throw new Error(message);
-        }
+      preloadCancel.current?.();
+      const url = `${base}?${params.toString()}`;
+      const applyData = (data) => {
         setRawItems(Array.isArray(data?.items) ? data.items : []);
         setTotalPages(data?.total_pages || 1);
         setTotalCount(data?.total_count || (Array.isArray(data?.items) ? data.items.length : 0));
@@ -175,6 +223,31 @@ export function useLibraryItems({ initialLibrary, enabled = true, collectionsOnl
           setNotReadyCount(data.not_ready_count);
           setNotReadyCountLoading(false);
         }
+        schedulePreload(url, data, desiredPage);
+      };
+
+      const prefetched = takePrefetched(url);
+      if (prefetched) {
+        fetchAbort.current = null;
+        setError(null);
+        setLoading(false);
+        applyData(prefetched);
+        return;
+      }
+
+      const controller = new AbortController();
+      fetchAbort.current = controller;
+      setLoading(true);
+      setError(null);
+
+      try {
+        const response = await fetch(url, { signal: controller.signal });
+        const data = await safeJson(response);
+        if (!response.ok) {
+          const message = responseErrorMessage(response, data);
+          throw new Error(message);
+        }
+        applyData(data);
       } catch (err) {
         if (err.name === 'AbortError') return;
         setRawItems([]);
@@ -189,7 +262,7 @@ export function useLibraryItems({ initialLibrary, enabled = true, collectionsOnl
         }
       }
     },
-    [canFetch, collectionsOnly, library, page, query, sortMode, notReadyOnly]
+    [canFetch, collectionsOnly, library, page, query, sortMode, notReadyOnly, schedulePreload]
   );
 
   useEffect(() => {
@@ -197,7 +270,13 @@ export function useLibraryItems({ initialLibrary, enabled = true, collectionsOnl
     loadItems();
   }, [canFetch, library, page, query, loadItems]);
 
-  useEffect(() => () => fetchAbort.current?.abort(), []);
+  useEffect(
+    () => () => {
+      fetchAbort.current?.abort();
+      preloadCancel.current?.();
+    },
+    []
+  );
 
   useEffect(() => {
     if (enabled) return;
@@ -236,6 +315,7 @@ export function useLibraryItems({ initialLibrary, enabled = true, collectionsOnl
   }, []);
 
   const reload = useCallback(() => {
+    prefetchedPages.clear();
     loadItems();
   }, [loadItems]);
 

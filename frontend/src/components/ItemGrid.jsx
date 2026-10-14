@@ -1,5 +1,6 @@
 import { Link, useLocation } from 'react-router-dom';
 import { buildDetailPath, normalizePoster } from '../utils/items.js';
+import { GRID_IMAGE_WIDTH, sizedImageUrl } from '../utils/images.js';
 import { currentPathWithSearch } from '../utils/navigation.js';
 
 function ItemGrid({ items, library, onRequestFolder, loading, error }) {
@@ -66,7 +67,7 @@ function ItemCard({ item, library, onRequestFolder, returnTo }) {
 
   const content = (
     <>
-      <img className="poster" src={poster} alt={title} loading="lazy" />
+      <img className="poster" src={sizedImageUrl(poster, GRID_IMAGE_WIDTH)} alt={title} loading="lazy" />
       <div className="meta">
         <div className="title">
           <span className="title-text" title={title}>

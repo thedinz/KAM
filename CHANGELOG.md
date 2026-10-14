@@ -1,5 +1,19 @@
 # Changelog
 
+## 7.3.0 — 2026-10-14
+
+- Pages load much faster on slow connections. Grids, cleanup lists and artwork previews
+  now show resized copies of artwork instead of the full-size files (a typical poster
+  drops from over 1 MB to under 100 KB). Copies of local artwork are kept in
+  `/config/cache/thumbnails` and rebuilt when the artwork changes; Plex images are
+  resized by Plex.
+- Images you've already seen are kept by your browser instead of being downloaded or
+  re-checked on every visit.
+- When a library page has finished loading, KAM quietly loads the next page and its
+  posters in the background, so **Next** is instant. This is skipped when your browser
+  has data saver on or reports a very slow connection.
+- With the built-in login on, files under `/assets` now require a login too.
+
 ## 7.2.2 — 2026-10-14
 
 Security and reliability fixes. Updating is recommended.

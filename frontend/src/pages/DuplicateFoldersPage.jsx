@@ -3,6 +3,7 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom';
 
 import { useLibraryItemsContext } from '../hooks/LibraryItemsProvider.jsx';
 import { responseErrorMessage, safeJson } from '../utils/api.js';
+import { SMALL_IMAGE_WIDTH, sizedImageUrl } from '../utils/images.js';
 
 const BATCH_RESOLUTION_KEY = '__all__';
 
@@ -308,7 +309,7 @@ function DuplicateFoldersPage() {
                           disabled={Boolean(resolvingKey)}
                         />
                         <span className="orphaned-asset-preview">
-                          {folder.posterUrl ? <img src={folder.posterUrl} alt="" loading="lazy" /> : <span aria-hidden="true">No poster</span>}
+                          {folder.posterUrl ? <img src={sizedImageUrl(folder.posterUrl, SMALL_IMAGE_WIDTH)} alt="" loading="lazy" /> : <span aria-hidden="true">No poster</span>}
                         </span>
                         <span className="duplicate-folder-copy">
                           <strong title={folder.folderName}>{folder.folderName}</strong>
