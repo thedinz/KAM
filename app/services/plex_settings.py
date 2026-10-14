@@ -112,7 +112,7 @@ def is_plex_url(url: Optional[str]) -> bool:
     return not base_path or target.path == base_path or target.path.startswith(base_path + "/")
 
 
-def _without_token(url: str) -> str:
+def without_token(url: str) -> str:
     """Return *url* without an X-Plex-Token query parameter."""
     parts = urlsplit(url)
     query = [
@@ -141,7 +141,7 @@ def plex_get(url: str, **kwargs: Any) -> requests.Response:
         headers[_TOKEN_PARAM] = token
     kwargs.setdefault("verify", verify_ssl())
 
-    url = _without_token(url)
+    url = without_token(url)
     for _ in range(_MAX_REDIRECTS + 1):
         response = requests.get(
             url,
@@ -156,5 +156,5 @@ def plex_get(url: str, **kwargs: Any) -> requests.Response:
         response.close()
         if not is_plex_url(location):
             raise requests.RequestException("Plex redirected outside the configured server")
-        url = _without_token(location)
+        url = without_token(location)
     raise requests.TooManyRedirects("Too many Plex redirects")

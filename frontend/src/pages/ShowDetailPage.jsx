@@ -3,6 +3,7 @@ import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom'
 import ArtworkCard from '../components/ArtworkCard.jsx';
 import { useLibraryItemsContext } from '../hooks/LibraryItemsProvider.jsx';
 import { responseErrorMessage, safeJson } from '../utils/api.js';
+import { GRID_IMAGE_WIDTH, sizedImageUrl } from '../utils/images.js';
 import { sendSavedArtworkToPlex, uploadStatusMessage } from '../utils/plexArtwork.js';
 import { useTheme } from '../theme/ThemeProvider.jsx';
 import { buildLibraryBackLink, detailBackLink } from '../utils/navigation.js';
@@ -973,7 +974,7 @@ function ShowDetailPage() {
                       >
                         <div className="asset-image-wrapper asset-image-wrapper--poster season-summary-image">
                           {season.posterUrl ? (
-                            <img className="asset-image" src={season.posterUrl} alt="" loading="lazy" />
+                            <img className="asset-image" src={sizedImageUrl(season.posterUrl, GRID_IMAGE_WIDTH)} alt="" loading="lazy" />
                           ) : (
                             <div className="asset-placeholder" aria-hidden="true">
                               No preview available
