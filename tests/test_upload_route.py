@@ -291,3 +291,70 @@ def test_mediux_zip_import_maps_sample_names_to_kometa_assets(tmp_path, monkeypa
     assert (target_dir / "background.jpg").read_bytes() == b"series-background"
     assert (target_dir / "Season01.jpg").read_bytes() == b"season-poster"
     assert (target_dir / "S01E01.jpg").read_bytes() == b"title-card"
+
+
+def test_upload_rejects_files_over_the_size_limit(tmp_path, monkeypatch):
+    upload_module, target_dir, library, folder = _setup_env(tmp_path, monkeypatch)
+    monkeypatch.setattr(upload_module, "MAX_IMAGE_BYTES", len(JPEG_BYTES) - 1)
+
+    with pytest.raises(HTTPException) as excinfo:
+        asyncio.run(_invoke_upload(upload_module, library, folder, JPEG_BYTES))
+
+    assert excinfo.value.status_code == 413
+    assert not (target_dir / "poster.jpg").exists()
+
+
+def test_upload_rejects_images_with_too_many_pixels(tmp_path, monkeypatch):
+    upload_module, target_dir, library, folder = _setup_env(tmp_path, monkeypatch)
+    monkeypatch.setattr(upload_module, "MAX_IMAGE_PIXELS", 10)
+
+    with pytest.raises(HTTPException) as excinfo:
+        asyncio.run(_invoke_upload(upload_module, library, folder, JPEG_BYTES))
+
+    assert excinfo.value.status_code == 422
+    assert not (target_dir / "poster.jpg").exists()
+
+
+def test_mediux_zip_with_too_many_entries_is_rejected(tmp_path, monkeypatch):
+    upload_module, target_dir, library, folder = _setup_env(tmp_path, monkeypatch)
+    monkeypatch.setattr(upload_module, "MAX_ZIP_MEMBERS", 2)
+
+    archive_bytes = io.BytesIO()
+    with zipfile.ZipFile(archive_bytes, "w") as archive:
+        for index in range(3):
+            archive.writestr(f"Show (2024) - S01E0{index + 1}.jpg", JPEG_BYTES)
+    archive_bytes.seek(0)
+
+    with pytest.raises(HTTPException) as excinfo:
+        asyncio.run(
+            upload_module.import_mediux_zip_asset(
+                library=library,
+                folderName=folder,
+                file=UploadFile(filename="Show (2024).zip", file=archive_bytes),
+            )
+        )
+
+    assert excinfo.value.status_code == 413
+    assert list(target_dir.iterdir()) == []
+
+
+def test_mediux_zip_skips_entries_that_expand_past_the_image_limit(tmp_path, monkeypatch):
+    upload_module, target_dir, library, folder = _setup_env(tmp_path, monkeypatch)
+    monkeypatch.setattr(upload_module, "MAX_IMAGE_BYTES", 1024)
+
+    archive_bytes = io.BytesIO()
+    with zipfile.ZipFile(archive_bytes, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("Show (2024).jpg", b"\0" * 4096)
+    archive_bytes.seek(0)
+
+    response = asyncio.run(
+        upload_module.import_mediux_zip_asset(
+            library=library,
+            folderName=folder,
+            file=UploadFile(filename="Show (2024).zip", file=archive_bytes),
+        )
+    )
+
+    assert response["importedCount"] == 0
+    assert response["skippedCount"] == 1
+    assert not (target_dir / "poster.jpg").exists()

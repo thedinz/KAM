@@ -13,9 +13,10 @@ def _reload_library_mappings():
     importlib.reload(_library_mappings_module)
     return _library_mappings_module
 
-def test_get_collections_path_uses_section_override(tmp_path):
+def test_get_collections_path_uses_section_override(tmp_path, monkeypatch):
     settings_path = tmp_path / "settings.json"
     assets_root = tmp_path / "assets"
+    monkeypatch.setenv("KAM_ASSETS_ROOT", str(assets_root))
     collections_root = assets_root / "Collections"
     movies_section_root = collections_root / "Movies"
     movies_asset_root = assets_root / "Movies"

@@ -1,5 +1,22 @@
 # Changelog
 
+## 7.2.2 — 2026-10-14
+
+Security and reliability fixes. Updating is recommended.
+
+- Library and collection folders must now be inside `/assets` (`KAM_ASSETS_ROOT`) or
+  `COLLECTIONS_ROOT`. Folders elsewhere can't be saved; ones saved by older versions
+  are ignored and flagged by **Setup Check**, so move them inside `/assets`.
+- Orphan and duplicate cleanup never deletes a folder that holds a configured library
+  or collections folder, and duplicate resolution keeps folders another item still uses.
+- Imports only accept POST requests.
+- The Plex token is sent only as a request header and kept out of logs, and Plex
+  requests no longer follow redirects to other servers.
+- Changing the login username, password or auth mode signs out existing sessions, and
+  repeated failed sign-ins from one address are paused for 15 minutes.
+- Uploads are limited to 50 MB and 100 megapixels per image, and Mediux zips to 5000
+  entries and 2 GB unpacked.
+
 ## 7.2.1 — 2026-09-28
 
 - Protect asset folders from orphan cleanup when their directory is shared with

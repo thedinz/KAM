@@ -82,21 +82,16 @@ def _get(url: str, params: Optional[dict] = None, headers: Optional[dict] = None
             _safe_params(params),
             _safe_headers(headers),
         )
-        r = requests.get(url, params=params, headers=headers, timeout=30, verify=plex_settings.verify_ssl())
+        r = plex_settings.plex_get(url, params=params, headers=headers, timeout=30)
         r.raise_for_status()
         return r
     except requests.HTTPError as e:
         status = e.response.status_code if e.response is not None else 502
         detail = f"Plex request failed [{status}] for {_safe_url(url)}"
-        logger.warning(
-            "Plex HTTP error [%s] for %s: %s",
-            status,
-            _safe_url(url),
-            e,
-        )
+        logger.warning("Plex HTTP error [%s] for %s", status, _safe_url(url))
         raise HTTPException(status_code=502, detail=detail)
     except Exception as e:
-        logger.warning("Plex request error for %s: %s", _safe_url(url), e)
+        logger.warning("Plex request error for %s: %s", _safe_url(url), _mask_token(str(e)))
         raise HTTPException(status_code=502, detail=f"Plex request error for {_safe_url(url)}: {_mask_token(str(e))}")
 
 def _download_to(path: str, url: str):
@@ -109,7 +104,7 @@ def _download_to(path: str, url: str):
     tmp_path = f"{path}.kam-download.tmp"
     try:
         logger.debug("Downloading %s to %s", _safe_url(url), path)
-        with requests.get(url, timeout=60, stream=True, verify=plex_settings.verify_ssl()) as r:
+        with plex_settings.plex_get(url, timeout=60, stream=True) as r:
             r.raise_for_status()
             with open(tmp_path, "wb") as f:
                 for chunk in r.iter_content(chunk_size=1024 * 64):
@@ -120,12 +115,10 @@ def _download_to(path: str, url: str):
         logger.debug("Download complete for %s", path)
     except requests.HTTPError as e:
         status = e.response.status_code if e.response is not None else 502
-        logger.warning(
-            "Download failed [%s] for %s: %s", status, _safe_url(url), e
-        )
+        logger.warning("Download failed [%s] for %s", status, _safe_url(url))
         raise HTTPException(status_code=502, detail=f"Download failed [{status}] for {_safe_url(url)}")
     except Exception as e:
-        logger.warning("Download error for %s: %s", _safe_url(url), e)
+        logger.warning("Download error for %s: %s", _safe_url(url), _mask_token(str(e)))
         raise HTTPException(status_code=502, detail=f"Download error for {_safe_url(url)}: {_mask_token(str(e))}")
     finally:
         if os.path.exists(tmp_path):
@@ -366,15 +359,6 @@ def import_poster_post(
     )
     return _download_result(path, src)
 
-@router.get("/api/import/poster")
-def import_poster_get(
-    library: str = Query(...),
-    folderName: str = Query(...),
-    ratingKey: str = Query(...),
-    url: Optional[str] = Query(None),
-):
-    return import_poster_post(library=library, folderName=folderName, ratingKey=ratingKey, url=url)
-
 @router.post("/api/import/background")
 def import_background_post(
     library: str = Form(...),
@@ -399,15 +383,6 @@ def import_background_post(
         _safe_url(src),
     )
     return _download_result(path, src)
-
-@router.get("/api/import/background")
-def import_background_get(
-    library: str = Query(...),
-    folderName: str = Query(...),
-    ratingKey: str = Query(...),
-    url: Optional[str] = Query(None),
-):
-    return import_background_post(library=library, folderName=folderName, ratingKey=ratingKey, url=url)
 
 @router.post("/api/import/season")
 def import_season_post(
@@ -465,24 +440,6 @@ def import_season_post(
     )
     return _download_result(path, src)
 
-@router.get("/api/import/season")
-def import_season_get(
-    library: str = Query(...),
-    folderName: str = Query(...),
-    season: str = Query(...),
-    kind: str = Query("poster"),
-    ratingKey: Optional[str] = Query(None),
-    url: Optional[str] = Query(None),
-):
-    return import_season_post(
-        library=library,
-        folderName=folderName,
-        season=season,
-        kind=kind,
-        ratingKey=ratingKey,
-        url=url,
-    )
-
 @router.post("/api/import/title-card")
 def import_title_card_post(
     library: str = Form(...),
@@ -522,24 +479,6 @@ def import_title_card_post(
         _safe_url(src),
     )
     return _download_result(path, src)
-
-@router.get("/api/import/title-card")
-def import_title_card_get(
-    library: str = Query(...),
-    folderName: str = Query(...),
-    season: str = Query(...),
-    episode: str = Query(...),
-    ratingKey: Optional[str] = Query(None),
-    url: Optional[str] = Query(None),
-):
-    return import_title_card_post(
-        library=library,
-        folderName=folderName,
-        season=season,
-        episode=episode,
-        ratingKey=ratingKey,
-        url=url,
-    )
 
 # NEW: combined import for movies (poster + background in one call)
 @router.post("/api/import/movie")

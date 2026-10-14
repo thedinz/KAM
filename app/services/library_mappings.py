@@ -18,6 +18,9 @@ __all__ = [
     "get_library_entry",
     "get_asset_path",
     "get_collections_path",
+    "allowed_roots",
+    "is_allowed_path",
+    "disallowed_paths",
 ]
 
 _CACHE: Optional[List[Dict[str, Any]]] = None
@@ -127,6 +130,70 @@ def normalize_path(value: Any) -> str:
                 return ""
 
     return normalized
+
+
+def allowed_roots() -> List[str]:
+    """Return the mounted folders that library mappings may point into.
+
+    Mappings arrive through the settings API, so they must stay inside the
+    asset mounts instead of reaching anywhere in the container.
+    """
+
+    roots = [_compute_expected_assets_root()]
+    collections_root = _normalize_env_path(os.environ.get("COLLECTIONS_ROOT"))
+    if collections_root:
+        roots.append(collections_root)
+    return [root for root in dict.fromkeys(roots) if root]
+
+
+def is_allowed_path(value: Any) -> bool:
+    """Return whether *value* is an absolute path inside an allowed root."""
+
+    text = str(value or "").strip()
+    if not text or not os.path.isabs(text):
+        return False
+    target = os.path.normcase(os.path.realpath(text))
+    for root in allowed_roots():
+        base = os.path.normcase(os.path.realpath(root))
+        if target == base or target.startswith(base.rstrip(os.sep) + os.sep):
+            return True
+    return False
+
+
+def _allowed(path: str) -> Optional[str]:
+    return path if path and is_allowed_path(path) else None
+
+
+def _mapping_paths(mappings: Iterable[Dict[str, Any]]) -> List[str]:
+    paths: List[str] = []
+    for entry in mappings or []:
+        for key in ("assetPath", "collectionsPath"):
+            path = normalize_path(entry.get(key))
+            if path:
+                paths.append(path)
+        for section in entry.get("collectionSections") or []:
+            path = normalize_path(section.get("collectionsPath"))
+            if path:
+                paths.append(path)
+    return paths
+
+
+def disallowed_paths(
+    mappings: Iterable[Dict[str, Any]],
+    previous: Iterable[Dict[str, Any]] = (),
+) -> List[str]:
+    """Return new mapping paths that fall outside the allowed roots.
+
+    Paths already saved in *previous* are left alone so older settings can
+    still be saved; they are ignored when KAM resolves folders.
+    """
+
+    existing = set(_mapping_paths(previous))
+    return [
+        path
+        for path in dict.fromkeys(_mapping_paths(mappings))
+        if path not in existing and not is_allowed_path(path)
+    ]
 
 
 def normalize_collection_sections(value: Any) -> List[Dict[str, str]]:
@@ -286,7 +353,7 @@ def get_asset_path(library: str) -> Optional[str]:
     if not entry:
         return None
     path = normalize_path(entry.get("assetPath"))
-    return path or None
+    return _allowed(path)
 
 
 def _default_collections_root() -> Optional[str]:
@@ -315,7 +382,7 @@ def _section_override_path(entry: Dict[str, Any], library: str) -> Optional[str]
             continue
         if name.casefold() != library_key:
             continue
-        path = normalize_path(section.get("collectionsPath"))
+        path = _allowed(normalize_path(section.get("collectionsPath")))
         if path:
             return path
 
@@ -327,7 +394,7 @@ def get_collections_path(library: Optional[str] = None) -> Optional[str]:
     if library:
         entry = get_library_entry(library)
         if entry:
-            path = normalize_path(entry.get("collectionsPath"))
+            path = _allowed(normalize_path(entry.get("collectionsPath")))
             if path:
                 return path
             override = _section_override_path(entry, library)
@@ -340,7 +407,9 @@ def get_collections_path(library: Optional[str] = None) -> Optional[str]:
             override = _section_override_path(explicit, library)
             if override:
                 return override
-        explicit_coll = normalize_path(explicit.get("collectionsPath") or explicit.get("assetPath"))
+        explicit_coll = _allowed(
+            normalize_path(explicit.get("collectionsPath") or explicit.get("assetPath"))
+        )
         if explicit_coll:
             return explicit_coll
 
@@ -353,7 +422,7 @@ def get_collections_path(library: Optional[str] = None) -> Optional[str]:
             override = _section_override_path(entry, library)
             if override:
                 return override
-        candidate = normalize_path(entry.get("collectionsPath"))
+        candidate = _allowed(normalize_path(entry.get("collectionsPath")))
         if candidate:
             return candidate
     return None

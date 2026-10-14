@@ -2,7 +2,6 @@
 from fastapi import APIRouter, HTTPException, Query
 from typing import Dict, Any, List, Optional, Tuple
 import os
-import requests
 import xml.etree.ElementTree as ET
 from urllib.parse import quote
 
@@ -26,7 +25,7 @@ def _plex_sections_raw():
     plex_url, plex_token = _require_plex()
     url = f"{plex_url}/library/sections"
     headers = {"Accept": "application/json", "X-Plex-Token": plex_token}
-    r = requests.get(
+    r = plex_settings.plex_get(
         url,
         headers=headers,
         params={"X-Plex-Token": plex_token},
@@ -104,7 +103,7 @@ def _plex_list(path: str, params: Optional[dict] = None) -> List[Dict[str, Any]]
     params = dict(params or {})
     params["X-Plex-Token"] = plex_token
     headers = {"Accept": "application/json", "X-Plex-Token": plex_token}
-    r = requests.get(
+    r = plex_settings.plex_get(
         url,
         params=params,
         headers=headers,
@@ -133,7 +132,7 @@ def _plex_list_page(path: str, params: Optional[dict] = None) -> Tuple[List[Dict
     params = dict(params or {})
     params["X-Plex-Token"] = plex_token
     headers = {"Accept": "application/json", "X-Plex-Token": plex_token}
-    r = requests.get(
+    r = plex_settings.plex_get(
         url,
         params=params,
         headers=headers,

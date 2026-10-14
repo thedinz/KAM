@@ -585,9 +585,12 @@ def _candidate_bases(library: str) -> Iterable[str]:
             candidates.append(coll_base)
 
     if ASSETS_ROOT:
-        fallback = os.path.join(ASSETS_ROOT, library)
-        if fallback not in candidates:
-            candidates.append(fallback)
+        # An absolute or dotted library name would make os.path.join discard
+        # ASSETS_ROOT, so only plain names get a folder under it.
+        if is_direct_child_name(library):
+            fallback = os.path.join(ASSETS_ROOT, library)
+            if fallback not in candidates:
+                candidates.append(fallback)
         if ASSETS_ROOT not in candidates:
             candidates.append(ASSETS_ROOT)
 

@@ -47,3 +47,30 @@ def test_health_report_checks_saved_paths(tmp_path, monkeypatch):
     assert Path(report["assetMappings"][0]["path"]) == movie_assets
     assert report["assetMappings"][0]["status"] == "ok"
     assert Path(report["collectionPaths"][0]["path"]) == collections
+
+
+def test_health_report_flags_a_mapping_outside_the_asset_root(tmp_path, monkeypatch):
+    assets_root = tmp_path / "assets"
+    outside = tmp_path / "outside"
+    assets_root.mkdir()
+    outside.mkdir()
+
+    monkeypatch.setenv("KAM_ASSETS_ROOT", str(assets_root))
+    monkeypatch.delenv("COLLECTIONS_ROOT", raising=False)
+
+    library_mappings = importlib.reload(importlib.import_module("app.services.library_mappings"))
+    settings_service = importlib.reload(importlib.import_module("app.services.settings"))
+    settings_service.set_settings_path(str(tmp_path / "config" / "settings.json"))
+    settings_service.save_settings(
+        {"libraryMappings": [{"library": "Movies", "assetPath": str(outside)}]}
+    )
+    library_mappings.clear_cache()
+
+    health_service = importlib.reload(importlib.import_module("app.services.health"))
+    monkeypatch.setattr(health_service.plex_service, "get_plex", lambda: SimpleNamespace())
+
+    report = health_service.get_health_report()
+
+    assert report["ok"] is False
+    assert report["assetMappings"][0]["status"] == "error"
+    assert "outside" in report["assetMappings"][0]["detail"]

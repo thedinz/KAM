@@ -162,6 +162,20 @@ class SettingsPayload(BaseModel):
         return value.strip()
 
 
+def _reject_disallowed_paths(mappings: List[LibraryMappingPayload]) -> None:
+    previous = settings_service.load_settings().get("libraryMappings") or []
+    disallowed = library_mappings_service.disallowed_paths(
+        [item.model_dump() for item in mappings],
+        previous if isinstance(previous, list) else [],
+    )
+    if disallowed:
+        roots = ", ".join(library_mappings_service.allowed_roots())
+        raise HTTPException(
+            status_code=422,
+            detail=f"Library folders must be inside {roots}: {', '.join(disallowed)}",
+        )
+
+
 @router.get("/api/settings", response_model=SettingsPayload)
 def get_settings() -> SettingsPayload:
     data = settings_service.load_settings()
@@ -175,6 +189,7 @@ def update_settings(payload: SettingsPayload) -> SettingsPayload:
             status_code=422,
             detail="A login username is required when a login password is configured",
         )
+    _reject_disallowed_paths(payload.libraryMappings)
     stored = settings_service.save_settings(payload.model_dump())
     return SettingsPayload(**stored)
 
@@ -202,6 +217,7 @@ class LibraryMappingsUpdatePayload(BaseModel):
 
 @router.put("/api/settings/library-mappings", response_model=List[LibraryMappingPayload])
 def update_library_mappings(payload: LibraryMappingsUpdatePayload) -> List[LibraryMappingPayload]:
+    _reject_disallowed_paths(payload.libraryMappings)
     stored = settings_service.save_library_mappings(
         [item.model_dump() for item in payload.libraryMappings]
     )
