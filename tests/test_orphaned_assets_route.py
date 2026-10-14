@@ -343,6 +343,49 @@ def test_duplicate_resolution_keeps_selection_and_deletes_other_folders(
     )
 
 
+def test_duplicate_resolution_keeps_a_folder_another_item_still_uses(
+    orphaned_assets_env,
+):
+    env = orphaned_assets_env
+    env.overrides.set_canonical_overrides("Movies", {"2": env.present.name})
+
+    payload = env.route.ResolveDuplicateFoldersPayload(
+        library="Movies",
+        ratingKey="1",
+        keepFolderName="Present Movie Directors Cut (2020)",
+    )
+    data = env.route.resolve_duplicate_folders(payload)
+
+    assert env.present.is_dir()
+    assert env.present.name not in data["deleted"]
+    assert any(item["folderName"] == env.present.name for item in data["skipped"])
+    assert not env.present_yearless.is_dir()
+
+
+def test_delete_never_removes_a_folder_holding_another_library_root(
+    orphaned_assets_env,
+):
+    env = orphaned_assets_env
+    kids_root = env.root / "Kids"
+    (kids_root / "Some Film (2001)").mkdir(parents=True)
+    settings = importlib.import_module("app.services.settings")
+    settings.save_settings({
+        "plexUrl": "http://plex.test",
+        "plexToken": "token",
+        "libraryMappings": [
+            {"library": "Movies", "assetPath": str(env.root)},
+            {"library": "Kids", "assetPath": str(kids_root)},
+        ],
+    })
+
+    payload = env.route.DeleteOrphanedAssetsPayload(library="Movies", folderNames=["Kids"])
+    data = env.route.delete_orphaned_assets(payload)
+
+    assert data["deleted"] == []
+    assert data["errors"][0]["folderName"] == "Kids"
+    assert kids_root.is_dir()
+
+
 def test_duplicate_batch_resolution_switches_kam_before_deleting_other_folders(
     orphaned_assets_env,
 ):

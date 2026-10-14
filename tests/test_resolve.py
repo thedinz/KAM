@@ -23,7 +23,7 @@ def test_resolve_prefers_config_mapping(tmp_path, monkeypatch):
     library = "Movies"
     target = "Avatar"
 
-    mapped_library_path = tmp_path / "custom_movies"
+    mapped_library_path = assets_root / "custom_movies"
     mapped_library_path.mkdir(parents=True)
     (mapped_library_path / target).mkdir()
 
@@ -468,3 +468,37 @@ def test_resolve_rejects_yearless_folder_when_explicit_year_conflicts(tmp_path, 
 
     with pytest.raises(FileNotFoundError):
         resolve_module.resolve_existing_dir_or_422(library, target)
+
+
+def test_resolve_never_uses_an_absolute_library_name_as_a_folder(tmp_path, monkeypatch):
+    assets_root = tmp_path / "assets"
+    assets_root.mkdir()
+    outside = tmp_path / "outside"
+    (outside / "Secret Folder").mkdir(parents=True)
+    monkeypatch.setenv("KAM_ASSETS_ROOT", str(assets_root))
+
+    settings_module = importlib.reload(importlib.import_module("app.services.settings"))
+    settings_module.set_settings_path(str(tmp_path / "settings.json"))
+    settings_module.save_library_mappings([])
+    resolve_module = _reload_with_assets_root(str(assets_root))
+
+    with pytest.raises(FileNotFoundError):
+        resolve_module.resolve_existing_dir_or_422(str(outside), "Secret Folder")
+
+
+def test_resolve_ignores_a_saved_mapping_outside_the_asset_root(tmp_path, monkeypatch):
+    assets_root = tmp_path / "assets"
+    assets_root.mkdir()
+    outside = tmp_path / "outside"
+    (outside / "Secret Folder").mkdir(parents=True)
+    monkeypatch.setenv("KAM_ASSETS_ROOT", str(assets_root))
+
+    settings_module = importlib.reload(importlib.import_module("app.services.settings"))
+    settings_module.set_settings_path(str(tmp_path / "settings.json"))
+    settings_module.save_library_mappings(
+        [{"library": "Movies", "assetPath": str(outside), "collectionsPath": None}]
+    )
+    resolve_module = _reload_with_assets_root(str(assets_root))
+
+    with pytest.raises(FileNotFoundError):
+        resolve_module.resolve_existing_dir_or_422("Movies", "Secret Folder")

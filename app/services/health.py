@@ -51,6 +51,16 @@ def _directory_check(
     path = library_mappings.normalize_path(path_value)
     if not path:
         return _result(key, label, "warning", "Not configured.", path="", library=library)
+    if key in {"asset-mapping", "collection-path"} and not library_mappings.is_allowed_path(path):
+        roots = ", ".join(library_mappings.allowed_roots())
+        return _result(
+            key,
+            label,
+            "error",
+            f"Path is outside {roots}, so KAM ignores it. Choose a folder inside it.",
+            path=path,
+            library=library,
+        )
 
     target = Path(path)
     if not target.exists():
