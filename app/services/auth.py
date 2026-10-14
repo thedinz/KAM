@@ -1,6 +1,8 @@
 """Lightweight authentication helpers for KAM."""
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 import secrets
 import threading
@@ -23,9 +25,15 @@ _AUTH_MODE_REVERSE_PROXY = "reverse_proxy"
 _DEFAULT_COOKIE_NAME = "kam_auth"
 _DEFAULT_TTL_SECONDS = 60 * 60 * 24 * 7
 _MAX_USERNAME_LENGTH = 128
+_LOGIN_WINDOW_SECONDS = 15 * 60
+_LOGIN_MAX_FAILURES = 10
+_LOGIN_MAX_TRACKED = 1000
 
 _LOCK = threading.Lock()
-_SESSIONS: dict[str, float] = {}
+# token -> (expiry, credentials fingerprint at login)
+_SESSIONS: dict[str, tuple[float, str]] = {}
+# client address -> failed login timestamps inside the window
+_FAILED_LOGINS: dict[str, list[float]] = {}
 
 
 def _normalize_mode(value: object) -> str:
@@ -159,11 +167,22 @@ def verify_credentials(candidate_username: Optional[str], candidate_password: Op
     return secrets.compare_digest(username, claimed_username)
 
 
+def _credentials_fingerprint() -> str:
+    """Return a digest that changes whenever the login mode or credentials do.
+
+    Sessions remember the fingerprint they were created under, so changing
+    the username, password or auth mode signs out every existing session.
+    """
+    material = json.dumps([auth_mode(), _resolve_username(), _resolve_password()])
+    return hashlib.sha256(material.encode("utf-8")).hexdigest()
+
+
 def create_session() -> str:
     token = secrets.token_urlsafe(32)
     expiry = time.time() + token_ttl_seconds()
+    fingerprint = _credentials_fingerprint()
     with _LOCK:
-        _SESSIONS[token] = expiry
+        _SESSIONS[token] = (expiry, fingerprint)
     return token
 
 
@@ -171,9 +190,10 @@ def validate_session(token: Optional[str]) -> bool:
     if not token:
         return False
     now = time.time()
+    fingerprint = _credentials_fingerprint()
     with _LOCK:
-        expiry = _SESSIONS.get(token)
-        if not expiry or expiry < now:
+        session = _SESSIONS.get(token)
+        if not session or session[0] < now or session[1] != fingerprint:
             _SESSIONS.pop(token, None)
             return False
         return True
@@ -189,6 +209,43 @@ def clear_session(token: Optional[str]) -> None:
 def clear_expired() -> None:
     now = time.time()
     with _LOCK:
-        expired = [token for token, expiry in _SESSIONS.items() if expiry < now]
+        expired = [token for token, (expiry, _) in _SESSIONS.items() if expiry < now]
         for token in expired:
             _SESSIONS.pop(token, None)
+
+
+def _recent_failures(client: str, now: float) -> list[float]:
+    cutoff = now - _LOGIN_WINDOW_SECONDS
+    recent = [stamp for stamp in _FAILED_LOGINS.get(client, []) if stamp > cutoff]
+    if recent:
+        _FAILED_LOGINS[client] = recent
+    else:
+        _FAILED_LOGINS.pop(client, None)
+    return recent
+
+
+def login_retry_after(client: str) -> int:
+    """Return seconds until *client* may try again, or 0 if it may now."""
+    now = time.time()
+    with _LOCK:
+        recent = _recent_failures(client, now)
+        if len(recent) < _LOGIN_MAX_FAILURES:
+            return 0
+        return max(1, int(recent[0] + _LOGIN_WINDOW_SECONDS - now) + 1)
+
+
+def record_login_failure(client: str) -> None:
+    now = time.time()
+    with _LOCK:
+        if client not in _FAILED_LOGINS and len(_FAILED_LOGINS) >= _LOGIN_MAX_TRACKED:
+            for stale in list(_FAILED_LOGINS):
+                _recent_failures(stale, now)
+            if len(_FAILED_LOGINS) >= _LOGIN_MAX_TRACKED:
+                oldest = min(_FAILED_LOGINS, key=lambda key: _FAILED_LOGINS[key][-1])
+                _FAILED_LOGINS.pop(oldest, None)
+        _FAILED_LOGINS.setdefault(client, []).append(now)
+
+
+def clear_login_failures(client: str) -> None:
+    with _LOCK:
+        _FAILED_LOGINS.pop(client, None)

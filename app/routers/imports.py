@@ -82,21 +82,16 @@ def _get(url: str, params: Optional[dict] = None, headers: Optional[dict] = None
             _safe_params(params),
             _safe_headers(headers),
         )
-        r = requests.get(url, params=params, headers=headers, timeout=30, verify=plex_settings.verify_ssl())
+        r = plex_settings.plex_get(url, params=params, headers=headers, timeout=30)
         r.raise_for_status()
         return r
     except requests.HTTPError as e:
         status = e.response.status_code if e.response is not None else 502
         detail = f"Plex request failed [{status}] for {_safe_url(url)}"
-        logger.warning(
-            "Plex HTTP error [%s] for %s: %s",
-            status,
-            _safe_url(url),
-            e,
-        )
+        logger.warning("Plex HTTP error [%s] for %s", status, _safe_url(url))
         raise HTTPException(status_code=502, detail=detail)
     except Exception as e:
-        logger.warning("Plex request error for %s: %s", _safe_url(url), e)
+        logger.warning("Plex request error for %s: %s", _safe_url(url), _mask_token(str(e)))
         raise HTTPException(status_code=502, detail=f"Plex request error for {_safe_url(url)}: {_mask_token(str(e))}")
 
 def _download_to(path: str, url: str):
@@ -109,7 +104,7 @@ def _download_to(path: str, url: str):
     tmp_path = f"{path}.kam-download.tmp"
     try:
         logger.debug("Downloading %s to %s", _safe_url(url), path)
-        with requests.get(url, timeout=60, stream=True, verify=plex_settings.verify_ssl()) as r:
+        with plex_settings.plex_get(url, timeout=60, stream=True) as r:
             r.raise_for_status()
             with open(tmp_path, "wb") as f:
                 for chunk in r.iter_content(chunk_size=1024 * 64):
@@ -120,12 +115,10 @@ def _download_to(path: str, url: str):
         logger.debug("Download complete for %s", path)
     except requests.HTTPError as e:
         status = e.response.status_code if e.response is not None else 502
-        logger.warning(
-            "Download failed [%s] for %s: %s", status, _safe_url(url), e
-        )
+        logger.warning("Download failed [%s] for %s", status, _safe_url(url))
         raise HTTPException(status_code=502, detail=f"Download failed [{status}] for {_safe_url(url)}")
     except Exception as e:
-        logger.warning("Download error for %s: %s", _safe_url(url), e)
+        logger.warning("Download error for %s: %s", _safe_url(url), _mask_token(str(e)))
         raise HTTPException(status_code=502, detail=f"Download error for {_safe_url(url)}: {_mask_token(str(e))}")
     finally:
         if os.path.exists(tmp_path):

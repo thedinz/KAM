@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Request, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ..services import auth as auth_service
 
@@ -9,8 +9,8 @@ router = APIRouter()
 
 
 class LoginPayload(BaseModel):
-    username: str | None = None
-    password: str
+    username: str | None = Field(default=None, max_length=1024)
+    password: str = Field(max_length=1024)
 
 
 @router.get("/auth/status")
@@ -44,8 +44,19 @@ def auth_status(request: Request) -> dict:
 def auth_login(payload: LoginPayload, request: Request, response: Response) -> dict:
     if not auth_service.is_enabled():
         raise HTTPException(status_code=404, detail="Built-in authentication not enabled")
+    peer = getattr(request, "client", None)
+    client = peer.host if peer else "unknown"
+    retry_after = auth_service.login_retry_after(client)
+    if retry_after:
+        raise HTTPException(
+            status_code=429,
+            detail="Too many failed sign-in attempts. Try again later.",
+            headers={"Retry-After": str(retry_after)},
+        )
     if not auth_service.verify_credentials(payload.username, payload.password):
+        auth_service.record_login_failure(client)
         raise HTTPException(status_code=401, detail="Invalid credentials")
+    auth_service.clear_login_failures(client)
     token = auth_service.create_session()
     response.set_cookie(
         auth_service.cookie_name(),
