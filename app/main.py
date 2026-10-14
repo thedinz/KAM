@@ -96,7 +96,9 @@ async def enforce_auth(request: Request, call_next):
         return await call_next(request)
 
     path = request.url.path
-    exempt_prefixes = ("/spa-assets", "/assets", "/auth/")
+    # /assets serves the user's artwork folders, so it needs a login like the
+    # API does; only the UI's own build files and the login flow are public.
+    exempt_prefixes = ("/spa-assets", "/auth/")
     exempt_exact = {"/login", "/favicon.ico", "/favicon.svg"}
 
     if path in exempt_exact or path.startswith(exempt_prefixes):
