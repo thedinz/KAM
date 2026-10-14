@@ -299,6 +299,7 @@ variables cover paths and deployment options.
 | `KAM_FOLDER_OVERRIDES_PATH` | `<state root>/folder_overrides.json` | Override the saved folder assignments file. |
 | `KAM_EXCLUSIONS_PATH` | `<state root>/exclusions.json` | Override the excluded items file. |
 | `KAM_ORPHAN_EXCLUSIONS_PATH` | `<state root>/orphan_exclusions.json` | Override the orphan audit exclusions file. |
+| `KAM_THUMBNAIL_CACHE` | `<settings folder>/cache/thumbnails` | Where resized copies of artwork are kept. |
 | `KAM_LEGACY_STATE_ROOT` | — | Older state folder to read folder assignments from after a migration. |
 
 ### Plex and logging
@@ -328,6 +329,7 @@ variables cover paths and deployment options.
 | `folder_overrides.json` | Folders you assigned with the folder finder or Mapping Scan. |
 | `exclusions.json` | Items hidden from KAM. |
 | `orphan_exclusions.json` | Folders hidden from the orphan audit. |
+| `cache/thumbnails/` | Small copies of artwork for faster pages. Safe to delete; KAM rebuilds them as needed. |
 
 Installs that stored these files in `/data` are migrated automatically: KAM keeps using
 an existing `/data/*.json` file until a `/config` copy exists.

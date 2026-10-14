@@ -3,6 +3,7 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom';
 
 import { useLibraryItemsContext } from '../hooks/LibraryItemsProvider.jsx';
 import { responseErrorMessage, safeJson } from '../utils/api.js';
+import { SMALL_IMAGE_WIDTH, sizedImageUrl } from '../utils/images.js';
 
 function formatBytes(value) {
   const bytes = Number(value) || 0;
@@ -258,7 +259,7 @@ function OrphanedAssetsPage() {
                   </label>
                   <div className="orphaned-asset-preview">
                     {item.posterUrl ? (
-                      <img src={item.posterUrl} alt="" loading="lazy" />
+                      <img src={sizedImageUrl(item.posterUrl, SMALL_IMAGE_WIDTH)} alt="" loading="lazy" />
                     ) : (
                       <span aria-hidden="true">No poster</span>
                     )}

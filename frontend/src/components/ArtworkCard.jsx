@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { PREVIEW_IMAGE_WIDTH, sizedImageUrl } from '../utils/images.js';
 
 const IDLE_OPERATION = Object.freeze({
   uploading: false,
@@ -130,7 +131,7 @@ function ArtworkCard({
       </div>
       <div className={imageWrapperClassName.join(' ')}>
         {imageUrl ? (
-          <img className="asset-image" src={imageUrl} alt={label} loading="lazy" />
+          <img className="asset-image" src={sizedImageUrl(imageUrl, PREVIEW_IMAGE_WIDTH)} alt={label} loading="lazy" />
         ) : (
           <div className="asset-placeholder" aria-hidden="true">
             No preview available
