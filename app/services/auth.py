@@ -12,6 +12,7 @@ from typing import Optional
 
 from fastapi import Request
 
+from . import passwords
 from . import settings as settings_service
 
 logger = logging.getLogger(__name__)
@@ -73,20 +74,21 @@ def is_reverse_proxy_mode() -> bool:
     return auth_mode() == _AUTH_MODE_REVERSE_PROXY
 
 
-def _resolve_password() -> str:
-    env_password = os.getenv(_PASSWORD_ENV)
-    if env_password and env_password.strip():
-        return env_password.strip()
+def _env_password() -> str:
+    return (os.getenv(_PASSWORD_ENV) or "").strip()
+
+
+def _stored_password_hash() -> str:
     try:
         data = settings_service.load_settings()
     except Exception:
         return ""
-    value = data.get("authPassword", "")
-    if value is None:
-        return ""
-    if isinstance(value, str):
-        return value.strip()
-    return str(value).strip()
+    return str(data.get("authPasswordHash") or "").strip()
+
+
+def _resolve_password() -> str:
+    """Return the password from the environment, else the saved hash ("" if none)."""
+    return _env_password() or _stored_password_hash()
 
 
 def _resolve_username() -> str:
@@ -215,10 +217,11 @@ def cookie_secure(request: Request) -> bool:
 def verify_password(candidate: Optional[str]) -> bool:
     if not candidate or not is_enabled():
         return False
-    expected = _resolve_password()
-    if not expected:
-        return False
-    return secrets.compare_digest(candidate, expected)
+    env_password = _env_password()
+    if env_password:
+        return secrets.compare_digest(candidate, env_password)
+    stored = _stored_password_hash()
+    return bool(stored) and passwords.verify_password(candidate, stored)
 
 
 def verify_credentials(candidate_username: Optional[str], candidate_password: Optional[str]) -> bool:

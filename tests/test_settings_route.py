@@ -37,11 +37,11 @@ def test_get_settings_returns_defaults_when_missing_file(settings_modules):
     assert resp.model_dump() == {
         "theme": "dark",
         "plexUrl": "",
-        "plexToken": "",
+        "plexTokenSet": False,
         "autoApplyToPlex": False,
         "authMode": "builtin",
         "authUsername": "",
-        "authPassword": "",
+        "authPasswordSet": False,
         "libraryMappings": [],
     }
 
@@ -73,11 +73,11 @@ def test_get_settings_returns_stored_values(settings_modules):
     assert resp.model_dump() == {
         "theme": "dark",
         "plexUrl": "http://plex.example:32400",
-        "plexToken": "initial-token",
+        "plexTokenSet": True,
         "autoApplyToPlex": False,
         "authMode": "builtin",
         "authUsername": "",
-        "authPassword": "",
+        "authPasswordSet": False,
         "libraryMappings": [
             {
                 "library": "Movies",
@@ -132,11 +132,11 @@ def test_put_settings_updates_file(settings_modules):
     assert resp.model_dump() == {
         "theme": "light",
         "plexUrl": "http://plex.changed",
-        "plexToken": "updated-token",
+        "plexTokenSet": True,
         "autoApplyToPlex": False,
         "authMode": "builtin",
         "authUsername": "",
-        "authPassword": "",
+        "authPasswordSet": False,
         "libraryMappings": [
             {
                 "library": "Movies",
@@ -161,7 +161,7 @@ def test_put_settings_updates_file(settings_modules):
         "autoApplyToPlex": False,
         "authMode": "builtin",
         "authUsername": "",
-        "authPassword": "",
+        "authPasswordHash": "",
         "libraryMappings": [
             {
                 "library": "Movies",
@@ -184,7 +184,7 @@ def test_put_settings_updates_file(settings_modules):
         "autoApplyToPlex": False,
         "authMode": "builtin",
         "authUsername": "",
-        "authPassword": "",
+        "authPasswordHash": "",
         "libraryMappings": [
             {
                 "library": "Movies",
@@ -237,8 +237,9 @@ def test_put_settings_accepts_reverse_proxy_auth_mode(settings_modules):
     resp = router.update_settings(payload)
 
     assert resp.authMode == "reverse_proxy"
-    assert resp.authPassword == "keep-existing-secret"
+    assert resp.authPasswordSet is True
     stored = json.loads(path.read_text(encoding="utf-8"))
+    assert "keep-existing-secret" not in path.read_text(encoding="utf-8")
     assert stored["authMode"] == "reverse_proxy"
     assert service.load_settings()["authMode"] == "reverse_proxy"
 
@@ -477,3 +478,86 @@ def test_update_settings_keeps_an_already_saved_folder_outside_the_asset_root(
     )
 
     assert router.update_settings(payload).theme == "light"
+
+
+def test_get_settings_never_returns_secrets(settings_modules):
+    router, service, _, _ = settings_modules
+    service.save_settings(
+        {
+            "theme": "dark",
+            "plexUrl": "http://plex.example:32400",
+            "plexToken": "secret-token",
+            "authUsername": "admin",
+            "authPassword": "secret-password",
+        }
+    )
+
+    body = router.get_settings().model_dump_json()
+
+    assert "secret-token" not in body
+    assert "secret-password" not in body
+    assert "scrypt" not in body
+    assert '"plexTokenSet":true' in body
+    assert '"authPasswordSet":true' in body
+
+
+def test_blank_secrets_keep_the_saved_ones(settings_modules):
+    router, service, _, _ = settings_modules
+    service.save_settings(
+        {
+            "theme": "dark",
+            "plexUrl": "http://plex.example:32400",
+            "plexToken": "secret-token",
+            "authUsername": "admin",
+            "authPassword": "secret-password",
+        }
+    )
+    saved_hash = service.load_settings()["authPasswordHash"]
+
+    router.update_settings(
+        router.SettingsPayload(
+            theme="light", plexUrl="http://plex.example:32400", authUsername="admin"
+        )
+    )
+
+    stored = service.load_settings()
+    assert stored["theme"] == "light"
+    assert stored["plexToken"] == "secret-token"
+    assert stored["authPasswordHash"] == saved_hash
+
+
+def test_a_new_plex_url_needs_the_token_again(settings_modules):
+    router, service, _, _ = settings_modules
+    service.save_settings(
+        {"theme": "dark", "plexUrl": "http://plex.example:32400", "plexToken": "secret-token"}
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        router.update_settings(
+            router.SettingsPayload(theme="dark", plexUrl="http://elsewhere.example:32400")
+        )
+    assert exc.value.status_code == 422
+    assert service.load_settings()["plexUrl"] == "http://plex.example:32400"
+
+    # Clearing the URL clears the token with it.
+    router.update_settings(router.SettingsPayload(theme="dark", plexUrl=""))
+    assert service.load_settings()["plexToken"] == ""
+
+
+def test_password_from_older_versions_is_hashed_on_load(settings_modules):
+    _, service, path, _ = settings_modules
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps({"theme": "dark", "authUsername": "admin", "authPassword": "old-plain"}),
+        encoding="utf-8",
+    )
+
+    first = service.load_settings()
+    second = service.load_settings()
+
+    assert first["authPasswordHash"].startswith("scrypt$")
+    assert second["authPasswordHash"] == first["authPasswordHash"]
+    assert "authPassword" not in first
+    on_disk = json.loads(path.read_text(encoding="utf-8"))
+    assert "old-plain" not in json.dumps(on_disk)
+    assert on_disk["authPasswordHash"] == first["authPasswordHash"]
