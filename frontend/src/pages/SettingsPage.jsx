@@ -87,11 +87,12 @@ function SettingsPage() {
   });
 
   const savedPlexUrl = savedSettings?.plexUrl || '';
-  const savedPlexToken = savedSettings?.plexToken || '';
+  // The server never sends the token or password back, only whether one is saved.
+  const savedPlexTokenSet = Boolean(savedSettings?.plexTokenSet);
   const savedAutoApplyToPlex = Boolean(savedSettings?.autoApplyToPlex);
   const savedAuthMode = savedSettings?.authMode || 'builtin';
   const savedAuthUsername = savedSettings?.authUsername || '';
-  const savedAuthPassword = savedSettings?.authPassword || '';
+  const savedAuthPasswordSet = Boolean(savedSettings?.authPasswordSet);
   const effectiveAuthMode = authMode === 'reverse_proxy' ? 'reverse_proxy' : 'builtin';
   const effectiveAuthUsername = authUsername ?? '';
   const effectiveAuthPassword = authPassword ?? '';
@@ -99,8 +100,11 @@ function SettingsPage() {
   const normalizedPlexToken = normalizeText(plexToken);
   const normalizedAuthUsername = normalizeText(effectiveAuthUsername);
   const normalizedAuthPassword = normalizeText(effectiveAuthPassword);
-  const hasPlexCredentials = Boolean(normalizedPlexUrl && normalizedPlexToken);
-  const hasAuthPassword = Boolean(normalizedAuthPassword);
+  const hasPlexCredentials = Boolean(
+    normalizedPlexUrl &&
+      (normalizedPlexToken || (savedPlexTokenSet && normalizedPlexUrl === savedPlexUrl))
+  );
+  const hasAuthPassword = Boolean(normalizedAuthPassword) || savedAuthPasswordSet;
   const hasAuthUsername = Boolean(normalizedAuthUsername);
   const reverseProxyAuth = effectiveAuthMode === 'reverse_proxy';
 
@@ -443,11 +447,11 @@ function SettingsPage() {
     const settingsChanged =
       theme !== savedTheme ||
       plexUrl !== savedPlexUrl ||
-      plexToken !== savedPlexToken ||
+      Boolean(plexToken) ||
       Boolean(autoApplyToPlex) !== savedAutoApplyToPlex ||
       effectiveAuthMode !== savedAuthMode ||
       effectiveAuthUsername !== savedAuthUsername ||
-      effectiveAuthPassword !== savedAuthPassword;
+      Boolean(effectiveAuthPassword);
     return settingsChanged || mappingsDirty;
   }, [
     hasUnsavedChanges,
@@ -456,7 +460,6 @@ function SettingsPage() {
     plexUrl,
     savedPlexUrl,
     plexToken,
-    savedPlexToken,
     autoApplyToPlex,
     savedAutoApplyToPlex,
     effectiveAuthMode,
@@ -464,7 +467,6 @@ function SettingsPage() {
     effectiveAuthUsername,
     savedAuthUsername,
     effectiveAuthPassword,
-    savedAuthPassword,
     mappingsDirty,
   ]);
 
@@ -1077,7 +1079,7 @@ function SettingsPage() {
                     value={effectiveAuthPassword}
                     onChange={handleAuthPasswordChange}
                     placeholder={
-                      savedAuthPassword ? 'Saved password' : 'Enter a password'
+                      savedAuthPasswordSet ? 'Saved (type a new one to change it)' : 'Enter a password'
                     }
                     autoComplete="new-password"
                     disabled={busy}
@@ -1122,7 +1124,11 @@ function SettingsPage() {
                 name="plexToken"
                 value={plexToken}
                 onChange={handlePlexTokenChange}
-                placeholder="Enter your Plex token"
+                placeholder={
+                  savedPlexTokenSet && normalizedPlexUrl === savedPlexUrl
+                    ? 'Saved (type a new one to change it)'
+                    : 'Enter your Plex token'
+                }
                 autoComplete="new-password"
                 disabled={busy}
               />

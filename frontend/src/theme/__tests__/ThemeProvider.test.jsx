@@ -34,7 +34,7 @@ describe('ThemeProvider', () => {
           jsonResponse({
             theme: 'dark',
             plexUrl: 'http://plex.local',
-            plexToken: 'token',
+            plexTokenSet: true,
             libraryMappings: [
               { library: 'Movies', assetPath: '/assets/Movies', collectionsPath: '' },
             ],

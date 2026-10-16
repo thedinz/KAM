@@ -9,7 +9,7 @@ import threading
 from pathlib import Path
 from typing import Any, Dict, List
 
-from . import library_mappings
+from . import library_mappings, passwords
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +20,8 @@ _DEFAULT_SETTINGS: Dict[str, Any] = {
     "autoApplyToPlex": False,
     "authMode": "builtin",
     "authUsername": "",
-    "authPassword": "",
+    # A salted hash; the login password itself is never stored.
+    "authPasswordHash": "",
     "libraryMappings": [],
 }
 
@@ -67,6 +68,8 @@ def _resolve_initial_storage_path() -> str:
 _STORAGE_PATH = _resolve_initial_storage_path()
 
 _LOCK = threading.Lock()
+# plain-text password from an older settings file -> its hash
+_LEGACY_HASHES: Dict[str, str] = {}
 
 
 def _normalize_auth_mode(value: Any) -> str:
@@ -107,9 +110,29 @@ def load_settings() -> Dict[str, Any]:
 
 
 def save_settings(data: Dict[str, Any]) -> Dict[str, Any]:
-    """Persist settings and return the stored payload merged with defaults."""
+    """Persist settings and return the stored payload merged with defaults.
+
+    The login password and Plex token are write-only for the UI: a blank
+    ``authPassword`` keeps the saved one, a blank ``plexToken`` keeps the saved
+    one while ``plexUrl`` is unchanged, and a new password is stored only as a
+    hash.
+    """
+    incoming = dict(data) if isinstance(data, dict) else {}
+    password = str(incoming.pop("authPassword", None) or "").strip()
+    incoming.pop("authPasswordHash", None)
     with _LOCK:
-        sanitized = _sanitize_payload(data)
+        current = _load_locked()
+        sanitized = _sanitize_payload(incoming)
+        sanitized["authPasswordHash"] = (
+            passwords.hash_password(password) if password else current["authPasswordHash"]
+        )
+        # Keep the saved token only for the same Plex server, so changing the
+        # URL can't send it somewhere new.
+        same_server = str(sanitized.get("plexUrl") or "").strip() == str(
+            current["plexUrl"] or ""
+        ).strip()
+        if not str(sanitized.get("plexToken") or "").strip() and same_server:
+            sanitized["plexToken"] = current["plexToken"]
         merged = _merge_with_defaults(sanitized)
         _write_locked(merged)
         _clear_plex_cache()
@@ -148,11 +171,11 @@ def claim_auth_credentials(username: str, password: str) -> bool:
     """Atomically save the first built-in login; False if a password already exists."""
     with _LOCK:
         current = _load_locked()
-        if str(current.get("authPassword") or "").strip():
+        if current["authPasswordHash"]:
             return False
         current["authMode"] = "builtin"
         current["authUsername"] = str(username).strip()
-        current["authPassword"] = str(password).strip()
+        current["authPasswordHash"] = passwords.hash_password(str(password).strip())
         _write_locked(current)
         return True
 
@@ -179,7 +202,7 @@ def _sanitize_payload(data: Dict[str, Any] | None) -> Dict[str, Any]:
         "plexToken",
         "autoApplyToPlex",
         "authUsername",
-        "authPassword",
+        "authPasswordHash",
     ):
         if key in data:
             sanitized[key] = (
@@ -213,8 +236,33 @@ def _load_locked() -> Dict[str, Any]:
         logger.warning("Invalid JSON in settings file %s: %s", path, exc)
         data = {}
 
-    sanitized = _sanitize_payload(data if isinstance(data, dict) else {})
-    return _merge_with_defaults(sanitized)
+    data = data if isinstance(data, dict) else {}
+    migrated = _hash_legacy_password(data)
+    merged = _merge_with_defaults(_sanitize_payload(data))
+    if migrated:
+        try:
+            _write_locked(merged)
+            logger.info("Stored the login password as a hash")
+        except Exception as exc:
+            logger.warning("Unable to save the hashed login password to %s: %s", path, exc)
+    return merged
+
+
+def _hash_legacy_password(data: Dict[str, Any]) -> bool:
+    """Replace a plain-text password saved by KAM 8.0 or older with its hash.
+
+    Returns whether the file still holds the old key and needs rewriting.
+    """
+    if "authPassword" not in data:
+        return False
+    legacy = str(data.pop("authPassword") or "").strip()
+    if legacy and not str(data.get("authPasswordHash") or "").strip():
+        # Reuse the hash if the file couldn't be rewritten, so each load
+        # doesn't make a new one and sign everyone out.
+        if legacy not in _LEGACY_HASHES:
+            _LEGACY_HASHES[legacy] = passwords.hash_password(legacy)
+        data["authPasswordHash"] = _LEGACY_HASHES[legacy]
+    return True
 
 
 def _write_locked(data: Dict[str, Any]) -> None:

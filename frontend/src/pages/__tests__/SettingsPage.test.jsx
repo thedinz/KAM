@@ -718,4 +718,64 @@ describe('SettingsPage', () => {
     expect(mockSave).toHaveBeenCalled();
     expect(await screen.findByRole('status')).toHaveTextContent('Settings saved successfully.');
   });
+
+  it('shows saved secrets as saved without their values', () => {
+    useTheme.mockReturnValue({
+      theme: 'dark',
+      savedTheme: 'dark',
+      plexUrl: 'http://plex.local',
+      plexToken: '',
+      autoApplyToPlex: false,
+      authMode: 'builtin',
+      authUsername: 'admin',
+      authPassword: '',
+      savedSettings: {
+        plexUrl: 'http://plex.local',
+        plexTokenSet: true,
+        autoApplyToPlex: false,
+        authMode: 'builtin',
+        authUsername: 'admin',
+        authPasswordSet: true,
+      },
+      libraryMappings: [],
+      savedLibraryMappings: [],
+      libraries: [],
+      librariesLoading: false,
+      librariesError: null,
+      loading: false,
+      saving: false,
+      error: null,
+      libraryMappingsDirty: false,
+      hasUnsavedChanges: false,
+      applyTheme: vi.fn(),
+      updateSettings: vi.fn(),
+      saveSettings: vi.fn(),
+      revertSettings: vi.fn(),
+      refreshLibraries: vi.fn().mockResolvedValue([]),
+      setLibraryMappings: vi.fn(),
+      exclusions: [],
+      exclusionsLoading: false,
+      exclusionsError: null,
+      refreshExclusions: vi.fn().mockResolvedValue([]),
+      includeItem: vi.fn(),
+      excludeItem: vi.fn(),
+      isItemExcluded: vi.fn(() => false),
+    });
+
+    const { container } = render(
+      <MemoryRouter>
+        <SettingsPage />
+      </MemoryRouter>
+    );
+
+    const token = container.querySelector('input[name="plexToken"]');
+    const password = container.querySelector('input[name="authPassword"]');
+    expect(token).toHaveValue('');
+    expect(token).toHaveAttribute('placeholder', 'Saved (type a new one to change it)');
+    expect(password).toHaveValue('');
+    expect(password).toHaveAttribute('placeholder', 'Saved (type a new one to change it)');
+    expect(
+      screen.getByText('Login is currently enabled. Save changes to update the username or password.')
+    ).toBeInTheDocument();
+  });
 });
