@@ -316,7 +316,7 @@ def test_collections_route_marks_asset_readiness(collections_env):
     assert missing["assetReady"] is False
     assert missing["folderName"] == "Missing Assets"
     assert missing["library"] == "Movies"
-    assert missing["posterUrlPlex"].startswith("http://plex.test")
+    assert missing["posterUrlPlex"].startswith("/api/plex/image?path=")
 
     sanitized = items["Mission: Impossible Collection"]
     assert sanitized["assetReady"] is True

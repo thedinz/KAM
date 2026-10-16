@@ -1,4 +1,5 @@
 import importlib
+import json
 import os
 from urllib.parse import unquote
 from types import SimpleNamespace
@@ -140,10 +141,11 @@ def test_tv_route_prefers_override(tv_env):
     assert data["seasons"][0]["episodes"][0]["filename"] == "S01E01.jpg"
     assert data["seasons"][0]["episodes"][0]["titleCardUrl"].startswith("/fileproxy")
     assert data["seasons"][0]["episodes"][0]["titleCardExists"] is True
-    assert data["seasons"][0]["episodes"][0]["plexTitleCardUrl"].startswith("http://plex.test")
-    assert data["plexPosterUrl"].startswith("http://plex.test")
-    assert data["plexBackgroundUrl"].startswith("http://plex.test")
-    assert data["seasons"][0]["plexBackgroundUrl"].startswith("http://plex.test")
+    assert data["seasons"][0]["episodes"][0]["plexTitleCardUrl"].startswith("/api/plex/image?path=")
+    assert data["plexPosterUrl"].startswith("/api/plex/image?path=")
+    assert data["plexBackgroundUrl"].startswith("/api/plex/image?path=")
+    assert data["seasons"][0]["plexBackgroundUrl"].startswith("/api/plex/image?path=")
+    assert "X-Plex-Token" not in json.dumps(data)
 
 
 @pytest.mark.parametrize("tv_env", ["kometa-tv"], indirect=True)
