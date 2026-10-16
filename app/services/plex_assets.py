@@ -30,30 +30,23 @@ def _strip_token(path: str) -> str:
     return urlunsplit((parsed.scheme, parsed.netloc, parsed.path, query, parsed.fragment))
 
 
+_PROXY_PATH = "/api/plex/image"
+
+
 def build_plex_asset_url(
     path: Optional[str],
     rating_key: Optional[str],
     kind: str,
 ) -> Optional[str]:
-    """Return a usable Plex asset URL with token attached when possible."""
+    """Return the proxy URL of a Plex asset, or None while Plex isn't configured.
+
+    The browser never gets a URL that carries the Plex token; it loads Plex
+    artwork through KAM, and imports turn the URL back into a Plex one.
+    """
     cfg = plex_settings.get_plex_config()
     if not cfg.url or not cfg.token:
         return None
-
-    resolved_path = _normalize_path(path, rating_key, kind)
-    if not resolved_path:
-        return None
-
-    if resolved_path.startswith("http://") or resolved_path.startswith("https://"):
-        base = resolved_path
-    else:
-        base = f"{cfg.url}{resolved_path}"
-
-    if "X-Plex-Token=" in base:
-        return base
-
-    separator = "&" if "?" in base else "?"
-    return f"{base}{separator}X-Plex-Token={cfg.token}"
+    return build_plex_proxy_url(path, rating_key, kind)
 
 
 def build_plex_proxy_url(
@@ -66,4 +59,25 @@ def build_plex_proxy_url(
     if not resolved_path:
         return None
     stripped = _strip_token(resolved_path)
-    return f"/api/plex/image?path={quote(stripped, safe='')}"
+    return f"{_PROXY_PATH}?path={quote(stripped, safe='')}"
+
+
+def plex_source_url(url: Optional[str]) -> Optional[str]:
+    """Return the token-free Plex URL behind a proxy URL or Plex URL, else None.
+
+    Plex requests add the token themselves, so the result never contains it.
+    """
+    cfg = plex_settings.get_plex_config()
+    if not url or not cfg.url:
+        return None
+    parts = urlsplit(url)
+    if not parts.scheme and not parts.netloc and parts.path == _PROXY_PATH:
+        query = dict(parse_qsl(parts.query))
+        kind = "art" if query.get("kind", "").lower() in ("art", "background") else "thumb"
+        path = _normalize_path(query.get("path"), query.get("ratingKey"), kind)
+        if not path:
+            return None
+        return plex_settings.without_token(f"{cfg.url}{path}")
+    if plex_settings.is_plex_url(url):
+        return plex_settings.without_token(url)
+    return None

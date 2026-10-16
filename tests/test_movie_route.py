@@ -1,4 +1,5 @@
 import importlib
+import json
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -143,5 +144,6 @@ def test_movie_route_prefers_override(movie_env):
     assert data["folderExists"] is True
     assert data["posterExists"] is True
     assert data["backgroundExists"] is True
-    assert data["posterUrlPlex"].startswith("http://plex.test")
-    assert data["backgroundUrlPlex"].startswith("http://plex.test")
+    assert data["posterUrlPlex"].startswith("/api/plex/image?path=")
+    assert data["backgroundUrlPlex"].startswith("/api/plex/image?path=")
+    assert "X-Plex-Token" not in json.dumps(data)

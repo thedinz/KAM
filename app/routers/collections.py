@@ -4,7 +4,7 @@ from typing import Optional, List, Dict, Any, Tuple
 from ..services.plex import get_plex
 from ..services import exclusions, folder_overrides
 from ..services import plex_settings
-from ..services.plex_assets import build_plex_proxy_url
+from ..services.plex_assets import build_plex_asset_url, build_plex_proxy_url
 from ..services import library_mappings as library_mappings_service
 from ..services.assets import sanitize_name
 from ..services.resolve import find_existing_dir_in_base
@@ -301,8 +301,8 @@ def collection(
     background_proxy = None
     cfg = plex_settings.get_plex_config()
     if cfg.url and cfg.token:
-        poster_plex = f"{cfg.url}/library/metadata/{int(ratingKey)}/thumb?X-Plex-Token={cfg.token}"
-        background_plex = f"{cfg.url}/library/metadata/{int(ratingKey)}/art?X-Plex-Token={cfg.token}"
+        poster_plex = build_plex_asset_url(None, str(int(ratingKey)), "thumb")
+        background_plex = build_plex_asset_url(None, str(int(ratingKey)), "art")
         poster_proxy = build_plex_proxy_url(None, str(ratingKey), "thumb")
         background_proxy = build_plex_proxy_url(None, str(ratingKey), "art")
 
@@ -414,7 +414,7 @@ def collections(
                 poster_plex = None
                 poster_proxy = None
                 if plex_url and plex_token:
-                    poster_plex = f"{plex_url}/library/metadata/{rk}/thumb?X-Plex-Token={plex_token}"
+                    poster_plex = build_plex_asset_url(None, str(rk), "thumb")
                     poster_proxy = build_plex_proxy_url(None, str(rk), "thumb")
 
                 library_name = name
