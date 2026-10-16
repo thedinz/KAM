@@ -1,5 +1,22 @@
 # Changelog
 
+## 8.0.0 — 2026-10-16
+
+KAM now requires a login before it can be used. **If your KAM has no login password,
+it will ask you to create one after this update.**
+
+- On first start (or after updating an install without a password), KAM shows a setup
+  screen and serves nothing else until a login is created. To prove you own the server,
+  enter the **setup code** from KAM's container log (on Unraid: **Docker** tab, KAM
+  icon, **Logs**), then choose a username and a password of at least 8 characters.
+  The code changes each time KAM restarts.
+- Installs that already have a password, use reverse proxy auth, or set
+  `KAM_AUTH_PASSWORD` are not affected.
+- To keep running without a login, set `KAM_AUTH_MODE=none` on the container. Only
+  do this if KAM can't be reached from anywhere you don't trust. This can't be switched
+  on from the Settings page, and Settings no longer saves the built-in login with an
+  empty password.
+
 ## 7.3.0 — 2026-10-14
 
 - Pages load much faster on slow connections. Grids, cleanup lists and artwork previews

@@ -65,5 +65,66 @@ describe('LoginPage', () => {
       'autocomplete',
       'current-password'
     );
+    expect(screen.queryByLabelText('Setup code')).not.toBeInTheDocument();
+  });
+
+  it('creates the first login with the setup code', async () => {
+    const setup = vi.fn().mockResolvedValue(undefined);
+    useAuth.mockReturnValue({
+      enabled: true,
+      authenticated: false,
+      loading: false,
+      usernameRequired: false,
+      setupRequired: true,
+      login: vi.fn(),
+      setup,
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/login']}>
+        <LoginPage />
+      </MemoryRouter>
+    );
+
+    fireEvent.change(screen.getByLabelText('Setup code'), { target: { value: ' ABCD-EFGH-JKMN ' } });
+    fireEvent.change(screen.getByLabelText('Username'), { target: { value: ' admin ' } });
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'long-secret' } });
+    fireEvent.change(screen.getByLabelText('Confirm password'), {
+      target: { value: 'long-secret' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Create login' }));
+
+    await waitFor(() => {
+      expect(setup).toHaveBeenCalledWith('ABCD-EFGH-JKMN', 'admin', 'long-secret');
+    });
+  });
+
+  it('checks the new password before sending the setup', () => {
+    const setup = vi.fn();
+    useAuth.mockReturnValue({
+      enabled: true,
+      authenticated: false,
+      loading: false,
+      setupRequired: true,
+      login: vi.fn(),
+      setup,
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/login']}>
+        <LoginPage />
+      </MemoryRouter>
+    );
+
+    fireEvent.change(screen.getByLabelText('Setup code'), { target: { value: 'ABCD-EFGH-JKMN' } });
+    fireEvent.change(screen.getByLabelText('Username'), { target: { value: 'admin' } });
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'long-secret' } });
+    fireEvent.change(screen.getByLabelText('Confirm password'), {
+      target: { value: 'other-secret' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Create login' }));
+
+    expect(screen.getByText('The passwords do not match.')).toBeInTheDocument();
+    expect(setup).not.toHaveBeenCalled();
   });
 });

@@ -17,6 +17,9 @@ if str(ROOT) not in sys.path:
 def settings_modules(tmp_path, monkeypatch):
     settings_path = tmp_path / "state" / "settings.json"
     monkeypatch.setenv("KAM_SETTINGS_PATH", str(settings_path))
+    # Most tests here save settings without a login; the password rule has its own tests.
+    monkeypatch.setenv("KAM_AUTH_MODE", "none")
+    monkeypatch.delenv("KAM_AUTH_PASSWORD", raising=False)
 
     library_module = importlib.reload(
         importlib.import_module("app.services.library_mappings")
@@ -268,6 +271,39 @@ def test_put_settings_rejects_password_without_username(settings_modules):
         router.update_settings(payload)
 
     assert exc.value.status_code == 422
+
+
+def test_put_settings_rejects_builtin_mode_without_a_password(settings_modules, monkeypatch):
+    router, _, _, _ = settings_modules
+    monkeypatch.delenv("KAM_AUTH_MODE")
+    payload = router.SettingsPayload(theme="dark", authMode="builtin", authUsername="admin")
+
+    with pytest.raises(HTTPException) as exc:
+        router.update_settings(payload)
+
+    assert exc.value.status_code == 422
+    assert "KAM_AUTH_MODE=none" in exc.value.detail
+
+
+@pytest.mark.parametrize(
+    ("env", "auth_mode"),
+    [
+        ({}, "reverse_proxy"),
+        ({"KAM_AUTH_PASSWORD": "env-secret"}, "builtin"),
+        ({"KAM_AUTH_MODE": "reverse_proxy"}, "builtin"),
+    ],
+)
+def test_put_settings_allows_no_password_when_kam_has_another_login(
+    settings_modules, monkeypatch, env, auth_mode
+):
+    router, _, _, _ = settings_modules
+    monkeypatch.delenv("KAM_AUTH_MODE")
+    for name, value in env.items():
+        monkeypatch.setenv(name, value)
+
+    response = router.update_settings(router.SettingsPayload(theme="light", authMode=auth_mode))
+
+    assert response.theme == "light"
 
 
 def test_put_settings_rejects_invalid_auth_mode(settings_modules):

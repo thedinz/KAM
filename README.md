@@ -70,7 +70,7 @@ Kometa expects.
 **Everything else**
 - **Setup Check** confirms Plex access, writable asset paths, collection folders, and
   that your settings will survive container updates.
-- Optional built-in login, or hand authentication to your reverse proxy.
+- Built-in login, or hand authentication to your reverse proxy.
 - Light and dark themes.
 
 ---
@@ -203,7 +203,11 @@ Install **Kometa Asset Manager** from Community Applications, then in the templa
 
 ### 3. First-time setup
 
-Open KAM and go to **Settings**:
+Open KAM. On first start it asks you to create a login: enter the **setup code** from
+KAM's container log (on Unraid: **Docker** tab, KAM icon, **Logs**), then choose a
+username and password. Until that's done, KAM serves nothing but this setup screen.
+
+Then go to **Settings**:
 
 1. **Plex** — enter your Plex URL (for example `http://192.168.1.10:32400`) and Plex
    token, then save.
@@ -212,8 +216,8 @@ Open KAM and go to **Settings**:
    folder** if that library's collections are not in `COLLECTIONS_ROOT`. Folders must be
    inside `/assets` or `COLLECTIONS_ROOT`; KAM won't save or use folders anywhere else.
 3. **Setup Check** — run it to confirm Plex, folders, and config persistence are working.
-4. **Login** (optional) — set a username and password, or choose reverse proxy auth. See
-   [Security](#security).
+4. **Login** (optional) — change your username or password, or choose reverse proxy auth.
+   See [Security](#security).
 
 Your mapped libraries now appear in the sidebar.
 
@@ -313,9 +317,9 @@ variables cover paths and deployment options.
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `KAM_AUTH_MODE` | from Settings | `builtin` or `reverse_proxy`. |
+| `KAM_AUTH_MODE` | from Settings | `builtin`, `reverse_proxy`, or `none` (no login at all; only set on the container). |
 | `KAM_AUTH_USERNAME` | from Settings | Built-in login username. |
-| `KAM_AUTH_PASSWORD` | from Settings | Built-in login password. Setting a password turns the login on. |
+| `KAM_AUTH_PASSWORD` | from Settings | Built-in login password. Setting it skips the first-run setup screen. |
 | `KAM_AUTH_COOKIE` | `kam_auth` | Session cookie name. |
 | `KAM_AUTH_TOKEN_TTL_SECONDS` | `604800` (7 days) | How long a login lasts. |
 | `KAM_AUTH_COOKIE_SECURE` | auto | `true` forces an HTTPS-only cookie; auto-detected otherwise. |
@@ -341,18 +345,24 @@ an existing `/data/*.json` file until a `/config` copy exists.
 KAM can read your Plex token and delete asset folders, so do not expose it to the
 internet without protection.
 
-- **Built-in login:** set a username and password under **Settings → Login** (or with
-  `KAM_AUTH_USERNAME` / `KAM_AUTH_PASSWORD`). Without a password, anyone who can reach KAM
-  can use it.
+- **Built-in login** (the default): on first start, KAM is locked until you create a
+  login with the one-time setup code from its container log. Change the username or
+  password later under **Settings → Login**, or set them with `KAM_AUTH_USERNAME` /
+  `KAM_AUTH_PASSWORD`.
 - **Reverse proxy auth:** choose **Reverse proxy auth** (or `KAM_AUTH_MODE=reverse_proxy`)
   if a proxy such as Authelia, Authentik, or an Nginx/Traefik/Caddy auth layer already
   protects KAM. KAM then skips its own login, so only use this behind a proxy that
   enforces authentication.
+- **No login:** set `KAM_AUTH_MODE=none` on the container only if KAM is unreachable
+  from anywhere you don't trust. Anyone who can reach KAM can then use it. This can't be
+  switched on from the Settings page.
 - For remote access, put KAM behind a reverse proxy with HTTPS rather than forwarding the
   port directly.
 
 Installs that only had a password from older versions keep working. The first login asks
-you to choose a username.
+you to choose a username. Installs from before 8.0 that had no password show the setup
+screen after updating; set `KAM_AUTH_MODE=none` instead if you want to keep running
+without a login.
 
 ---
 

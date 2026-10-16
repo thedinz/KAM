@@ -8,6 +8,7 @@ export function AuthProvider({ children }) {
     enabled: false,
     authenticated: true,
     usernameRequired: false,
+    setupRequired: false,
     loading: true,
   });
 
@@ -21,6 +22,7 @@ export function AuthProvider({ children }) {
             enabled: false,
             authenticated: true,
             usernameRequired: false,
+            setupRequired: false,
             loading: false,
           };
           setAuthState(nextState);
@@ -30,10 +32,11 @@ export function AuthProvider({ children }) {
       }
       const data = await response.json();
       const nextState = {
-        mode: data.mode === 'reverse_proxy' ? 'reverse_proxy' : 'builtin',
+        mode: ['reverse_proxy', 'none'].includes(data.mode) ? data.mode : 'builtin',
         enabled: Boolean(data.enabled),
         authenticated: Boolean(data.authenticated),
         usernameRequired: Boolean(data.usernameRequired),
+        setupRequired: Boolean(data.setupRequired),
         loading: false,
       };
       setAuthState(nextState);
@@ -44,6 +47,7 @@ export function AuthProvider({ children }) {
         enabled: false,
         authenticated: true,
         usernameRequired: false,
+        setupRequired: false,
         loading: false,
       };
       setAuthState(nextState);
@@ -74,6 +78,31 @@ export function AuthProvider({ children }) {
       enabled: true,
       authenticated: true,
       usernameRequired: false,
+      setupRequired: false,
+      loading: false,
+    });
+  }, []);
+
+  const setup = useCallback(async (code, username, password) => {
+    const response = await fetch('/auth/setup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify({ code, username, password }),
+    });
+
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      const message = typeof payload.detail === 'string' ? payload.detail : 'Setup failed';
+      throw new Error(message);
+    }
+
+    setAuthState({
+      mode: 'builtin',
+      enabled: true,
+      authenticated: true,
+      usernameRequired: false,
+      setupRequired: false,
       loading: false,
     });
   }, []);
@@ -84,6 +113,7 @@ export function AuthProvider({ children }) {
       mode: prev.mode,
       enabled: prev.enabled,
       authenticated: prev.mode === 'reverse_proxy' ? true : false,
+      setupRequired: false,
       loading: false,
     }));
   }, []);
@@ -93,9 +123,10 @@ export function AuthProvider({ children }) {
       ...authState,
       refresh,
       login,
+      setup,
       logout,
     }),
-    [authState, refresh, login, logout]
+    [authState, refresh, login, setup, logout]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
