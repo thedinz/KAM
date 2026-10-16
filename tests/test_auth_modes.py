@@ -1,4 +1,5 @@
 import importlib
+import json
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -272,11 +273,9 @@ def test_setup_code_creates_the_first_login(auth_modules):
     assert result == {"ok": True}
     assert auth_service.cookie_name() in response.headers["set-cookie"]
     stored = settings_service.load_settings()
-    assert (stored["authMode"], stored["authUsername"], stored["authPassword"]) == (
-        "builtin",
-        "admin",
-        "long-secret",
-    )
+    assert (stored["authMode"], stored["authUsername"]) == ("builtin", "admin")
+    assert stored["authPasswordHash"].startswith("scrypt$")
+    assert "long-secret" not in json.dumps(stored)
     assert auth_service.setup_required() is False
     assert auth_service.verify_credentials("admin", "long-secret") is True
 
@@ -308,7 +307,7 @@ def test_setup_rejects_a_wrong_code_and_short_passwords(auth_modules):
             Response(),
         )
     assert exc.value.status_code == 422
-    assert settings_service.load_settings()["authPassword"] == ""
+    assert settings_service.load_settings()["authPasswordHash"] == ""
     assert auth_service.setup_required() is True
 
 
@@ -348,3 +347,18 @@ def test_password_env_skips_setup(auth_modules, monkeypatch):
 
     assert auth_service.setup_required() is False
     assert auth_service.is_enabled() is True
+
+
+def test_login_works_with_a_password_saved_by_older_versions(auth_modules, tmp_path):
+    settings_service, auth_service, _ = auth_modules
+    (tmp_path / "settings.json").write_text(
+        json.dumps({"authMode": "builtin", "authUsername": "admin", "authPassword": "old-plain"}),
+        encoding="utf-8",
+    )
+
+    assert auth_service.verify_credentials("admin", "old-plain") is True
+    assert auth_service.verify_credentials("admin", "wrong") is False
+    token = auth_service.create_session()
+    # Later loads reuse the stored hash, so sessions stay valid.
+    assert auth_service.validate_session(token) is True
+    assert "old-plain" not in (tmp_path / "settings.json").read_text(encoding="utf-8")

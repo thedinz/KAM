@@ -15,20 +15,24 @@ const ThemeContext = createContext({
     theme: 'dark',
     plexUrl: '',
     plexToken: '',
+    plexTokenSet: false,
     autoApplyToPlex: false,
     authMode: 'builtin',
     authUsername: '',
     authPassword: '',
+    authPasswordSet: false,
     libraryMappings: [],
   },
   savedSettings: {
     theme: 'dark',
     plexUrl: '',
     plexToken: '',
+    plexTokenSet: false,
     autoApplyToPlex: false,
     authMode: 'builtin',
     authUsername: '',
     authPassword: '',
+    authPasswordSet: false,
     libraryMappings: [],
   },
   theme: 'dark',
@@ -45,6 +49,8 @@ const ThemeContext = createContext({
   savedAuthMode: 'builtin',
   savedAuthUsername: '',
   savedAuthPassword: '',
+  savedPlexTokenSet: false,
+  savedAuthPasswordSet: false,
   libraryMappings: [],
   savedLibraryMappings: [],
   libraries: [],
@@ -153,12 +159,14 @@ const sanitizeSettings = (raw = {}) => {
         : plexUrlValue
         ? String(plexUrlValue)
         : '',
+    // A new token typed into Settings; the saved one is never sent back.
     plexToken:
       typeof plexTokenValue === 'string'
         ? plexTokenValue.trim()
         : plexTokenValue
         ? String(plexTokenValue)
         : '',
+    plexTokenSet: Boolean(raw.plexTokenSet),
     autoApplyToPlex: Boolean(autoApplyToPlexValue),
     authMode: authModeValue,
     authUsername:
@@ -173,6 +181,7 @@ const sanitizeSettings = (raw = {}) => {
         : authPasswordValue
         ? String(authPasswordValue)
         : '',
+    authPasswordSet: Boolean(raw.authPasswordSet),
     libraryMappings: sanitizeLibraryMappings(raw.libraryMappings),
   };
 };
@@ -500,8 +509,8 @@ export function ThemeProvider({ children }) {
   }, []);
 
   const hasPlexCredentials = useMemo(
-    () => Boolean(settings.plexUrl && settings.plexToken),
-    [settings.plexUrl, settings.plexToken]
+    () => Boolean(settings.plexUrl && (settings.plexToken || settings.plexTokenSet)),
+    [settings.plexUrl, settings.plexToken, settings.plexTokenSet]
   );
 
   const refreshLibraries = useCallback(
@@ -567,9 +576,9 @@ export function ThemeProvider({ children }) {
           setSavedSettings(next);
           setSettings(next);
         }
-        const nextHasCredentials = Boolean(next.plexUrl && next.plexToken);
+        const nextHasCredentials = Boolean(next.plexUrl && next.plexTokenSet);
         if (nextHasCredentials) {
-          loadedLibrariesCredentialsKeyRef.current = `${next.plexUrl}::${next.plexToken}`;
+          loadedLibrariesCredentialsKeyRef.current = next.plexUrl;
           await refreshLibraries({ force: true }).catch(() => {});
         } else if (isMountedRef.current) {
           loadedLibrariesCredentialsKeyRef.current = '';
@@ -603,9 +612,7 @@ export function ThemeProvider({ children }) {
       return;
     }
     const credentialsKey =
-      savedSettings.plexUrl && savedSettings.plexToken
-        ? `${savedSettings.plexUrl}::${savedSettings.plexToken}`
-        : '';
+      savedSettings.plexUrl && savedSettings.plexTokenSet ? savedSettings.plexUrl : '';
     if (!credentialsKey) {
       loadedLibrariesCredentialsKeyRef.current = '';
       setLibraries([]);
@@ -615,7 +622,7 @@ export function ThemeProvider({ children }) {
     if (loadedLibrariesCredentialsKeyRef.current === credentialsKey) return;
     loadedLibrariesCredentialsKeyRef.current = credentialsKey;
     refreshLibraries({ force: true }).catch(() => {});
-  }, [canFetch, savedSettings.plexUrl, savedSettings.plexToken, refreshLibraries]);
+  }, [canFetch, savedSettings.plexUrl, savedSettings.plexTokenSet, refreshLibraries]);
 
   useEffect(() => {
     if (!canFetch) return;
@@ -763,6 +770,8 @@ export function ThemeProvider({ children }) {
       savedAuthMode: savedSettings.authMode,
       savedAuthUsername: savedSettings.authUsername,
       savedAuthPassword: savedSettings.authPassword,
+      savedPlexTokenSet: savedSettings.plexTokenSet,
+      savedAuthPasswordSet: savedSettings.authPasswordSet,
       libraryMappings: settings.libraryMappings,
       savedLibraryMappings: savedSettings.libraryMappings,
       libraries,

@@ -85,6 +85,8 @@ class LibraryMappingPayload(BaseModel):
 
 
 class SettingsPayload(BaseModel):
+    """Settings as the UI saves them. A blank plexToken or authPassword keeps the saved one."""
+
     model_config = ConfigDict(extra="ignore")
 
     theme: Literal["light", "dark"]
@@ -163,6 +165,29 @@ class SettingsPayload(BaseModel):
         return value.strip()
 
 
+class SettingsResponse(BaseModel):
+    """Settings as the UI reads them: secrets are reported as set or not, never sent."""
+
+    theme: Literal["light", "dark"]
+    plexUrl: str = ""
+    plexTokenSet: bool = False
+    autoApplyToPlex: bool = False
+    authMode: Literal["builtin", "reverse_proxy"] = "builtin"
+    authUsername: str = ""
+    authPasswordSet: bool = False
+    libraryMappings: List[LibraryMappingPayload] = Field(default_factory=list)
+
+
+def _settings_response(data: dict) -> SettingsResponse:
+    # Validate through the payload model so stored values get the same cleanup.
+    payload = SettingsPayload(**data)
+    return SettingsResponse(
+        **payload.model_dump(exclude={"plexToken", "authPassword"}),
+        plexTokenSet=bool(payload.plexToken),
+        authPasswordSet=bool(str(data.get("authPasswordHash") or "").strip()),
+    )
+
+
 def _reject_disallowed_paths(mappings: List[LibraryMappingPayload]) -> None:
     previous = settings_service.load_settings().get("libraryMappings") or []
     disallowed = library_mappings_service.disallowed_paths(
@@ -177,15 +202,16 @@ def _reject_disallowed_paths(mappings: List[LibraryMappingPayload]) -> None:
         )
 
 
-@router.get("/api/settings", response_model=SettingsPayload)
-def get_settings() -> SettingsPayload:
-    data = settings_service.load_settings()
-    return SettingsPayload(**data)
+@router.get("/api/settings", response_model=SettingsResponse)
+def get_settings() -> SettingsResponse:
+    return _settings_response(settings_service.load_settings())
 
 
-@router.put("/api/settings", response_model=SettingsPayload)
-def update_settings(payload: SettingsPayload) -> SettingsPayload:
-    if not payload.authPassword and auth_service.password_required_for(payload.authMode):
+@router.put("/api/settings", response_model=SettingsResponse)
+def update_settings(payload: SettingsPayload) -> SettingsResponse:
+    saved = settings_service.load_settings()
+    has_password = bool(payload.authPassword or str(saved.get("authPasswordHash") or "").strip())
+    if not has_password and auth_service.password_required_for(payload.authMode):
         raise HTTPException(
             status_code=422,
             detail=(
@@ -193,14 +219,21 @@ def update_settings(payload: SettingsPayload) -> SettingsPayload:
                 "set KAM_AUTH_MODE=none on the container"
             ),
         )
-    if payload.authMode == "builtin" and payload.authPassword and not payload.authUsername:
+    if payload.authMode == "builtin" and has_password and not payload.authUsername:
         raise HTTPException(
             status_code=422,
             detail="A login username is required when a login password is configured",
         )
+    # The saved token stays with the server it was entered for.
+    new_server = payload.plexUrl and payload.plexUrl != str(saved.get("plexUrl") or "").strip()
+    if new_server and not payload.plexToken and saved.get("plexToken"):
+        raise HTTPException(
+            status_code=422,
+            detail="Enter the Plex token again when changing the Plex URL",
+        )
     _reject_disallowed_paths(payload.libraryMappings)
     stored = settings_service.save_settings(payload.model_dump())
-    return SettingsPayload(**stored)
+    return _settings_response(stored)
 
 
 @router.get("/api/settings/health")

@@ -1,6 +1,7 @@
 import importlib
 import importlib
 import importlib
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -123,7 +124,7 @@ def test_items_route_prefers_override(items_env):
     assert overridden["assetReady"] is True
     assert overridden["posterUrl"].startswith("/fileproxy")
     assert overridden["posterUrlLocal"].startswith("/fileproxy")
-    assert overridden["posterUrlPlex"].startswith("http://plex.test")
+    assert overridden["posterUrlPlex"].startswith("/api/plex/image?path=")
 
 
 def test_items_route_reports_not_ready_count_and_filters(items_env):
@@ -136,9 +137,8 @@ def test_items_route_reports_not_ready_count_and_filters(items_env):
     assert by_key["33"]["folderName"] == items_env.tagged_folder.name
     assert by_key["22"]["assetReady"] is False
     assert by_key["22"]["posterUrl"].startswith("/api/plex/image")
-    assert by_key["22"]["posterUrlPlex"].startswith("http://plex.test")
-    assert "?" in by_key["22"]["posterUrlPlex"]
-    assert "X-Plex-Token=token" in by_key["22"]["posterUrlPlex"].split("?")[-1]
+    assert by_key["22"]["posterUrlPlex"].startswith("/api/plex/image?path=")
+    assert "X-Plex-Token" not in json.dumps(data)
 
     filtered = items_env.call(not_ready_only=True)
 

@@ -329,7 +329,7 @@ variables cover paths and deployment options.
 
 | File | Contents |
 |---|---|
-| `settings.json` | Theme, Plex URL and token, login settings, and library mappings. |
+| `settings.json` | Theme, Plex URL and token, login username and password hash, and library mappings. |
 | `folder_overrides.json` | Folders you assigned with the folder finder or Mapping Scan. |
 | `exclusions.json` | Items hidden from KAM. |
 | `orphan_exclusions.json` | Folders hidden from the orphan audit. |
@@ -358,6 +358,11 @@ internet without protection.
   switched on from the Settings page.
 - For remote access, put KAM behind a reverse proxy with HTTPS rather than forwarding the
   port directly.
+
+Your Plex token and login password never leave the server. **Settings** only shows that
+they are saved; type a new value to replace one. The password is stored as a salted
+hash, and Plex artwork reaches the browser through KAM rather than through Plex links
+that carry the token. If you change the Plex URL, enter the token again.
 
 Installs that only had a password from older versions keep working. The first login asks
 you to choose a username. Installs from before 8.0 that had no password show the setup

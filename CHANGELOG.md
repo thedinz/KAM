@@ -1,5 +1,21 @@
 # Changelog
 
+## 8.1.0 — 2026-10-16
+
+Your Plex token and login password now stay on the server. No action is needed.
+
+- **Settings** no longer sends the Plex token or login password to your browser. Both
+  fields show that a value is saved; leave them blank to keep it, or type a new one to
+  replace it.
+- If you change the Plex URL, enter the Plex token again. A saved token is only ever
+  sent to the Plex server it was entered for.
+- The login password is stored as a salted hash instead of plain text. Passwords saved
+  by earlier versions are converted automatically the first time KAM starts.
+- Plex artwork is loaded through KAM instead of through Plex links that carried the
+  token, so Plex images on detail pages are also resized for faster loading.
+- Downgrading to 8.0.0 or earlier after this update shows the first-run setup screen,
+  because older versions can't read the hashed password.
+
 ## 8.0.0 — 2026-10-16
 
 KAM now requires a login before it can be used. **If your KAM has no login password,

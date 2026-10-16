@@ -8,6 +8,7 @@ import requests
 from fastapi import APIRouter, Form, HTTPException, Query
 
 from ..services import plex_settings
+from ..services.plex_assets import plex_source_url
 from ..services.resolve import resolve_existing_dir_or_422
 
 router = APIRouter()
@@ -95,12 +96,15 @@ def _get(url: str, params: Optional[dict] = None, headers: Optional[dict] = None
         raise HTTPException(status_code=502, detail=f"Plex request error for {_safe_url(url)}: {_mask_token(str(e))}")
 
 def _download_to(path: str, url: str):
-    # Import URLs can come from the browser; only ever send the token to Plex.
-    if not plex_settings.is_plex_url(url):
+    # Import URLs can come from the browser as KAM proxy URLs or Plex URLs;
+    # only ever send the token to Plex.
+    source = plex_source_url(url)
+    if not source:
         raise HTTPException(
             status_code=422,
             detail="Import URLs must point at the configured Plex server",
         )
+    url = source
     tmp_path = f"{path}.kam-download.tmp"
     try:
         logger.debug("Downloading %s to %s", _safe_url(url), path)
@@ -131,7 +135,7 @@ def _download_to(path: str, url: str):
 def _download_result(path: str, src: str) -> Dict[str, Any]:
     replaced = os.path.isfile(path)
     _download_to(path, src)
-    return {"ok": True, "path": path, "src": src, "error": None, "replaced": replaced}
+    return {"ok": True, "path": path, "src": _safe_url(src), "error": None, "replaced": replaced}
 
 def _parse_asset_index(value: str, label: str) -> int:
     try:
@@ -195,8 +199,8 @@ def _resolve_art_path_from_metadata(rating_key: str) -> Optional[str]:
     return None
 
 def _poster_url_for_rating_key(rating_key: str) -> str:
-    plex_url, plex_token = _require_plex()
-    direct = f"{plex_url}/library/metadata/{rating_key}/thumb?X-Plex-Token={plex_token}"
+    plex_url, _ = _require_plex()
+    direct = f"{plex_url}/library/metadata/{rating_key}/thumb"
     try:
         logger.debug(
             "Attempting direct poster URL for ratingKey=%s: %s",
@@ -211,11 +215,11 @@ def _poster_url_for_rating_key(rating_key: str) -> str:
         if not thumb_path:
             logger.warning("Poster path resolution failed for ratingKey=%s", rating_key)
             raise HTTPException(status_code=502, detail=f"Could not resolve poster path for ratingKey={rating_key}")
-        return f"{plex_url}{thumb_path}?X-Plex-Token={plex_token}"
+        return f"{plex_url}{thumb_path}"
 
 def _art_url_for_rating_key(rating_key: str) -> str:
-    plex_url, plex_token = _require_plex()
-    direct = f"{plex_url}/library/metadata/{rating_key}/art?X-Plex-Token={plex_token}"
+    plex_url, _ = _require_plex()
+    direct = f"{plex_url}/library/metadata/{rating_key}/art"
     try:
         logger.debug(
             "Attempting direct background URL for ratingKey=%s: %s",
@@ -230,7 +234,7 @@ def _art_url_for_rating_key(rating_key: str) -> str:
         if not art_path:
             logger.warning("Background path resolution failed for ratingKey=%s", rating_key)
             raise HTTPException(status_code=502, detail=f"Could not resolve background path for ratingKey={rating_key}")
-        return f"{plex_url}{art_path}?X-Plex-Token={plex_token}"
+        return f"{plex_url}{art_path}"
 
 def _children_for_show(rating_key: str) -> List[Dict[str, Any]]:
     logger.debug("Fetching seasons for show ratingKey=%s", rating_key)
@@ -294,13 +298,13 @@ def _season_poster_url(show_rating_key: str, season_index: int) -> str:
             show_rating_key,
         )
         raise HTTPException(status_code=404, detail=f"Season {season_index} not found in Plex")
-    plex_url, plex_token = _require_plex()
+    plex_url, _ = _require_plex()
     thumb = target.get("thumb")
     rk    = target.get("ratingKey")
     if thumb:
-        return f"{plex_url}{thumb}?X-Plex-Token={plex_token}"
+        return f"{plex_url}{thumb}"
     if rk:
-        return f"{plex_url}/library/metadata/{rk}/thumb?X-Plex-Token={plex_token}"
+        return f"{plex_url}/library/metadata/{rk}/thumb"
     logger.warning(
         "Season poster URL unavailable for show %s season %s", show_rating_key, season_index
     )
@@ -323,13 +327,13 @@ def _season_background_url(show_rating_key: str, season_index: int) -> str:
     if not target:
         raise HTTPException(status_code=404, detail=f"Season {season_index} not found in Plex")
 
-    plex_url, plex_token = _require_plex()
+    plex_url, _ = _require_plex()
     art = target.get("art")
     rating_key = target.get("ratingKey")
     if art:
-        return f"{plex_url}{art}?X-Plex-Token={plex_token}"
+        return f"{plex_url}{art}"
     if rating_key:
-        return f"{plex_url}/library/metadata/{rating_key}/art?X-Plex-Token={plex_token}"
+        return f"{plex_url}/library/metadata/{rating_key}/art"
     raise HTTPException(status_code=502, detail="Season background URL unavailable from Plex")
 
 # ---------------- Endpoints ----------------
