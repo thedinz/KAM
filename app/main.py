@@ -1,6 +1,7 @@
 # app/main.py
 import logging
 import os
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, Request
@@ -15,7 +16,16 @@ from .services import auth as auth_service
 configure_logging()
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="KAM")
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    # A fresh install stays locked until its owner enters the code from the log.
+    if auth_service.setup_required():
+        auth_service.setup_code()
+    yield
+
+
+app = FastAPI(title="KAM", lifespan=lifespan)
 
 # The bundled UI is same-origin and needs no CORS. A wildcard policy would let
 # any website a user visits read /api/settings (including the Plex token) from
@@ -92,7 +102,9 @@ async def libraries_page():
 
 @app.middleware("http")
 async def enforce_auth(request: Request, call_next):
-    if not auth_service.is_enabled():
+    # Built-in mode needs a session even before a password exists, so an
+    # install that hasn't been set up yet only serves the login and setup flow.
+    if not auth_service.login_required():
         return await call_next(request)
 
     path = request.url.path
