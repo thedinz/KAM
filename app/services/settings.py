@@ -144,6 +144,19 @@ def claim_auth_username(username: str) -> str:
         return normalized
 
 
+def claim_auth_credentials(username: str, password: str) -> bool:
+    """Atomically save the first built-in login; False if a password already exists."""
+    with _LOCK:
+        current = _load_locked()
+        if str(current.get("authPassword") or "").strip():
+            return False
+        current["authMode"] = "builtin"
+        current["authUsername"] = str(username).strip()
+        current["authPassword"] = str(password).strip()
+        _write_locked(current)
+        return True
+
+
 def _merge_with_defaults(data: Dict[str, Any] | None) -> Dict[str, Any]:
     merged = copy.deepcopy(_DEFAULT_SETTINGS)
     if data:

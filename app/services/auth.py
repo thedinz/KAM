@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import secrets
 import threading
@@ -13,6 +14,8 @@ from fastapi import Request
 
 from . import settings as settings_service
 
+logger = logging.getLogger(__name__)
+
 _PASSWORD_ENV = "KAM_AUTH_PASSWORD"
 _USERNAME_ENV = "KAM_AUTH_USERNAME"
 _AUTH_MODE_ENV = "KAM_AUTH_MODE"
@@ -22,18 +25,24 @@ _COOKIE_SECURE_ENV = "KAM_AUTH_COOKIE_SECURE"
 
 _AUTH_MODE_BUILTIN = "builtin"
 _AUTH_MODE_REVERSE_PROXY = "reverse_proxy"
+_AUTH_MODE_NONE = "none"
 _DEFAULT_COOKIE_NAME = "kam_auth"
 _DEFAULT_TTL_SECONDS = 60 * 60 * 24 * 7
 _MAX_USERNAME_LENGTH = 128
+_MIN_SETUP_PASSWORD_LENGTH = 8
 _LOGIN_WINDOW_SECONDS = 15 * 60
 _LOGIN_MAX_FAILURES = 10
 _LOGIN_MAX_TRACKED = 1000
+# No 0/O or 1/I/L, so the code is easy to copy from a log by hand.
+_SETUP_CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
 
 _LOCK = threading.Lock()
 # token -> (expiry, credentials fingerprint at login)
 _SESSIONS: dict[str, tuple[float, str]] = {}
-# client address -> failed login timestamps inside the window
+# client address -> failed login and setup timestamps inside the window
 _FAILED_LOGINS: dict[str, list[float]] = {}
+# One-time code that proves the first-run setup is done by the server's owner.
+_SETUP_CODE: Optional[str] = None
 
 
 def _normalize_mode(value: object) -> str:
@@ -42,6 +51,8 @@ def _normalize_mode(value: object) -> str:
     text = str(value).strip().lower().replace("-", "_")
     if text in {"reverse_proxy", "proxy"}:
         return _AUTH_MODE_REVERSE_PROXY
+    if text in {"none", "off", "disabled"}:
+        return _AUTH_MODE_NONE
     return _AUTH_MODE_BUILTIN
 
 
@@ -53,7 +64,9 @@ def auth_mode() -> str:
         data = settings_service.load_settings()
     except Exception:
         return _AUTH_MODE_BUILTIN
-    return _normalize_mode(data.get("authMode"))
+    mode = _normalize_mode(data.get("authMode"))
+    # Running without a login is a container setting only, never a saved one.
+    return _AUTH_MODE_BUILTIN if mode == _AUTH_MODE_NONE else mode
 
 
 def is_reverse_proxy_mode() -> bool:
@@ -92,11 +105,79 @@ def _resolve_username() -> str:
     return str(value).strip()
 
 
+def login_required() -> bool:
+    """Return whether requests need a KAM session (built-in mode, set up or not)."""
+    return auth_mode() == _AUTH_MODE_BUILTIN
+
+
 def is_enabled() -> bool:
-    if is_reverse_proxy_mode():
+    """Return whether built-in login is set up and accepting sign-ins."""
+    return login_required() and bool(_resolve_password())
+
+
+def setup_required() -> bool:
+    """Return whether built-in mode is on but no password has been set yet."""
+    return login_required() and not _resolve_password()
+
+
+def password_required_for(saved_mode: str) -> bool:
+    """Return whether saving *saved_mode* without a password would lock KAM."""
+    if (os.getenv(_PASSWORD_ENV) or "").strip():
         return False
-    password = _resolve_password()
-    return bool(password)
+    env_mode = os.getenv(_AUTH_MODE_ENV)
+    mode = env_mode if env_mode and env_mode.strip() else saved_mode
+    return _normalize_mode(mode) == _AUTH_MODE_BUILTIN
+
+
+def setup_code() -> str:
+    """Return the first-run setup code, creating and logging it on first use."""
+    global _SETUP_CODE
+    with _LOCK:
+        if _SETUP_CODE is None:
+            _SETUP_CODE = "-".join(
+                "".join(secrets.choice(_SETUP_CODE_ALPHABET) for _ in range(4))
+                for _ in range(3)
+            )
+            # At least WARNING, but never below KAM_LOG_LEVEL, so the code always shows.
+            level = max(logging.WARNING, logger.getEffectiveLevel())
+            logger.log(
+                level,
+                "KAM needs a login before it can be used. Open KAM in a browser "
+                "and enter this setup code to create one: %s",
+                _SETUP_CODE,
+            )
+        return _SETUP_CODE
+
+
+def _normalize_setup_code(value: str) -> str:
+    return "".join(ch for ch in value.upper() if ch.isalnum())
+
+
+def verify_setup_code(candidate: Optional[str]) -> bool:
+    if not candidate or not setup_required():
+        return False
+    return secrets.compare_digest(
+        _normalize_setup_code(candidate), _normalize_setup_code(setup_code())
+    )
+
+
+def setup_credentials_error(username: str, password: str) -> Optional[str]:
+    """Return why *username* and *password* can't be used for setup, or None."""
+    if not username or len(username) > _MAX_USERNAME_LENGTH:
+        return f"Choose a username of 1 to {_MAX_USERNAME_LENGTH} characters"
+    if len(password) < _MIN_SETUP_PASSWORD_LENGTH:
+        return f"Choose a password of at least {_MIN_SETUP_PASSWORD_LENGTH} characters"
+    return None
+
+
+def complete_setup(username: str, password: str) -> bool:
+    """Save the first login and retire the setup code; False if setup already ran."""
+    global _SETUP_CODE
+    if not settings_service.claim_auth_credentials(username, password):
+        return False
+    with _LOCK:
+        _SETUP_CODE = None
+    return True
 
 
 def username_required() -> bool:

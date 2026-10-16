@@ -7,6 +7,7 @@ from typing import List, Literal
 from urllib.parse import urlparse
 
 from ..services import (
+    auth as auth_service,
     health as health_service,
     library_mappings as library_mappings_service,
     settings as settings_service,
@@ -184,6 +185,14 @@ def get_settings() -> SettingsPayload:
 
 @router.put("/api/settings", response_model=SettingsPayload)
 def update_settings(payload: SettingsPayload) -> SettingsPayload:
+    if not payload.authPassword and auth_service.password_required_for(payload.authMode):
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "A login password is required. To run KAM without a login, "
+                "set KAM_AUTH_MODE=none on the container"
+            ),
+        )
     if payload.authMode == "builtin" and payload.authPassword and not payload.authUsername:
         raise HTTPException(
             status_code=422,

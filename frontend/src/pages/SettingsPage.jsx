@@ -36,7 +36,7 @@ const normalizeText = (value) => {
 
 function SettingsPage() {
   const navigate = useNavigate();
-  const { refresh: refreshAuth } = useAuth();
+  const { mode: activeAuthMode, refresh: refreshAuth } = useAuth();
   const {
     theme,
     savedTheme,
@@ -1077,9 +1077,7 @@ function SettingsPage() {
                     value={effectiveAuthPassword}
                     onChange={handleAuthPasswordChange}
                     placeholder={
-                      savedAuthPassword
-                        ? 'Saved password (leave blank to clear)'
-                        : 'Enter a password'
+                      savedAuthPassword ? 'Saved password' : 'Enter a password'
                     }
                     autoComplete="new-password"
                     disabled={busy}
@@ -1088,13 +1086,15 @@ function SettingsPage() {
               </>
             ) : null}
             <p className="settings-help">
-              {reverseProxyAuth
+              {activeAuthMode === 'none'
+                ? 'Login is turned off by KAM_AUTH_MODE=none on the container.'
+                : reverseProxyAuth
                 ? 'KAM will skip built-in login and trust the upstream proxy.'
                 : hasAuthPassword && !hasAuthUsername
                 ? 'Choose a username before saving. Password-only installs can also create one at their next login.'
                 : hasAuthPassword
                 ? 'Login is currently enabled. Save changes to update the username or password.'
-                : 'Login is currently disabled.'}
+                : 'A password is required. To run KAM without a login, set KAM_AUTH_MODE=none on the container.'}
             </p>
           </section>
 
